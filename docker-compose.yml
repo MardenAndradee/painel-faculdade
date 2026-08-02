@@ -1,0 +1,82 @@
+name: painel-faculdade
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: painel-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-painel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-painel_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-painel_faculdade}
+    ports:
+      # 5433 no host evita colisao com um PostgreSQL instalado localmente na 5432.
+      - '${POSTGRES_PORT:-5433}:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-painel} -d ${POSTGRES_DB:-painel_faculdade}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - painel-network
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: development
+    container_name: painel-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - apps/api/.env
+    environment:
+      # Dentro da rede do compose o host do banco e o nome do servico, na porta interna 5432.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-painel}:${POSTGRES_PASSWORD:-painel_dev_password}@postgres:5432/${POSTGRES_DB:-painel_faculdade}?schema=public
+      PORT: 3333
+    ports:
+      - '${API_PORT:-3333}:3333'
+    volumes:
+      - ./apps/api:/app/apps/api
+      - ./packages/shared:/app/packages/shared
+      - /app/node_modules
+      - /app/apps/api/node_modules
+    networks:
+      - painel-network
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: development
+    container_name: painel-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    env_file:
+      - apps/web/.env.local
+    ports:
+      - '${WEB_PORT:-3000}:3000'
+    volumes:
+      - ./apps/web:/app/apps/web
+      - ./packages/shared:/app/packages/shared
+      - /app/node_modules
+      - /app/apps/web/node_modules
+      - /app/apps/web/.next
+    networks:
+      - painel-network
+
+volumes:
+  postgres_data:
+    name: painel-postgres-data
+
+networks:
+  painel-network:
+    name: painel-network
+    driver: bridge

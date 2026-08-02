@@ -1,0 +1,61 @@
+{
+  "name": "painel-faculdade",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Plataforma de organizacao academica para estudantes universitarios",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "overrides": {
+    "postcss": "^8.5.25",
+    "sharp": "^0.35.3"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build:shared": "npm run build --workspace @painel/shared",
+    "predev": "npm run build:shared",
+    "dev": "concurrently -n shared,api,web -c gray,blue,magenta \"npm:dev:shared\" \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:shared": "npm run dev --workspace @painel/shared",
+    "dev:api": "npm run dev --workspace @painel/api",
+    "dev:web": "npm run dev --workspace @painel/web",
+    "prebuild": "npm run build:shared",
+    "build": "npm run build --workspace @painel/api && npm run build --workspace @painel/web",
+    "start:api": "npm run start --workspace @painel/api",
+    "start:web": "npm run start --workspace @painel/web",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "pretypecheck": "npm run build:shared",
+    "typecheck": "npm run typecheck --workspaces --if-present && tsc -p tsconfig.test.json",
+    "db:generate": "npm run db:generate --workspace @painel/api",
+    "db:migrate": "npm run db:migrate --workspace @painel/api",
+    "db:deploy": "npm run db:deploy --workspace @painel/api",
+    "db:seed": "npm run db:seed --workspace @painel/api",
+    "db:studio": "npm run db:studio --workspace @painel/api",
+    "db:reset": "npm run db:reset --workspace @painel/api",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "prepare": "husky",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "concurrently": "^10.0.4",
+    "eslint": "^10.8.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.3.0",
+    "prettier": "^3.6.2",
+    "prettier-plugin-tailwindcss": "^0.8.1",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.65.0",
+    "vitest": "^3.2.7"
+  }
+}

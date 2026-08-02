@@ -1,0 +1,734 @@
+// =============================================================================
+// Painel Faculdade - schema do banco de dados
+// =============================================================================
+// Convencoes adotadas:
+//
+// - Toda entidade pertencente a um usuario carrega `userId` com onDelete: Cascade.
+//   Isso permite filtrar por dono em uma unica clausula e garante que a exclusao
+//   da conta remova todos os dados derivados.
+// - Notas e pesos usam Float. Decimal seria necessario para valores monetarios,
+//   mas notas academicas tem precisao baixa (0-10 com ate 2 casas) e Decimal
+//   obrigaria conversao manual em toda resposta JSON da API.
+// - Identificadores externos do Google sao unicos por usuario, nunca globalmente:
+//   duas contas podem legitimamente importar a mesma turma do Classroom.
+// =============================================================================
+
+// Generator do Prisma 7: emite ESM nativo (o antigo `prisma-client-js` era
+// CommonJS e quebrava o import nomeado neste projeto, que e ESM puro).
+// O codigo gerado fica dentro de src/ para ser resolvido pelo tsconfig.
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+
+  /// Emite os imports internos com extensao `.js`.
+  ///
+  /// Sem isto o client gerado usa `import ... from './internal/class'`, sem
+  /// extensao. O `tsx` do desenvolvimento resolve assim mesmo, mas o Node em
+  /// ESM puro exige a extensao explicita - e `node dist/server.js` morria com
+  /// ERR_MODULE_NOT_FOUND no primeiro boot de producao.
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// =============================================================================
+// Enums
+// =============================================================================
+
+enum ThemePreference {
+  LIGHT
+  DARK
+  SYSTEM
+}
+
+enum SemesterStatus {
+  PLANNED
+  ACTIVE
+  FINISHED
+}
+
+enum SubjectStatus {
+  IN_PROGRESS
+  APPROVED
+  FAILED
+  WITHDRAWN
+}
+
+/// Discriminador da origem da atividade. Atividades manuais e importadas do
+/// Classroom compartilham a mesma tabela porque aparecem nas mesmas listas,
+/// filtros, calendario e estatisticas - separa-las exigiria UNION em toda query.
+enum AssignmentSource {
+  MANUAL
+  GOOGLE_CLASSROOM
+}
+
+enum AssignmentStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum GradeType {
+  P1
+  P2
+  P3
+  ASSIGNMENT
+  SEMINAR
+  PROJECT
+  PARTICIPATION
+  OTHER
+}
+
+enum CalendarEventSource {
+  MANUAL
+  GOOGLE_CALENDAR
+}
+
+enum AttachmentType {
+  PDF
+  IMAGE
+  ZIP
+  SLIDE
+  LINK
+  DOCUMENT
+  OTHER
+}
+
+enum AttachmentSource {
+  UPLOAD
+  LINK
+  GOOGLE_CLASSROOM
+  GOOGLE_DRIVE
+}
+
+enum StudySessionStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  SKIPPED
+}
+
+enum NotificationType {
+  ASSIGNMENT_DUE
+  ASSIGNMENT_OVERDUE
+  EXAM_UPCOMING
+  GRADE_POSTED
+  STUDY_SESSION
+  SYNC_COMPLETED
+  SYNC_FAILED
+  SYSTEM
+}
+
+// =============================================================================
+// Usuario e autenticacao
+// =============================================================================
+
+model User {
+  id        String  @id @default(cuid())
+  googleId  String  @unique
+  email     String  @unique
+  name      String
+  avatarUrl String?
+
+  theme    ThemePreference @default(SYSTEM)
+  timezone String          @default("America/Sao_Paulo")
+  locale   String          @default("pt-BR")
+
+  /// Tokens do Google guardados para sincronizar Classroom e Calendar sem
+  /// exigir novo consentimento a cada acesso.
+  googleAccessToken  String?   @db.Text
+  googleRefreshToken String?   @db.Text
+  googleTokenExpiry  DateTime?
+
+  /// Escopos ja concedidos pelo usuario. Sem isso nao ha como saber se a
+  /// permissao do Classroom foi autorizada sem chamar a API e receber 403.
+  googleGrantedScopes String[]  @default([])
+  classroomSyncedAt   DateTime?
+  calendarSyncedAt    DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  lastLogin DateTime?
+
+  refreshTokens     RefreshToken[]
+  semesters         Semester[]
+  teachers          Teacher[]
+  subjects          Subject[]
+  assignments       Assignment[]
+  exams             Exam[]
+  grades            Grade[]
+  calendarEvents    CalendarEvent[]
+  attachments       Attachment[]
+  studySessions     StudySession[]
+  notifications     Notification[]
+  decks             Deck[]
+  flashcards        Flashcard[]
+  flashcardReviews  FlashcardReview[]
+  studyAvailability StudyAvailability[]
+
+  @@index([email])
+  @@map("users")
+}
+
+/// Refresh tokens ficam em tabela propria (e nao em coluna do usuario) para
+/// permitir varias sessoes simultaneas e revogacao individual por dispositivo.
+model RefreshToken {
+  id String @id @default(cuid())
+
+  /// Hash SHA-256 do token. O valor puro nunca e persistido.
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+
+  userAgent String?
+  ipAddress String?
+
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+// =============================================================================
+// Estrutura academica
+// =============================================================================
+
+model Semester {
+  id     String         @id @default(cuid())
+  name   String
+  year   Int
+  /// Periodo dentro do ano: 1 ou 2.
+  term   Int
+  status SemesterStatus @default(ACTIVE)
+
+  startDate DateTime
+  endDate   DateTime
+
+  /// Semestre exibido por padrao no dashboard.
+  isCurrent Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  subjects Subject[]
+
+  @@unique([userId, year, term])
+  @@index([userId, isCurrent])
+  @@map("semesters")
+}
+
+model Teacher {
+  id    String  @id @default(cuid())
+  name  String
+  email String?
+  phone String?
+  notes String? @db.Text
+
+  /// Identificador do professor no Google Classroom, usado para deduplicar
+  /// importacoes repetidas.
+  googleUserId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  subjects Subject[]
+
+  @@unique([userId, googleUserId])
+  @@index([userId])
+  @@map("teachers")
+}
+
+model Subject {
+  id          String  @id @default(cuid())
+  name        String
+  code        String?
+  description String? @db.Text
+
+  /// Cor em hexadecimal (#RRGGBB) usada em cards, calendario e graficos.
+  color   String  @default("#6366f1")
+  room    String?
+  credits Int?
+
+  /// Nota minima para aprovacao. Varia por instituicao, entao e por disciplina.
+  passingGrade Float @default(6)
+
+  status SubjectStatus @default(IN_PROGRESS)
+
+  /// Media final consolidada quando o semestre encerra. Enquanto a disciplina
+  /// esta em andamento a media e calculada sob demanda a partir de Grade.
+  finalGrade Float?
+
+  /// Identificador do curso no Google Classroom.
+  googleCourseId String?
+  classroomLink  String?
+
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  semesterId String?
+  semester   Semester? @relation(fields: [semesterId], references: [id], onDelete: SetNull)
+
+  teacherId String?
+  teacher   Teacher? @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+
+  assignments    Assignment[]
+  exams          Exam[]
+  grades         Grade[]
+  attachments    Attachment[]
+  calendarEvents CalendarEvent[]
+  studySessions  StudySession[]
+  decks          Deck[]
+
+  @@unique([userId, googleCourseId])
+  @@index([userId, semesterId])
+  @@index([userId, status])
+  @@map("subjects")
+}
+
+// =============================================================================
+// Atividades
+// =============================================================================
+
+model Assignment {
+  id          String  @id @default(cuid())
+  title       String
+  description String? @db.Text
+  notes       String? @db.Text
+
+  dueDate  DateTime?
+  priority Priority         @default(MEDIUM)
+  status   AssignmentStatus @default(PENDING)
+  source   AssignmentSource @default(MANUAL)
+
+  completedAt DateTime?
+
+  /// Pontuacao maxima informada pelo professor, quando existir.
+  maxPoints Float?
+
+  // --- Campos exclusivos de atividades importadas do Google Classroom ---
+  googleCourseWorkId String?
+  /// Estado bruto vindo do Classroom (PUBLISHED, DRAFT, DELETED).
+  classroomState     String?
+  classroomLink      String?
+  /// Ultima vez que esta atividade foi atualizada por uma sincronizacao.
+  syncedAt           DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  subjectId String?
+  subject   Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+
+  grade          Grade?
+  attachments    Attachment[]
+  calendarEvents CalendarEvent[]
+  studySessions  StudySession[]
+
+  /// Garante idempotencia da sincronizacao: reimportar o mesmo courseWork
+  /// atualiza o registro existente em vez de criar duplicata.
+  @@unique([userId, googleCourseWorkId])
+  @@index([userId, status, dueDate])
+  @@index([userId, dueDate])
+  @@index([subjectId])
+  @@map("assignments")
+}
+
+// =============================================================================
+// Provas
+// =============================================================================
+
+model Exam {
+  id      String  @id @default(cuid())
+  title   String
+  content String? @db.Text
+  notes   String? @db.Text
+  room    String?
+
+  date            DateTime
+  durationMinutes Int?
+
+  /// Peso da prova no calculo da media da disciplina.
+  weight Float @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  subjectId String
+  subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  grade          Grade?
+  attachments    Attachment[]
+  calendarEvents CalendarEvent[]
+  studySessions  StudySession[]
+
+  @@index([userId, date])
+  @@index([subjectId])
+  @@map("exams")
+}
+
+// =============================================================================
+// Notas
+// =============================================================================
+
+/// Uma nota pode existir sozinha (lancamento avulso) ou vinculada a uma prova
+/// ou atividade. A relacao e 1-1 opcional em ambos os lados.
+model Grade {
+  id    String    @id @default(cuid())
+  type  GradeType
+  /// Rotulo livre, util para tipos OTHER ("Prova substitutiva", "Lista 3").
+  label String?
+
+  value    Float
+  maxValue Float @default(10)
+  weight   Float @default(1)
+
+  gradedAt DateTime @default(now())
+  notes    String?  @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  subjectId String
+  subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  examId String? @unique
+  exam   Exam?   @relation(fields: [examId], references: [id], onDelete: SetNull)
+
+  assignmentId String?     @unique
+  assignment   Assignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+
+  @@index([userId, subjectId])
+  @@index([subjectId, type])
+  @@map("grades")
+}
+
+// =============================================================================
+// Calendario
+// =============================================================================
+
+/// Eventos proprios do calendario: criados manualmente ou importados do Google
+/// Calendar. Provas e atividades NAO sao duplicadas aqui - a agenda as agrega
+/// em tempo de consulta. As relacoes opcionais abaixo existem apenas para o
+/// caso inverso: um evento do Google que o usuario vinculou a uma prova/atividade.
+model CalendarEvent {
+  id          String  @id @default(cuid())
+  title       String
+  description String? @db.Text
+  location    String?
+
+  startsAt DateTime
+  endsAt   DateTime
+  allDay   Boolean  @default(false)
+
+  color  String?
+  source CalendarEventSource @default(MANUAL)
+
+  // --- Campos exclusivos de eventos importados do Google Calendar ---
+  googleEventId    String?
+  googleCalendarId String?
+  syncedAt         DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  subjectId String?
+  subject   Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+
+  assignmentId String?
+  assignment   Assignment? @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  examId String?
+  exam   Exam?   @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, googleEventId])
+  @@index([userId, startsAt])
+  @@map("calendar_events")
+}
+
+// =============================================================================
+// Materiais
+// =============================================================================
+
+model Attachment {
+  id   String         @id @default(cuid())
+  name String
+  type AttachmentType @default(OTHER)
+
+  /// URL publica (link externo) ou caminho servido pela API (upload local).
+  url        String  @db.Text
+  /// Chave no storage. Nulo quando o anexo e apenas um link.
+  storageKey String?
+
+  mimeType  String?
+  sizeBytes Int?
+
+  source AttachmentSource @default(UPLOAD)
+
+  googleDriveId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  subjectId String?
+  subject   Subject? @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  assignmentId String?
+  assignment   Assignment? @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  examId String?
+  exam   Exam?   @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@index([userId, subjectId])
+  @@index([assignmentId])
+  @@map("attachments")
+}
+
+// =============================================================================
+// Cronograma de estudos
+// =============================================================================
+
+/// Bloco de estudo agendado. Gerado pelo planejador a partir da disponibilidade
+/// do usuario ou criado manualmente.
+model StudySession {
+  id    String @id @default(cuid())
+  title String
+
+  scheduledStart DateTime
+  scheduledEnd   DateTime
+
+  /// Minutos efetivamente estudados, preenchido ao concluir a sessao.
+  actualMinutes Int?
+
+  status StudySessionStatus @default(PLANNED)
+  notes  String?            @db.Text
+
+  /// Marca sessoes criadas pelo gerador automatico, permitindo regerar o
+  /// cronograma sem apagar blocos criados a mao.
+  autoGenerated Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  subjectId String?
+  subject   Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+
+  assignmentId String?
+  assignment   Assignment? @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  examId String?
+  exam   Exam?   @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@index([userId, scheduledStart])
+  @@index([userId, status])
+  @@map("study_sessions")
+}
+
+// =============================================================================
+// Notificacoes
+// =============================================================================
+
+model Notification {
+  id      String           @id @default(cuid())
+  type    NotificationType
+  title   String
+  message String           @db.Text
+
+  /// Referencia generica a entidade de origem, evitando uma FK por tipo.
+  entityType String?
+  entityId   String?
+
+  readAt       DateTime?
+  scheduledFor DateTime?
+
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+// =============================================================================
+// Flashcards
+// =============================================================================
+
+/// Baralho de cartoes. Agrupa flashcards por assunto dentro de uma disciplina:
+/// "Formulas de derivada" e "Teoremas de convergencia" sao baralhos distintos
+/// de Calculo III, e o aluno estuda um por vez.
+model Deck {
+  id          String  @id @default(cuid())
+  name        String
+  description String? @db.Text
+
+  /// Cor usada nos cards e graficos, no mesmo padrao de Subject.
+  color String @default("#6366f1")
+
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Opcional: um baralho pode ser geral ("Ingles tecnico") ou preso a uma
+  /// disciplina. SetNull para que excluir a disciplina nao apague o estudo.
+  subjectId String?
+  subject   Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+
+  cards Flashcard[]
+
+  @@index([userId, subjectId])
+  @@index([userId, archivedAt])
+  @@map("decks")
+}
+
+/// Cartao com pergunta e resposta, mais o estado de repeticao espacada.
+///
+/// Os campos `easeFactor`, `intervalDays` e `repetitions` implementam o SM-2:
+/// guardar o agendamento no proprio cartao evita uma consulta extra para
+/// descobrir o que revisar - a pergunta "o que vence hoje" vira um unico
+/// `WHERE dueDate <= now()`.
+model Flashcard {
+  id    String  @id @default(cuid())
+  front String  @db.Text
+  back  String  @db.Text
+  /// Dica opcional, exibida antes de virar o cartao.
+  hint  String? @db.Text
+
+  // --- Estado do SM-2 ---------------------------------------------------------
+  /// Facilidade do cartao. Comeca em 2.5 e nunca cai abaixo de 1.3, senao um
+  /// cartao dificil ficaria preso repetindo todo dia para sempre.
+  easeFactor   Float @default(2.5)
+  /// Intervalo atual em dias ate a proxima revisao.
+  intervalDays Int   @default(0)
+  /// Acertos consecutivos. Zera a cada erro.
+  repetitions  Int   @default(0)
+
+  /// Quando o cartao deve voltar. Nulo enquanto nunca foi estudado - e esses
+  /// entram na fila como novos.
+  dueDate        DateTime?
+  lastReviewedAt DateTime?
+
+  /// Contadores acumulados, uteis no card do baralho sem varrer o log.
+  totalReviews Int @default(0)
+  lapses       Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  deckId String
+  deck   Deck   @relation(fields: [deckId], references: [id], onDelete: Cascade)
+
+  reviews FlashcardReview[]
+
+  /// Sustenta a fila de revisao, que e a consulta mais frequente da tela.
+  @@index([userId, dueDate])
+  @@index([deckId, dueDate])
+  @@map("flashcards")
+}
+
+/// Registro imutavel de uma revisao.
+///
+/// O estado no cartao responde "o que revisar agora"; ele nao responde "quanto
+/// estudei nesta semana". As Estatisticas precisam da segunda pergunta, e o
+/// historico so existe se for gravado no momento em que acontece.
+model FlashcardReview {
+  id String @id @default(cuid())
+
+  /// Avaliacao do aluno, de 0 (errei) a 5 (facil).
+  quality      Int
+  /// Intervalo aplicado apos esta revisao, em dias.
+  intervalDays Int
+  /// Tempo gasto no cartao, quando o cliente conseguir medir.
+  durationMs   Int?
+
+  reviewedAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  flashcardId String
+  flashcard   Flashcard @relation(fields: [flashcardId], references: [id], onDelete: Cascade)
+
+  @@index([userId, reviewedAt])
+  @@index([flashcardId])
+  @@map("flashcard_reviews")
+}
+
+// =============================================================================
+// Disponibilidade para estudo
+// =============================================================================
+
+/// Janela semanal em que o aluno consegue estudar.
+///
+/// Tabela propria em vez de um JSON no usuario: um dia costuma ter mais de uma
+/// janela ("livre das 9h as 11h e das 14h as 18h"), e o gerador precisa
+/// consultar isso por dia da semana. Em JSON toda geracao leria o objeto
+/// inteiro e filtraria em memoria.
+model StudyAvailability {
+  id String @id @default(cuid())
+
+  /// 0 = domingo, 6 = sabado. Mesma convencao de `Date.getDay()`.
+  dayOfWeek Int
+
+  /// Minutos desde a meia-noite. Guardar como inteiro evita o problema de
+  /// gravar "14:00" num DateTime e depois brigar com fuso horario.
+  startMinute Int
+  endMinute   Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, dayOfWeek])
+  @@map("study_availability")
+}

@@ -1,0 +1,22 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  // `@painel/shared` e resolvido pelo package.json do workspace (dist + .d.ts).
+  // A referencia abaixo garante que o TypeScript reconstrua o pacote quando
+  // necessario e mantenha os tipos sincronizados.
+  "references": [{ "path": "../../packages/shared" }],
+  "include": ["src/**/*.ts"],
+  // Testes fora do build de producao - ver a nota em packages/shared.
+  "exclude": ["node_modules", "dist", "**/*.test.ts"]
+}

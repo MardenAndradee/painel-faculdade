@@ -1,0 +1,100 @@
+/**
+ * Calculo de medias academicas.
+ *
+ * Extraido do dashboard quando a tela de disciplinas passou a precisar da
+ * mesma conta: manter a regra em dois lugares garantiria divergencia entre o
+ * numero do card e o numero da tela de detalhes.
+ */
+
+/** Nota no formato minimo necessario para o calculo. */
+export interface GradeLike {
+  value: number;
+  maxValue: number;
+  weight: number;
+}
+
+/**
+ * Media ponderada de uma lista de notas, na escala 0-10.
+ *
+ * As notas sao normalizadas antes da ponderacao: uma prova valendo 100 pontos
+ * precisa ser comparavel a um trabalho valendo 10.
+ *
+ * Retorna null quando nao ha nota - disciplina sem avaliacao nao e disciplina
+ * com media zero, e exibir 0,0 sugeriria reprovacao.
+ */
+export function calculateWeightedAverage(grades: GradeLike[]): number | null {
+  if (grades.length === 0) return null;
+
+  let weightedSum = 0;
+  let totalWeight = 0;
+
+  for (const grade of grades) {
+    // Valores invalidos vindos de importacao usam o padrao em vez de zerar a conta.
+    const maxValue = grade.maxValue > 0 ? grade.maxValue : 10;
+    const weight = grade.weight > 0 ? grade.weight : 1;
+
+    weightedSum += (grade.value / maxValue) * 10 * weight;
+    totalWeight += weight;
+  }
+
+  if (totalWeight === 0) return null;
+
+  return roundGrade(weightedSum / totalWeight);
+}
+
+/**
+ * Media geral: media SIMPLES das medias por disciplina.
+ *
+ * Deliberadamente nao ponderada pela quantidade de avaliacoes - do contrario
+ * uma disciplina com dez listas dominaria outra com duas provas.
+ * Disciplinas sem nota ficam de fora.
+ */
+export function calculateOverallAverage(subjectAverages: (number | null)[]): number | null {
+  const valid = subjectAverages.filter((average): average is number => average !== null);
+
+  if (valid.length === 0) return null;
+
+  const sum = valid.reduce((total, average) => total + average, 0);
+
+  return roundGrade(sum / valid.length);
+}
+
+/**
+ * Nota ainda necessaria para atingir a media de aprovacao.
+ *
+ * Considera o peso restante informado: com peso total 10, ja avaliados 6 e
+ * media 5, faltam 4 pontos de peso para alcancar a media minima.
+ *
+ * Retorna:
+ * - `null` quando nao ha peso restante (nada mais a fazer);
+ * - valor <= 0 quando a aprovacao ja esta garantida;
+ * - valor > escala maxima quando a aprovacao ja e impossivel.
+ */
+export function calculateRequiredGrade(
+  currentGrades: GradeLike[],
+  passingGrade: number,
+  remainingWeight: number,
+): number | null {
+  if (remainingWeight <= 0) return null;
+
+  let weightedSum = 0;
+  let usedWeight = 0;
+
+  for (const grade of currentGrades) {
+    const maxValue = grade.maxValue > 0 ? grade.maxValue : 10;
+    const weight = grade.weight > 0 ? grade.weight : 1;
+
+    weightedSum += (grade.value / maxValue) * 10 * weight;
+    usedWeight += weight;
+  }
+
+  const totalWeight = usedWeight + remainingWeight;
+  const required = (passingGrade * totalWeight - weightedSum) / remainingWeight;
+
+  return roundGrade(required);
+}
+
+/** Duas casas decimais: precisao suficiente para nota, sem ruido de ponto flutuante. */
+export function roundGrade(value: number): number {
+  return Number(value.toFixed(2));
+}

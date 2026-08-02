@@ -1,0 +1,14 @@
+{
+  // Os testes ficam FORA dos tsconfigs de build para nao entrarem no `dist`.
+  // Este arquivo existe para que eles continuem tipados: o Vitest transpila
+  // sem checar tipos, entao sem isto um erro de tipo num teste so apareceria
+  // como falha estranha em tempo de execucao.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "types": ["vitest/globals", "node"]
+  },
+  "include": ["{apps,packages}/**/*.test.ts", "vitest.config.ts"]
+}

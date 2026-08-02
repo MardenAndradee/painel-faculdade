@@ -1,0 +1,12 @@
+node_modules
+dist
+build
+.next
+out
+coverage
+package-lock.json
+apps/api/prisma/migrations
+apps/api/src/generated
+# Gerado pelo Next a cada build.
+apps/web/next-env.d.ts
+*.md

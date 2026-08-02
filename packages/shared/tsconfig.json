@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    // `composite` habilita project references: api e web consomem os .d.ts
+    // gerados aqui em vez de recompilarem estes fontes dentro do proprio
+    // programa, o que violaria o rootDir de cada app.
+    "composite": true
+  },
+  "include": ["src/**/*.ts"],
+  // Os testes ficam fora do build: eles nao pertencem ao pacote
+  // publicado, e compila-los faria um import so de teste quebrar o
+  // build de producao.
+  "exclude": ["node_modules", "dist", "**/*.test.ts"]
+}

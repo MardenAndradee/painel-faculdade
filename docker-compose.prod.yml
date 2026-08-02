@@ -1,0 +1,132 @@
+name: painel-faculdade-prod
+
+# =============================================================================
+# Composicao de producao.
+#
+# Difere da de desenvolvimento em quatro pontos que importam:
+#  1. usa os estagios `production` das imagens (build compilado, usuario nao-root);
+#  2. NAO monta o codigo por volume - a imagem e o artefato;
+#  3. persiste os uploads num volume nomeado. Sem isso, todo material enviado
+#     pelos usuarios sumiria no primeiro restart do container;
+#  4. tem healthcheck em todos os servicos, para o orquestrador saber o que
+#     esta realmente pronto para receber trafego.
+#
+# Uso:
+#   docker compose -f docker-compose.prod.yml up -d --build
+#   docker compose -f docker-compose.prod.yml exec api npm run db:deploy
+# =============================================================================
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: painel-postgres-prod
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?defina POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-painel_faculdade}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # Sem `ports` de proposito: o banco so precisa ser alcancavel pela rede
+    # interna. Expo-lo ao host aumenta a superficie de ataque sem necessidade.
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB:-painel_faculdade}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - painel-network
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: production
+    container_name: painel-api-prod
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3333
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-painel_faculdade}?schema=public
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?defina JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?defina JWT_REFRESH_SECRET}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?defina GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:?defina GOOGLE_CLIENT_SECRET}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:?defina GOOGLE_REDIRECT_URI}
+      WEB_APP_URL: ${WEB_APP_URL:?defina WEB_APP_URL}
+      CORS_ORIGINS: ${CORS_ORIGINS:?defina CORS_ORIGINS}
+      UPLOAD_DIR: /app/uploads
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - '${API_PORT:-3333}:3333'
+    volumes:
+      # Os materiais enviados pelos usuarios vivem AQUI, fora da imagem. O
+      # provider local grava em disco; sem este volume, cada deploy apagaria
+      # todos os arquivos. Ao migrar para storage de objetos, o volume sai.
+      - uploads_data:/app/uploads
+    healthcheck:
+      # O endpoint toca o banco: processo vivo com banco fora do ar nao esta
+      # saudavel e nao deve receber trafego.
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:3333/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - painel-network
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: production
+      args:
+        # O Next embute `NEXT_PUBLIC_*` no bundle em tempo de BUILD, nao de
+        # execucao: passar isso só como variavel de ambiente do container nao
+        # teria efeito nenhum no código do navegador.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?defina NEXT_PUBLIC_API_URL}
+    container_name: painel-web-prod
+    restart: always
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+    ports:
+      - '${WEB_PORT:-3000}:3000'
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - painel-network
+
+volumes:
+  postgres_data:
+    name: painel-postgres-data-prod
+  uploads_data:
+    name: painel-uploads-data
+
+networks:
+  painel-network:
+    name: painel-network-prod
+    driver: bridge
