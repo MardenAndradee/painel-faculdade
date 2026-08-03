@@ -31,6 +31,19 @@ const syncRateLimiter = rateLimit({
 
 integrationRoutes.get('/integrations/status', integrationController.status);
 
+/**
+ * Disparada quando o app abre.
+ *
+ * Sem o `syncRateLimiter`: o teto de verdade e o intervalo de 30 minutos que o
+ * SERVICE aplica olhando `classroomSyncedAt`. Chamadas dentro da janela nem
+ * chegam ao Google - respondem "pulei" de imediato -, entao limita-las aqui so
+ * transformaria uma resposta correta num 429 confuso ao trocar de aba.
+ */
+integrationRoutes.post(
+  '/integrations/classroom/auto-sync',
+  integrationController.autoSyncClassroom,
+);
+
 integrationRoutes.get('/integrations/classroom/connect', integrationController.connectClassroom);
 
 integrationRoutes.post(

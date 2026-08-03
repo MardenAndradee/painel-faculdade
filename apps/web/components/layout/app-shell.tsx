@@ -9,6 +9,7 @@ import { ThemeToggle } from './theme-toggle';
 import { UserMenu } from './user-menu';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { useAutoSync } from '@/hooks/use-auto-sync';
 
 /**
  * Estrutura das telas autenticadas: sidebar + navbar + area de conteudo.
@@ -20,6 +21,11 @@ import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/s
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = usePathname();
+
+  // Sincroniza o Classroom ao abrir o app. Fica AQUI, e nao numa tela
+  // especifica, porque o shell monta uma vez e persiste enquanto o usuario
+  // navega - entao circular entre telas nao dispara nada de novo.
+  useAutoSync();
 
   return (
     <div className="flex min-h-dvh">

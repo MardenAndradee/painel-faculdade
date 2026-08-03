@@ -12,6 +12,7 @@ import type {
   ClassroomTimeOfDay,
 } from '../integrations/classroom/classroom.types.js';
 import { semesterRepository } from '../repositories/semester.repository.js';
+import { AppError } from '../utils/app-error.js';
 
 /**
  * Importacao do Google Classroom.
@@ -196,22 +197,34 @@ export const classroomSyncService = {
 
     /**
      * O professor e um dado ACESSORIO: `Subject.teacherId` e anulavel, e a
-     * disciplina com suas atividades vale por si so.
+     * disciplina com suas atividades vale por si so. Por isso a falha aqui
+     * nao aborta a turma.
      *
-     * Por isso a falha aqui nao pode abortar a turma. Na pratica o Google
-     * responde 500 neste endpoint quando o aluno nao tem permissao de ver os
-     * perfis do diretorio da instituicao - o que fazia a turma inteira, com
-     * todas as atividades, deixar de ser importada por causa de um nome.
+     * Sobre o 500: quando a turma pertence a um Workspace institucional e a
+     * conta que sincroniza e EXTERNA a esse dominio, o Google recusa resolver
+     * o perfil do professor e responde 500 - nao 403. Verificado na pratica:
+     * numa mesma conta, a turma de um professor com conta pessoal traz o nome,
+     * e as turmas do dominio da faculdade devolvem 500 em todos os caminhos
+     * (`teachers`, `teachers/{id}` e `userProfiles/{id}`). Nenhum escopo muda
+     * isso; e politica de visibilidade de diretorio da instituicao.
+     *
+     * Por isso a mensagem NAO manda tentar de novo: tentar nao resolve, e
+     * sugerir isso faria o usuario repetir uma acao inutil.
      */
     const teachers = await client.listTeachers(course.id).catch((error: unknown) => {
+      const status = error instanceof AppError ? error.statusCode : 0;
       const message = error instanceof Error ? error.message : 'erro desconhecido';
 
-      report.warnings.push(
-        `Turma "${course.name}": importada sem o professor (${message.replace(/\.$/, '')})`,
-      );
+      const motivo =
+        status === 502
+          ? 'a instituição restringe a consulta ao perfil do professor — preencha em Disciplinas'
+          : message.replace(/\.$/, '');
+
+      report.warnings.push(`Turma "${course.name}": importada sem o professor (${motivo})`);
       logger.warn('Classroom: falha ao listar professores', {
         userId,
         course: course.id,
+        status,
         message,
       });
 

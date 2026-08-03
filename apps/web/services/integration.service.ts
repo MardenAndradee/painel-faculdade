@@ -1,4 +1,9 @@
-import type { CalendarSyncReport, IntegrationStatus, SyncReport } from '@painel/shared';
+import type {
+  AutoSyncResult,
+  CalendarSyncReport,
+  IntegrationStatus,
+  SyncReport,
+} from '@painel/shared';
 import { httpClient } from './http-client';
 
 export const integrationService = {
@@ -14,6 +19,11 @@ export const integrationService = {
    */
   connectClassroom(): Promise<{ url: string }> {
     return httpClient.get<{ url: string }>('/integrations/classroom/connect');
+  },
+
+  /** Disparada ao abrir o app; o servidor decide se realmente sincroniza. */
+  autoSyncClassroom(): Promise<AutoSyncResult> {
+    return httpClient.post<AutoSyncResult>('/integrations/classroom/auto-sync');
   },
 
   syncClassroom(): Promise<SyncReport> {

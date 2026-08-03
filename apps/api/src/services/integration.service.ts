@@ -1,3 +1,4 @@
+import type { AutoSyncResult } from '@painel/shared';
 import {
   ERROR_CODES,
   GOOGLE_SCOPE_GROUPS,
@@ -13,6 +14,15 @@ import { calendarSyncService } from './calendar-sync.service.js';
 import { userRepository } from '../repositories/user.repository.js';
 import { AppError } from '../utils/app-error.js';
 import { logger } from '../config/logger.js';
+
+/**
+ * Intervalo minimo entre sincronizacoes automaticas.
+ *
+ * Trinta minutos e maior que uma navegacao normal - entao abrir e fechar o app
+ * varias vezes nao dispara nada - e menor que uma aula, entao uma atividade
+ * postada de manha aparece antes da tarde.
+ */
+const AUTO_SYNC_INTERVAL_MS = 30 * 60 * 1000;
 
 /**
  * Orquestracao das integracoes com o Google.
@@ -204,5 +214,61 @@ export const integrationService = {
       where: { id: userId },
       data: { googleGrantedScopes: remaining, classroomSyncedAt: null },
     });
+  },
+
+  /**
+   * Sincronizacao automatica, disparada quando o usuario abre o app.
+   *
+   * A decisao de sincronizar ou nao e do SERVIDOR, nao do cliente. Se o
+   * navegador decidisse, uma aba recarregando em laco esgotaria a cota da
+   * conta Google do usuario - o teto viraria sugestao. Aqui o cliente apenas
+   * avisa que abriu; quem consulta o relogio e quem manda e este metodo.
+   *
+   * Nao lanca: uma falha de rede ao abrir a tela nao pode virar erro na cara
+   * de quem so queria ver o dashboard. O botao manual em Integracoes continua
+   * sendo o caminho para ver o relatorio completo e os avisos.
+   */
+  async autoSyncClassroom(userId: string): Promise<AutoSyncResult> {
+    const empty = { subjects: 0, assignments: 0 };
+
+    const user = await userRepository.findById(userId);
+
+    if (!user || !hasScopes(user.googleGrantedScopes, 'classroom')) {
+      return { ran: false, skippedReason: 'nao-conectado', imported: empty, syncedAt: null };
+    }
+
+    const lastSync = user.classroomSyncedAt;
+
+    if (lastSync && Date.now() - lastSync.getTime() < AUTO_SYNC_INTERVAL_MS) {
+      return {
+        ran: false,
+        skippedReason: 'sincronizado-recentemente',
+        imported: empty,
+        syncedAt: lastSync.toISOString(),
+      };
+    }
+
+    try {
+      const report = await this.syncClassroom(userId);
+
+      return {
+        ran: true,
+        skippedReason: null,
+        // So o que ENTROU interessa aqui: o usuario nao pediu esta
+        // sincronizacao, entao avisar sobre atualizacoes de rotina seria ruido.
+        imported: {
+          subjects: report.subjects.created,
+          assignments: report.assignments.created,
+        },
+        syncedAt: report.finishedAt,
+      };
+    } catch (error) {
+      logger.warn('Sincronizacao automatica do Classroom falhou', {
+        userId,
+        message: error instanceof Error ? error.message : String(error),
+      });
+
+      return { ran: false, skippedReason: null, imported: empty, syncedAt: null };
+    }
   },
 };

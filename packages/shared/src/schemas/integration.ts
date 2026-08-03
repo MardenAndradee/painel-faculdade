@@ -28,6 +28,22 @@ export interface IntegrationStatus {
   importedAssignments: number;
 }
 
+/**
+ * Resultado da sincronizacao automatica disparada ao abrir o app.
+ *
+ * `skipped` nao e falha: significa que a ultima sincronizacao e recente
+ * demais, ou que a integracao nem esta conectada. A tela usa isso para ficar
+ * calada em vez de avisar algo que o usuario nao pediu.
+ */
+export interface AutoSyncResult {
+  ran: boolean;
+  /** Por que nao rodou, quando `ran` e falso. */
+  skippedReason: 'nao-conectado' | 'sincronizado-recentemente' | null;
+  /** Quanto entrou de novo. Zerado quando nao rodou. */
+  imported: { subjects: number; assignments: number };
+  syncedAt: string | null;
+}
+
 /** Resultado da sincronizacao do Google Calendar. */
 export interface CalendarSyncReport {
   startedAt: string;

@@ -29,6 +29,19 @@ export const integrationController = {
     ok(res, { url });
   },
 
+  /**
+   * Sincronizacao automatica ao abrir o app.
+   *
+   * Sempre responde 200, mesmo quando nao sincroniza: "nao rodou porque foi
+   * ha 5 minutos" nao e erro, e devolver 4xx faria o cliente tratar como
+   * falha algo que e o comportamento correto.
+   */
+  async autoSyncClassroom(req: Request, res: Response): Promise<void> {
+    const user = getAuthUser(req);
+
+    ok(res, await integrationService.autoSyncClassroom(user.id));
+  },
+
   async syncClassroom(req: Request, res: Response): Promise<void> {
     const user = getAuthUser(req);
 

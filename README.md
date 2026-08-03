@@ -511,6 +511,31 @@ classroom.student-submissions.me.readonly
 
 O `googleapis` traz os tipos de **todas** as APIs do Google (dezenas de MB) para consumirmos quatro endpoints. Usamos `fetch` direto na REST API; o `google-auth-library` cuida só de obter e renovar o token.
 
+### Sincronização automática ao abrir o app
+
+Atividades postadas pelo professor **não** aparecem sozinhas em tempo real — não
+há webhook nem processo em segundo plano. O que existe: ao abrir o app, o
+frontend avisa o servidor, e **o servidor decide** se sincroniza, comparando
+`classroomSyncedAt` com um teto de **30 minutos**.
+
+A decisão fica no servidor de propósito. Se o navegador decidisse, uma aba
+recarregando em laço esgotaria a cota da conta Google — o teto viraria sugestão.
+
+| Situação | O que acontece |
+| --- | --- |
+| Última sincronização há menos de 30 min | Responde "pulei", sem tocar no Google |
+| Classroom não conectado | Responde "pulei", sem tentar |
+| Sincronizou e nada entrou | **Silêncio** — avisar toda vez viraria ruído |
+| Sincronizou e entrou algo | Toast com o que foi importado |
+| Falhou | Silêncio no toast, registro no log |
+
+Falha aqui **nunca** vira erro na tela: o usuário só queria abrir o dashboard,
+não pediu essa sincronização. O botão **Sincronizar Agora** em Integrações
+continua sendo o caminho para forçar e ver o relatório completo com os avisos.
+
+O gatilho vive no `AppShell`, que monta uma vez e persiste — circular entre
+telas não redispara nada; só recarregar a página.
+
 ### Tolerância a falhas
 
 - Uma turma que falhar **não aborta** as demais — o erro vira aviso no relatório
@@ -525,11 +550,22 @@ importação de uma turma inteira com todas as suas atividades.
 
 ### "Turma X: importada sem o professor"
 
-Aviso comum, e quase sempre **não é problema da sua conta**. O endpoint
-`courses.teachers.list` do Google responde `500 INTERNAL` quando o aluno não tem
-permissão de ver os perfis do diretório da instituição — a API devolve 500 em vez
-de um 403 honesto. O escopo `classroom.rosters.readonly` estar concedido não muda
-isso; é uma política do Workspace da faculdade.
+Acontece quando a turma pertence a um **Workspace institucional** e a conta que
+sincroniza é **externa** a esse domínio — o caso típico de quem entra com Gmail
+pessoal em turmas de `@suafaculdade.edu.br`.
+
+O Google recusa resolver o perfil do professor e responde **`500 INTERNAL`**, não
+um 403 honesto. Verificado numa conta real, comparando 7 turmas:
+
+| Turma | Domínio do grupo | `teachers` | `teachers/{id}` | `userProfiles/{id}` |
+| --- | --- | --- | --- | --- |
+| do professor com conta pessoal | `classroom.google.com` | 200 | 200 | 200 |
+| as 6 da instituição | `uniformg.edu.br` | 500 | 500 | 500 |
+
+**Os três caminhos falham igualmente**, então não há alternativa via API — e
+nenhum escopo adicional muda isso, porque não é falta de permissão e sim política
+de visibilidade de diretório. Entrar com a conta institucional (`@dominio.edu.br`)
+provavelmente resolve, já que aí a conta é interna ao domínio.
 
 Consequência prática: a turma e as atividades são importadas normalmente, só o
 nome do professor não vem. Você pode preenchê-lo à mão em **Disciplinas**.
