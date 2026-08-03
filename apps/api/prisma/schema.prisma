@@ -175,6 +175,8 @@ model User {
   flashcards        Flashcard[]
   flashcardReviews  FlashcardReview[]
   studyAvailability StudyAvailability[]
+  noteFolders       NoteFolder[]
+  notes             Note[]
 
   @@index([email])
   @@map("users")
@@ -302,6 +304,8 @@ model Subject {
   calendarEvents CalendarEvent[]
   studySessions  StudySession[]
   decks          Deck[]
+  noteFolders    NoteFolder[]
+  notes          Note[]
 
   @@unique([userId, googleCourseId])
   @@index([userId, semesterId])
@@ -520,6 +524,63 @@ model Attachment {
   @@index([userId, subjectId])
   @@index([assignmentId])
   @@map("attachments")
+}
+
+// =============================================================================
+// Anotacoes
+// =============================================================================
+
+/// Pasta de anotacoes de uma disciplina. Auto-referenciada para permitir
+/// aninhamento livre, como no Explorer/Finder.
+model NoteFolder {
+  id   String @id @default(cuid())
+  name String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  subjectId String
+  subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  /// Pasta-mae. Nula na raiz da disciplina. Cascade: excluir uma pasta leva
+  /// junto as subpastas e notas dentro dela.
+  parentId String?
+  parent   NoteFolder?  @relation("NoteFolderTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children NoteFolder[] @relation("NoteFolderTree")
+
+  notes Note[]
+
+  @@index([userId, subjectId])
+  @@index([parentId])
+  @@map("note_folders")
+}
+
+/// Nota de texto rico presa a uma disciplina, solta na raiz ou dentro de uma
+/// pasta. O conteudo trafega como o documento JSON do editor (Tiptap) - o
+/// backend nunca interpreta essa estrutura, so guarda e devolve.
+model Note {
+  id      String @id @default(cuid())
+  title   String
+  content Json   @default("{\"type\":\"doc\",\"content\":[]}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  subjectId String
+  subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  folderId String?
+  folder   NoteFolder? @relation(fields: [folderId], references: [id], onDelete: Cascade)
+
+  @@index([userId, subjectId])
+  @@index([folderId])
+  @@map("notes")
 }
 
 // =============================================================================

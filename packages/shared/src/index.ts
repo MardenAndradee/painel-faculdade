@@ -11,6 +11,7 @@ export * from './schemas/grade.js';
 export * from './schemas/semester.js';
 export * from './schemas/teacher.js';
 export * from './schemas/attachment.js';
+export * from './schemas/note.js';
 export * from './schemas/flashcard.js';
 export * from './schemas/study-plan.js';
 export * from './schemas/statistics.js';

@@ -12,6 +12,7 @@ import {
   History,
   ListChecks,
   MapPin,
+  NotebookText,
   Pencil,
   RefreshCw,
   Target,
@@ -30,6 +31,7 @@ import { AssignmentList } from '@/components/assignments/assignment-list';
 import { ExamList } from '@/components/exams/exam-list';
 import { SubjectGradesCard } from '@/components/grades/subject-grades-card';
 import { GradeFormDialog } from '@/components/grades/grade-form-dialog';
+import { NotesPanel } from '@/components/notes/notes-panel';
 import { useSubjectGrades } from '@/hooks/use-grades';
 import { formatDate, formatGrade } from '@/lib/format';
 
@@ -239,6 +241,10 @@ export default function SubjectDetailPage({ params }: { params: Promise<{ id: st
             <FileStack aria-hidden />
             Materiais
           </TabsTrigger>
+          <TabsTrigger value="anotacoes">
+            <NotebookText aria-hidden />
+            Anotações
+          </TabsTrigger>
           <TabsTrigger value="historico">
             <History aria-hidden />
             Histórico
@@ -305,6 +311,10 @@ export default function SubjectDetailPage({ params }: { params: Promise<{ id: st
               />
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="anotacoes" className="mt-4">
+          <NotesPanel subjectId={subject.id} />
         </TabsContent>
 
         <TabsContent value="historico" className="mt-4">

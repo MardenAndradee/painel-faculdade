@@ -13,6 +13,7 @@ import { attachmentRoutes } from './attachment.routes.js';
 import { flashcardRoutes } from './flashcard.routes.js';
 import { studyPlanRoutes } from './study-plan.routes.js';
 import { statisticsRoutes } from './statistics.routes.js';
+import { noteRoutes } from './note.routes.js';
 
 /**
  * Registro central de rotas. Cada modulo entregue nas proximas etapas
@@ -34,3 +35,4 @@ routes.use(attachmentRoutes);
 routes.use(flashcardRoutes);
 routes.use(studyPlanRoutes);
 routes.use(statisticsRoutes);
+routes.use(noteRoutes);
