@@ -28,7 +28,6 @@ yarn-error.log*
 
 # uploads locais (materiais dos usuarios)
 uploads/
-storage/
 
 # editores
 .vscode/*
@@ -49,3 +48,6 @@ coverage/
 .eslintcache
 .prettiercache
 .turbo/
+
+# Vercel (metadados de projeto vinculado, gerados por `vercel link`/`vercel dev`)
+.vercel/

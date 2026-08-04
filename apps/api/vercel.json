@@ -1,0 +1,4 @@
+{
+  "buildCommand": "cd ../.. && npm run build:shared && cd apps/api && npx prisma generate",
+  "rewrites": [{ "source": "/(.*)", "destination": "/api" }]
+}
