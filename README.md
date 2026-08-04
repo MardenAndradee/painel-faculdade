@@ -1185,6 +1185,23 @@ Variáveis de ambiente:
 
 Como já vale para o Docker: `NEXT_PUBLIC_*` é embutido no bundle em **tempo de build**. Definir a variável depois do primeiro deploy exige um redeploy para ter efeito.
 
+### `husky: command not found` no build
+
+Se o build da Vercel parar em `npm install` com `code 127`:
+
+```
+sh: line 1: husky: command not found
+npm error command failed
+```
+
+O script `prepare` do npm roda logo após o install e chama o `husky`. Mas o
+build de produção instala sem `devDependencies` — e o `husky` é uma delas, então
+o binário não existe e o npm derruba o install inteiro.
+
+Por isso o script é `husky || true`: hooks de git não têm sentido num build de
+CI, e a ausência deles não pode impedir o deploy. Localmente nada muda — o
+`husky` está instalado e configura o `core.hooksPath` normalmente.
+
 ### O que é diferente aqui, e por quê
 
 **Rate limit por instância, não global.** `express-rate-limit` guarda os contadores em memória do processo. Em funções serverless cada instância fria tem sua própria memória, então o limite efetivo é "por instância ativa", não um teto global preciso como no Docker (processo único de longa duração). Para um uso pessoal isso não chega a importar; se o tráfego crescer, a correção é trocar o store por um compartilhado (Redis/Upstash).
