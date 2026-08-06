@@ -3,6 +3,7 @@ import type { GoogleScopeGroup } from '@painel/shared';
 import { authService } from '../services/auth.service.js';
 import { getAuthUser } from '../middlewares/authenticate.js';
 import { env } from '../config/env.js';
+import { logger } from '../config/logger.js';
 import { AppError } from '../utils/app-error.js';
 import { ok, noContent } from '../utils/http-response.js';
 import { safeCompare } from '../utils/crypto.js';
@@ -100,6 +101,19 @@ export const authController = {
       res.redirect(`${env.WEB_APP_URL}/auth/callback`);
     } catch (err) {
       const reason = err instanceof AppError ? err.code.toLowerCase() : 'falha_login';
+
+      /**
+       * O usuario so ve "falha_login" na URL - deliberado, porque detalhe de
+       * erro em query string vaza informacao. Mas o motivo REAL precisa ficar
+       * em algum lugar: sem este log, um login quebrado em producao nao tem
+       * como ser diagnosticado.
+       */
+      logger.error('Falha no callback do Google', {
+        reason,
+        message: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+      });
+
       redirectWithError(reason);
     }
   },
