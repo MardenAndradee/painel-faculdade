@@ -1,3 +1,10 @@
 {
-  "buildCommand": "cd ../.. && npm run build:shared && cd apps/web && npm run build"
+  "buildCommand": "cd ../.. && npm run build:shared && cd apps/web && npm run build",
+
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://painel-faculdade-api.vercel.app/api/:path*"
+    }
+  ]
 }

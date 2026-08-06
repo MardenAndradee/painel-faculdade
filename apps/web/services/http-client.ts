@@ -105,8 +105,24 @@ interface RequestOptions extends Omit<RequestInit, 'body'> {
   query?: Record<string, string | number | boolean | undefined | null>;
 }
 
+/**
+ * Monta a URL final aceitando `API_URL` absoluto OU relativo.
+ *
+ * Em producao o valor recomendado e relativo (`/api/v1`), servido pelo mesmo
+ * dominio do frontend via rewrite. Isso faz o cookie de sessao ser
+ * *first-party*: navegadores que bloqueiam cookie de terceiro - Brave por
+ * padrao, e o Chrome caminhando para o mesmo - descartariam um cookie vindo de
+ * um dominio diferente, e a sessao nunca se estabeleceria.
+ *
+ * `new URL()` exige base quando o primeiro argumento e relativo, dai o
+ * `origin`. Em SSR nao ha `window`; a base ali e irrelevante porque as
+ * chamadas partem de hooks que so rodam no cliente.
+ */
 function buildUrl(path: string, query?: RequestOptions['query']): string {
-  const url = new URL(`${API_URL}${path.startsWith('/') ? path : `/${path}`}`);
+  const normalized = `${API_URL}${path.startsWith('/') ? path : `/${path}`}`;
+  const origin = typeof window === 'undefined' ? 'http://localhost' : window.location.origin;
+
+  const url = new URL(normalized, origin);
 
   if (query) {
     for (const [key, value] of Object.entries(query)) {

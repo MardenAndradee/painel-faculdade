@@ -14,7 +14,9 @@ export const authService = {
    * dominio do Google e o retorno precisa carregar o cookie httpOnly.
    */
   redirectToGoogle(scopes?: 'classroom' | 'calendar'): void {
-    const url = new URL(`${API_URL}/auth/google`);
+    // `window.location.origin` como base porque `API_URL` pode ser relativo
+    // (`/api/v1`) quando a API e servida pelo mesmo dominio do frontend.
+    const url = new URL(`${API_URL}/auth/google`, window.location.origin);
     if (scopes) url.searchParams.set('scopes', scopes);
 
     window.location.href = url.toString();

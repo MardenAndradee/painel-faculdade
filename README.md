@@ -1155,7 +1155,7 @@ Variáveis de ambiente (Production e Preview):
 | `DIRECT_DATABASE_URL` | connection string direta do Neon |
 | `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` | `openssl rand -base64 48`, um valor **diferente** para cada |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | do Google Cloud Console |
-| `GOOGLE_REDIRECT_URI` | `https://<domínio-da-api>/api/v1/auth/google/callback` |
+| `GOOGLE_REDIRECT_URI` | `https://<domínio-do-**web**>/api/v1/auth/google/callback` — ver [Por que a API é servida pelo domínio do frontend](#por-que-a-api-é-servida-pelo-domínio-do-frontend) |
 | `WEB_APP_URL`, `CORS_ORIGINS` | `https://<domínio-do-web>` |
 | `STORAGE_DRIVER` | `r2` |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` | do passo 2 |
@@ -1180,10 +1180,37 @@ Variáveis de ambiente:
 
 | Variável | Valor |
 | --- | --- |
-| `NEXT_PUBLIC_API_URL` | `https://<domínio-da-api>/api/v1` |
+| `NEXT_PUBLIC_API_URL` | `/api/v1` — **caminho relativo**, não a URL da API |
 | `NEXT_PUBLIC_APP_NAME` | `Painel Faculdade` |
 
 Como já vale para o Docker: `NEXT_PUBLIC_*` é embutido no bundle em **tempo de build**. Definir a variável depois do primeiro deploy exige um redeploy para ter efeito.
+
+### Por que a API é servida pelo domínio do frontend
+
+`apps/web/vercel.json` reescreve `/api/*` para o domínio da API. Assim o navegador
+enxerga **um só site**, e o cookie de sessão é *first-party*.
+
+Sem isso, `web.vercel.app` e `api.vercel.app` são sites diferentes — e como
+`vercel.app` está na *Public Suffix List*, nem dá para compartilhar cookie entre
+os subdomínios. O cookie da API vira **cookie de terceiro**, que o Brave bloqueia
+por padrão e o Chrome vem restringindo. O sintoma é traiçoeiro: o login
+**funciona** (o log registra "Login realizado"), mas o `POST /auth/refresh`
+seguinte responde 401 porque o navegador não devolve o cookie — e o usuário vê
+"Não foi possível entrar" sem nenhuma pista.
+
+Duas consequências para a configuração:
+
+- **`GOOGLE_REDIRECT_URI` aponta para o domínio do WEB**, não o da API:
+  `https://<domínio-do-web>/api/v1/auth/google/callback`. O retorno do Google
+  precisa chegar pelo mesmo domínio, senão o cookie é gravado no domínio da API
+  e o problema volta. Esse é o valor que vai no **Authorized redirect URIs** do
+  Google Cloud Console.
+- **O `destination` do rewrite tem o domínio da API fixo.** Se ele mudar, ajuste
+  `apps/web/vercel.json` junto.
+
+O `NEXT_PUBLIC_API_URL` relativo é o que faz o cliente chamar o próprio domínio;
+a URL absoluta continua funcionando em desenvolvimento, onde front e API rodam em
+portas diferentes e o cookie é `SameSite=Lax` no mesmo `localhost`.
 
 ### `husky: command not found` no build
 
