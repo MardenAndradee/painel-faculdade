@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { updateProfileSchema } from '@painel/shared';
+import { exchangeSessionSchema, updateProfileSchema } from '@painel/shared';
 
 /**
  * Schemas das rotas de autenticacao.
@@ -24,4 +24,4 @@ export const loginQuerySchema = z.object({
     .transform((value) => (value ? [value] : [])),
 });
 
-export { updateProfileSchema };
+export { exchangeSessionSchema, updateProfileSchema };

@@ -252,11 +252,19 @@ Nas Etapas 8 e 9, quando as APIs do Classroom e do Calendar forem usadas, será 
 ```
 Browser  →  GET  /auth/google           → redireciona ao consentimento do Google
 Google   →  GET  /auth/google/callback  → valida state, troca code por tokens,
-                                          grava cookie httpOnly e redireciona
-Browser  →  POST /auth/refresh          → recebe o access token no corpo
+                                          redireciona levando o refresh token
+                                          no FRAGMENTO da URL (#session=...)
+Browser  →  POST /auth/session          → troca o token do fragmento pela sessao;
+                                          o cookie httpOnly e gravado AQUI
+Browser  →  POST /auth/refresh          → recarregamentos seguintes: recebe o
+                                          access token no corpo, a partir do cookie
 ```
 
-O access token **nunca trafega pela URL**. Passá-lo por query string o exporia no histórico do navegador, nos logs de acesso do servidor e no header `Referer` — por isso o callback entrega apenas o cookie e o frontend busca o token numa segunda chamada.
+O access token **nunca trafega pela URL** em nenhuma etapa. Passá-lo por query string o exporia no histórico do navegador, nos logs de acesso do servidor e no header `Referer`.
+
+O refresh token, por sua vez, viaja no **fragmento** (`#session=...`) só entre o callback e `/auth/callback` no frontend — o fragmento nunca chega a nenhum servidor (nem ao nosso, nem a um proxy, nem a um log de acesso), e o frontend o remove da barra de endereços assim que lê.
+
+**Por que o cookie não é gravado direto no redirecionamento do callback.** Essa era a implementação original, e funciona em Chrome/Firefox — mas o Safari (ITP) limita a validade de cookies gravados numa resposta de redirecionamento logo após uma navegação vinda de outro site (o Google, nesse caso), *ignorando silenciosamente* o `Max-Age` configurado. Na prática, a sessão parecia expirar em menos de 7 dias sem nenhum erro visível, e o usuário era deslogado com frequência — especialmente perceptível num PWA adicionado à tela de início do iOS. `POST /auth/session` existe só para fugir desse padrão: troca o token do fragmento pela sessão através de um `fetch` comum, fora de qualquer cadeia de redirecionamento, onde o cookie é gravado com a validade correta. A rotina de validação é a mesma do `/auth/refresh` — o token do callback é tratado como um refresh token igual a qualquer outro.
 
 ### Onde cada token fica
 
@@ -277,6 +285,7 @@ Cada `POST /auth/refresh` revoga o token apresentado e emite um novo. Se um toke
 | --- | --- | --- | --- |
 | GET | `/auth/google` | — | Inicia o fluxo OAuth |
 | GET | `/auth/google/callback` | — | Retorno do Google |
+| POST | `/auth/session` | — | Troca o token do fragmento do callback pela sessão (grava o cookie) |
 | POST | `/auth/refresh` | cookie | Rotaciona a sessão e devolve o access token |
 | POST | `/auth/logout` | cookie | Encerra a sessão atual |
 | GET | `/auth/me` | Bearer | Perfil do usuário |

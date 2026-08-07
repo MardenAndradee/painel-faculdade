@@ -4,6 +4,7 @@ import { authenticate } from '../middlewares/authenticate.js';
 import { authRateLimiter, refreshRateLimiter } from '../middlewares/rate-limit.js';
 import { validate } from '../middlewares/validate.js';
 import {
+  exchangeSessionSchema,
   googleCallbackQuerySchema,
   loginQuerySchema,
   updateProfileSchema,
@@ -36,6 +37,15 @@ authRoutes.get(
 // Renovacao ocorre a cada carregamento de pagina: limite proprio, mais folgado.
 authRoutes.post('/auth/refresh', refreshRateLimiter, authController.refresh);
 authRoutes.post('/auth/logout', refreshRateLimiter, authController.logout);
+
+// Passo final do login (ver comentario em handleGoogleCallback): mesmo
+// perfil de uso do refresh, entao o mesmo limite.
+authRoutes.post(
+  '/auth/session',
+  refreshRateLimiter,
+  validate({ body: exchangeSessionSchema }),
+  authController.exchangeSession,
+);
 
 // --- Protegidas -------------------------------------------------------------
 // Cobertas pelo limite geral da API; apenas a revogacao em massa recebe o

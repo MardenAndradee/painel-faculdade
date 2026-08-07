@@ -32,6 +32,23 @@ export const authService = {
     return session;
   },
 
+  /**
+   * Troca o token do fragmento da URL (ver `app/auth/callback`) pela sessao.
+   *
+   * Grava o cookie httpOnly como efeito colateral da resposta - por nao ser um
+   * redirecionamento, o Safari nao encurta a validade do cookie.
+   */
+  async exchangeSession(token: string): Promise<AuthSession> {
+    const session = await httpClient.post<AuthSession>(
+      '/auth/session',
+      { token },
+      { skipAuth: true },
+    );
+
+    setAccessToken(session.accessToken);
+    return session;
+  },
+
   me(): Promise<AuthUser> {
     return httpClient.get<AuthUser>('/auth/me');
   },

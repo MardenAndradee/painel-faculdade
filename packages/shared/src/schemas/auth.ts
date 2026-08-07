@@ -42,6 +42,22 @@ export const authSessionSchema = z.object({
 
 export type AuthSession = z.infer<typeof authSessionSchema>;
 
+/**
+ * Troca do token emitido no callback do Google pela sessao (e pelo cookie).
+ *
+ * O callback NAO grava mais o cookie na mesma resposta que redireciona: o
+ * Safari (ITP) limita a validade de cookies gravados numa resposta de
+ * redirecionamento logo apos uma navegacao vinda de outro site, ignorando o
+ * `maxAge` configurado. O token viaja no fragmento da URL (nunca chega ao
+ * servidor) e esta rota o troca pela sessao via um `fetch` comum - fora de
+ * qualquer cadeia de redirecionamento, o cookie e gravado com a validade certa.
+ */
+export const exchangeSessionSchema = z.object({
+  token: z.string().min(1, 'Token obrigatório'),
+});
+
+export type ExchangeSessionInput = z.infer<typeof exchangeSessionSchema>;
+
 /** Conteudo do access token JWT. */
 export interface AccessTokenPayload {
   sub: string;

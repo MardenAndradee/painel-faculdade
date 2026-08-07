@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { AuthUser } from '@painel/shared';
+import type { AuthSession, AuthUser } from '@painel/shared';
 import { authService } from '@/services/auth.service';
 import { setAccessToken, setSessionExpiredHandler } from '@/services/http-client';
 
@@ -22,6 +22,8 @@ interface AuthContextValue {
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   setUser: (user: AuthUser) => void;
+  /** Aplica uma sessao ja obtida (ex.: troca do token do callback) sem novo fetch. */
+  applySession: (session: AuthSession) => void;
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
@@ -66,12 +68,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [clearRenewalTimer],
   );
 
+  /** Aplica os dados de uma sessao ja obtida: guarda o usuario e agenda a renovacao. */
+  const applySession = useCallback(
+    (session: AuthSession) => {
+      setUserState(session.user);
+      scheduleRenewal(session.expiresIn);
+    },
+    [scheduleRenewal],
+  );
+
   const restoreSession = useCallback(async (): Promise<void> => {
     try {
       const session = await authService.refresh();
 
-      setUserState(session.user);
-      scheduleRenewal(session.expiresIn);
+      applySession(session);
     } catch {
       setUserState(null);
       setAccessToken(null);
@@ -79,7 +89,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [scheduleRenewal, clearRenewalTimer]);
+  }, [applySession, clearRenewalTimer]);
 
   useEffect(() => {
     restoreSessionRef.current = restoreSession;
@@ -124,8 +134,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       logout,
       refreshUser,
       setUser: setUserState,
+      applySession,
     }),
-    [user, isLoading, logout, refreshUser],
+    [user, isLoading, logout, refreshUser, applySession],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

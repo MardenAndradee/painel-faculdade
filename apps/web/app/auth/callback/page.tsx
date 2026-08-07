@@ -3,44 +3,66 @@
 import { Suspense, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
+import { authService } from '@/services/auth.service';
 import { FullPageSpinner } from '@/components/ui/spinner';
+
+const TOKEN_HASH_PREFIX = '#session=';
 
 /**
  * Ponto de retorno do fluxo OAuth.
  *
- * Quando o navegador chega aqui o cookie httpOnly de refresh ja foi gravado
- * pela API. O AuthProvider troca esse cookie pelo access token; esta pagina
- * apenas aguarda o resultado e encaminha o usuario.
+ * O token chega no FRAGMENTO da URL (`#session=...`), nunca visto pelo
+ * servidor - nem no redirecionamento da API, nem em log de acesso. Lemos e
+ * removemos da barra de enderecos imediatamente, e trocamos pela sessao com
+ * um `fetch` comum: diferente de gravar o cookie na propria resposta do
+ * redirecionamento, isso nao esbarra no limite que o Safari impoe a cookies
+ * gravados logo apos uma navegacao vinda de outro site (o Google).
  *
- * O access token nunca aparece na URL, justamente para nao vazar no historico
- * do navegador, nos logs de acesso nem no header Referer.
+ * O access token em si nunca aparece na URL, em nenhum dos dois casos - isso
+ * o exporia no historico do navegador, nos logs de acesso e no header Referer.
  */
 function AuthCallbackContent() {
-  const { isLoading, isAuthenticated } = useAuth();
+  const { applySession } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const hasRedirected = useRef(false);
+  const hasRun = useRef(false);
 
   useEffect(() => {
-    if (isLoading || hasRedirected.current) return;
+    if (hasRun.current) return;
+    hasRun.current = true;
 
-    hasRedirected.current = true;
+    const hash = window.location.hash;
+    const token = hash.startsWith(TOKEN_HASH_PREFIX)
+      ? decodeURIComponent(hash.slice(TOKEN_HASH_PREFIX.length))
+      : null;
 
-    if (!isAuthenticated) {
+    // Some da URL e do historico assim que lido, com ou sem sucesso.
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+
+    if (!token) {
       router.replace('/login?error=falha_login');
       return;
     }
 
-    // Autorizacao incremental parte da tela de integracoes e volta para la.
-    const destino = searchParams.get('destino');
-    const conectado = searchParams.get('conectado');
+    void (async () => {
+      try {
+        const session = await authService.exchangeSession(token);
+        applySession(session);
 
-    router.replace(
-      destino === 'integracoes'
-        ? `/integracoes?conectado=${conectado ?? 'classroom'}`
-        : '/dashboard',
-    );
-  }, [isLoading, isAuthenticated, router, searchParams]);
+        // Autorizacao incremental parte da tela de integracoes e volta para la.
+        const destino = searchParams.get('destino');
+        const conectado = searchParams.get('conectado');
+
+        router.replace(
+          destino === 'integracoes'
+            ? `/integracoes?conectado=${conectado ?? 'classroom'}`
+            : '/dashboard',
+        );
+      } catch {
+        router.replace('/login?error=falha_login');
+      }
+    })();
+  }, [router, searchParams, applySession]);
 
   return <FullPageSpinner label="Concluindo login" />;
 }

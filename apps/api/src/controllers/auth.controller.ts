@@ -46,8 +46,19 @@ export const authController = {
   /**
    * Callback do Google.
    *
-   * Termina em redirecionamento para o frontend levando apenas o cookie de
-   * refresh. O access token NAO viaja na URL: isso o exporia no historico do
+   * Termina em redirecionamento para o frontend levando o refresh token no
+   * FRAGMENTO da URL (`#session=...`) - nunca a query string. O fragmento
+   * nunca chega ao servidor (nem ao nosso, nem a proxies, nem a logs de
+   * acesso), e o frontend o remove da barra de enderecos assim que le.
+   *
+   * O cookie NAO e gravado aqui de proposito: o Safari (ITP) limita a
+   * validade de cookies gravados numa resposta de redirecionamento logo apos
+   * uma navegacao vinda de outro site (o Google), ignorando silenciosamente o
+   * `maxAge` configurado - o usuario ficaria sendo deslogado sem motivo
+   * aparente. `POST /auth/session` troca esse token pela sessao via um
+   * `fetch` comum, fora de qualquer cadeia de redirecionamento, onde o
+   * cookie e gravado com a validade correta. O access token, por sua vez,
+   * segue nunca viajando pela URL - isso o exporia no historico do
    * navegador, nos logs de acesso e no header Referer.
    */
   async handleGoogleCallback(req: Request, res: Response): Promise<void> {
@@ -85,7 +96,8 @@ export const authController = {
       const { refreshToken } = await authService.loginWithGoogle(code, sessionContext(req));
 
       clearOAuthStateCookie(res);
-      setRefreshCookie(res, refreshToken);
+
+      const fragment = `#session=${encodeURIComponent(refreshToken)}`;
 
       // O prefixo do `state` indica que a autorizacao partiu da tela de
       // integracoes; nesse caso o usuario volta para la, e nao ao dashboard.
@@ -93,12 +105,12 @@ export const authController = {
 
       if (scopeGroup) {
         res.redirect(
-          `${env.WEB_APP_URL}/auth/callback?destino=integracoes&conectado=${scopeGroup}`,
+          `${env.WEB_APP_URL}/auth/callback?destino=integracoes&conectado=${scopeGroup}${fragment}`,
         );
         return;
       }
 
-      res.redirect(`${env.WEB_APP_URL}/auth/callback`);
+      res.redirect(`${env.WEB_APP_URL}/auth/callback${fragment}`);
     } catch (err) {
       const reason = err instanceof AppError ? err.code.toLowerCase() : 'falha_login';
 
@@ -115,6 +127,31 @@ export const authController = {
       });
 
       redirectWithError(reason);
+    }
+  },
+
+  /**
+   * Troca o token recebido no fragmento do callback pela sessao.
+   *
+   * Usa a MESMA rotina do refresh comum (`authService.refreshSession`): o
+   * token do callback e um refresh token igual a qualquer outro, so que
+   * chega no corpo da requisicao em vez do cookie porque, nesse momento, o
+   * cookie ainda nao existe. Ver o comentario em `handleGoogleCallback`.
+   */
+  async exchangeSession(req: Request, res: Response): Promise<void> {
+    const { token } = req.body as { token: string };
+
+    try {
+      const { session, refreshToken } = await authService.refreshSession(
+        token,
+        sessionContext(req),
+      );
+
+      setRefreshCookie(res, refreshToken);
+      ok(res, session);
+    } catch (error) {
+      clearRefreshCookie(res);
+      throw error;
     }
   },
 
