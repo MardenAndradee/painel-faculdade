@@ -223,31 +223,34 @@ export default function SubjectDetailPage({ params }: { params: Promise<{ id: st
       </div>
 
       {/* Abas */}
+      {/* Seis abas nao cabem inteiras num celular; abaixo de `sm` so o icone
+          aparece (rotulo continua no aria-label, para leitor de tela), o que
+          evita depender so da rolagem horizontal para descobrir as demais. */}
       <Tabs defaultValue="atividades">
         <TabsList>
-          <TabsTrigger value="atividades">
+          <TabsTrigger value="atividades" aria-label="Atividades">
             <ListChecks aria-hidden />
-            Atividades
+            <span className="hidden sm:inline">Atividades</span>
           </TabsTrigger>
-          <TabsTrigger value="provas">
+          <TabsTrigger value="provas" aria-label="Provas">
             <ClipboardList aria-hidden />
-            Provas
+            <span className="hidden sm:inline">Provas</span>
           </TabsTrigger>
-          <TabsTrigger value="notas">
+          <TabsTrigger value="notas" aria-label="Notas">
             <BookOpen aria-hidden />
-            Notas
+            <span className="hidden sm:inline">Notas</span>
           </TabsTrigger>
-          <TabsTrigger value="materiais">
+          <TabsTrigger value="materiais" aria-label="Materiais">
             <FileStack aria-hidden />
-            Materiais
+            <span className="hidden sm:inline">Materiais</span>
           </TabsTrigger>
-          <TabsTrigger value="anotacoes">
+          <TabsTrigger value="anotacoes" aria-label="Anotações">
             <NotebookText aria-hidden />
-            Anotações
+            <span className="hidden sm:inline">Anotações</span>
           </TabsTrigger>
-          <TabsTrigger value="historico">
+          <TabsTrigger value="historico" aria-label="Histórico">
             <History aria-hidden />
-            Histórico
+            <span className="hidden sm:inline">Histórico</span>
           </TabsTrigger>
         </TabsList>
 

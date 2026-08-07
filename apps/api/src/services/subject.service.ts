@@ -279,8 +279,8 @@ export const subjectService = {
   /**
    * Exclusao permanente.
    *
-   * O cascade do schema remove provas, notas e anexos junto. A interface
-   * mostra o impacto antes de confirmar.
+   * O cascade do schema remove atividades, provas, notas e anexos junto. A
+   * interface mostra o impacto antes de confirmar.
    */
   async remove(userId: string, id: string): Promise<void> {
     // Os arquivos precisam sair ANTES: depois do delete o banco ja apagou as

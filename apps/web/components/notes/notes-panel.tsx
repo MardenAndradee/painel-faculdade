@@ -24,6 +24,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { cn } from '@/lib/utils';
 import { NotesTree } from './notes-tree';
 import { NoteFolderDialog } from './note-folder-dialog';
 import { NoteEditor } from './note-editor';
@@ -82,8 +83,19 @@ export function NotesPanel({ subjectId }: NotesPanelProps) {
 
   return (
     <Card className="overflow-hidden p-0">
-      <div className="flex h-[min(70dvh,700px)] min-h-[420px]">
-        <div className="flex w-64 shrink-0 flex-col border-r">
+      <div className="flex h-[min(75dvh,700px)] min-h-[420px]">
+        {/*
+          No celular as duas colunas nao cabem lado a lado, entao so uma
+          aparece por vez: a lista some quando ha nota selecionada, e volta
+          quando `onBack` e chamado no editor. Do `md` para cima as duas
+          ficam sempre visiveis, como antes.
+        */}
+        <div
+          className={cn(
+            'w-full shrink-0 flex-col border-r md:flex md:w-64',
+            selectedNoteId ? 'hidden' : 'flex',
+          )}
+        >
           <div className="flex items-center gap-1 border-b p-2">
             <Button
               variant="ghost"
@@ -128,20 +140,21 @@ export function NotesPanel({ subjectId }: NotesPanelProps) {
           </div>
         </div>
 
-        <div className="min-w-0 flex-1">
+        <div className={cn('min-w-0 flex-1', selectedNoteId ? 'flex' : 'hidden md:flex')}>
           {selectedNoteId ? (
             <NoteEditor
               key={selectedNoteId}
               noteId={selectedNoteId}
               subjectId={subjectId}
               onMissing={() => setSelectedNoteId(null)}
+              onBack={() => setSelectedNoteId(null)}
             />
           ) : (
             <EmptyState
               icon={NotebookText}
               title="Nenhuma nota selecionada"
               description="Crie uma nota ou escolha uma na lista ao lado."
-              className="h-full justify-center"
+              className="h-full w-full justify-center"
             />
           )}
         </div>

@@ -5,11 +5,9 @@ import {
   CalendarClock,
   CheckCircle2,
   ClipboardList,
-  GraduationCap,
   ListChecks,
   PartyPopper,
   RefreshCw,
-  TrendingUp,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useDashboardSummary } from '@/hooks/use-dashboard';
@@ -23,7 +21,6 @@ import { AssignmentRow } from '@/components/dashboard/assignment-row';
 import { ExamRow } from '@/components/dashboard/exam-row';
 import { MiniCalendar } from '@/components/dashboard/mini-calendar';
 import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
-import { formatGrade } from '@/lib/format';
 
 /**
  * Dashboard.
@@ -95,35 +92,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Estatísticas rápidas */}
-      <section
-        aria-label="Estatísticas rápidas"
-        className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
-      >
-        <StatCard
-          label="Disciplinas"
-          value={stats.subjectCount}
-          icon={GraduationCap}
-          hint={
-            stats.upcomingExamCount > 0 ? `${stats.upcomingExamCount} provas a caminho` : undefined
-          }
-        />
-
-        <StatCard
-          label="Média geral"
-          value={formatGrade(stats.overallAverage)}
-          icon={TrendingUp}
-          tone={
-            stats.overallAverage === null
-              ? 'default'
-              : stats.overallAverage >= 7
-                ? 'success'
-                : stats.overallAverage >= 6
-                  ? 'warning'
-                  : 'danger'
-          }
-          hint={stats.overallAverage === null ? 'Nenhuma nota lançada' : 'Média das disciplinas'}
-        />
-
+      <section aria-label="Estatísticas rápidas" className="grid gap-4 sm:grid-cols-2">
         <StatCard
           label="Em aberto"
           value={stats.pendingCount}

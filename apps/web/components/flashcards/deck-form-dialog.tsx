@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Loader2, Plus } from 'lucide-react';
@@ -46,6 +47,7 @@ const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#0ea5e9'
 
 export function DeckFormDialog({ open, onOpenChange, deck }: DeckFormDialogProps) {
   const isEditing = Boolean(deck);
+  const router = useRouter();
   const createDeck = useCreateDeck();
   const updateDeck = useUpdateDeck();
   const { data: subjects } = useSubjects({ page: 1, perPage: 100 });
@@ -80,11 +82,15 @@ export function DeckFormDialog({ open, onOpenChange, deck }: DeckFormDialogProps
     try {
       if (isEditing && deck) {
         await updateDeck.mutateAsync({ id: deck.id, data: values });
+        onOpenChange(false);
       } else {
-        await createDeck.mutateAsync(values);
+        const created = await createDeck.mutateAsync(values);
+        onOpenChange(false);
+        // Baralho novo nao tem cartao nenhum ainda - vai direto pra tela dele
+        // em vez de fazer o usuario reabrir o diálogo pra achar o que acabou
+        // de criar na lista.
+        router.push(`/flashcards/${created.id}`);
       }
-
-      onOpenChange(false);
     } catch {
       // O toast de erro vem do hook; o diálogo fica aberto para correção.
     }

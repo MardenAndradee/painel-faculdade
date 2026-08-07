@@ -148,13 +148,19 @@ export function AvailabilityDialog({ open, onOpenChange, windows }: Availability
                       const suffix = dayWindows.length > 1 ? ` ${position + 1}` : '';
 
                       return (
-                        <div key={index} className="flex flex-wrap items-center gap-2">
+                        // Grid em vez de flex-wrap: os dois campos de hora dividem o
+                        // espaco igualmente e "até"/lixeira ficam com largura minima,
+                        // entao a quebra nunca deixa um deles sozinho numa linha - no
+                        // celular a linha so encolhe junto, sem sobrar nada pendurado.
+                        <div
+                          key={index}
+                          className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-2"
+                        >
                           <Input
                             type="time"
                             value={item.start}
                             onChange={(event) => updateWindow(index, { start: event.target.value })}
                             aria-label={`Início da janela${suffix} de ${label}`}
-                            className="w-32"
                           />
 
                           <span className="text-sm text-muted-foreground">até</span>
@@ -164,7 +170,6 @@ export function AvailabilityDialog({ open, onOpenChange, windows }: Availability
                             value={item.end}
                             onChange={(event) => updateWindow(index, { end: event.target.value })}
                             aria-label={`Fim da janela${suffix} de ${label}`}
-                            className="w-32"
                           />
 
                           <Button

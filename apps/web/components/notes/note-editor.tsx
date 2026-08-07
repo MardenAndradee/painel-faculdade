@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ComponentType } from 'react';
 import { EditorContent, useEditor, type Editor, type JSONContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import {
+  ArrowLeft,
   Bold,
   Heading1,
   Heading2,
@@ -27,6 +28,8 @@ interface NoteEditorProps {
   subjectId: string;
   /** Chamado quando a nota nao e encontrada (excluida direto ou por cascata da pasta). */
   onMissing: () => void;
+  /** Volta para a lista. So aparece no celular, onde lista e editor nao cabem lado a lado. */
+  onBack: () => void;
 }
 
 const SAVE_DELAY_MS = 800;
@@ -158,7 +161,7 @@ function Toolbar({ editor }: { editor: Editor }) {
  * para nao disparar um PATCH a cada tecla. `titleRef` guarda o titulo mais
  * recente para o timer, que roda fora do ciclo de render do React.
  */
-export function NoteEditor({ noteId, subjectId, onMissing }: NoteEditorProps) {
+export function NoteEditor({ noteId, subjectId, onMissing, onBack }: NoteEditorProps) {
   const { data: note, isLoading, isError } = useNote(noteId);
   const updateNote = useUpdateNote(subjectId);
 
@@ -236,6 +239,17 @@ export function NoteEditor({ noteId, subjectId, onMissing }: NoteEditorProps) {
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between gap-3 border-b px-4 py-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-8 shrink-0 md:hidden"
+          onClick={onBack}
+        >
+          <ArrowLeft className="size-4" aria-hidden />
+          <span className="sr-only">Voltar para a lista</span>
+        </Button>
+
         <input
           value={title}
           onChange={(event) => {

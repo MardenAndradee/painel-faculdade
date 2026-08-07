@@ -37,7 +37,12 @@ export function CalendarItemChip({ item, onClick, variant = 'compact' }: Calenda
         style={{ backgroundColor: color }}
         aria-hidden
       />
-      <Icon className="size-3 shrink-0 opacity-70" aria-hidden />
+      {/* No celular a celula do mes mal cabe o ponto de cor + o titulo; o
+          icone some ali e volta a aparecer a partir de `sm`, onde ha espaco. */}
+      <Icon
+        className={cn('size-3 shrink-0 opacity-70', variant === 'compact' && 'hidden sm:block')}
+        aria-hidden
+      />
       <span className={cn('min-w-0 flex-1 truncate', item.isCompleted && 'line-through')}>
         {item.title}
       </span>

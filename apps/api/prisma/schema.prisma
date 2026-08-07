@@ -348,7 +348,10 @@ model Assignment {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   subjectId String?
-  subject   Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  /// Cascade: excluir a disciplina apaga suas atividades tambem, como a tela
+  /// de confirmacao ja promete ao usuario. Atividade sem disciplina (avulsa)
+  /// so existe quando criada assim - nunca sobra orfa por causa de uma exclusao.
+  subject   Subject? @relation(fields: [subjectId], references: [id], onDelete: Cascade)
 
   grade          Grade?
   attachments    Attachment[]
