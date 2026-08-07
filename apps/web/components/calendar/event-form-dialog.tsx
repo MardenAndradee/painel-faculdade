@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { FormField } from '@/components/ui/form-field';
+import { DateTimePicker } from '@/components/ui/date-time-picker';
 import {
   Dialog,
   DialogContent,
@@ -152,11 +153,35 @@ export function EventFormDialog({ open, onOpenChange, event, defaultDate }: Even
 
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField label="Início" error={errors.startsAt?.message} required>
-              {(field) => <Input {...field} {...register('startsAt')} type="datetime-local" />}
+              {(field) => (
+                <Controller
+                  control={control}
+                  name="startsAt"
+                  render={({ field: controlled }) => (
+                    <DateTimePicker
+                      {...field}
+                      value={controlled.value ?? ''}
+                      onChange={controlled.onChange}
+                    />
+                  )}
+                />
+              )}
             </FormField>
 
             <FormField label="Término" error={errors.endsAt?.message} required>
-              {(field) => <Input {...field} {...register('endsAt')} type="datetime-local" />}
+              {(field) => (
+                <Controller
+                  control={control}
+                  name="endsAt"
+                  render={({ field: controlled }) => (
+                    <DateTimePicker
+                      {...field}
+                      value={controlled.value ?? ''}
+                      onChange={controlled.onChange}
+                    />
+                  )}
+                />
+              )}
             </FormField>
           </div>
 

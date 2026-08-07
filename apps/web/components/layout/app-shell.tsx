@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { Menu } from 'lucide-react';
+import { Menu, RefreshCw } from 'lucide-react';
 import { SidebarNav } from './sidebar-nav';
 import { Breadcrumbs } from './breadcrumbs';
 import { ThemeToggle } from './theme-toggle';
@@ -10,6 +10,8 @@ import { UserMenu } from './user-menu';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { useAutoSync } from '@/hooks/use-auto-sync';
+import { useAuth } from '@/hooks/use-auth';
+import { useSyncClassroom } from '@/hooks/use-integrations';
 
 /**
  * Estrutura das telas autenticadas: sidebar + navbar + area de conteudo.
@@ -21,6 +23,8 @@ import { useAutoSync } from '@/hooks/use-auto-sync';
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = usePathname();
+  const { user } = useAuth();
+  const sync = useSyncClassroom();
 
   // Sincroniza o Classroom ao abrir o app. Fica AQUI, e nao numa tela
   // especifica, porque o shell monta uma vez e persiste enquanto o usuario
@@ -55,6 +59,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Breadcrumbs key={pathname} />
 
           <div className="ml-auto flex items-center gap-1">
+            {/* So aparece pra quem ja conectou o Classroom: sem conta ligada,
+                a sincronizacao nao teria o que fazer. */}
+            {user?.hasClassroomAccess && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => sync.mutate()}
+                disabled={sync.isPending}
+                aria-label="Sincronizar com o Classroom"
+              >
+                <RefreshCw
+                  className={sync.isPending ? 'size-4 animate-spin' : 'size-4'}
+                  aria-hidden
+                />
+                <span className="hidden sm:inline">
+                  {sync.isPending ? 'Sincronizando...' : 'Sincronizar'}
+                </span>
+              </Button>
+            )}
+
             <ThemeToggle />
             <UserMenu />
           </div>

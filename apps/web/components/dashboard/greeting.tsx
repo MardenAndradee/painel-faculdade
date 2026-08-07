@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 /**
  * Saudacao conforme a hora do dia.
@@ -18,32 +20,69 @@ function getGreeting(hour: number): string {
   return 'Boa noite';
 }
 
+/** "sexta-feira, 7 de agosto" -> "Sexta-feira, 7 de agosto". */
+function formatTodayLabel(date: Date): string {
+  const label = format(date, "EEEE, d 'de' MMMM", { locale: ptBR });
+
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
 interface GreetingProps {
   name: string;
   semesterName: string | null;
-  pendingCount: number;
-  overdueCount: number;
+  /** Entregas com prazo dentro dos proximos 7 dias. */
+  dueThisWeekCount: number;
+  /** Dias ate a proxima prova, ou nulo quando nao ha prova marcada. */
+  nextExamDays: number | null;
 }
 
-export function Greeting({ name, semesterName, pendingCount, overdueCount }: GreetingProps) {
+/** "uma prova hoje" / "amanhã" / "em N dias" - por extenso perto do prazo, porque le melhor. */
+function examPhrase(days: number): string {
+  if (days <= 0) return 'uma prova hoje';
+  if (days === 1) return 'uma prova amanhã';
+
+  return `uma prova em ${days} dias`;
+}
+
+/** Resumo da semana: entregas nos proximos 7 dias e a proxima prova, quando houver. */
+function buildSummary(dueThisWeekCount: number, nextExamDays: number | null): string {
+  const parts: string[] = [];
+
+  if (dueThisWeekCount > 0) {
+    parts.push(
+      `${dueThisWeekCount} ${dueThisWeekCount === 1 ? 'entrega' : 'entregas'} nesta semana`,
+    );
+  }
+
+  if (nextExamDays !== null) parts.push(examPhrase(nextExamDays));
+
+  if (parts.length === 0)
+    return 'Nenhuma entrega ou prova esta semana. Aproveite para adiantar os estudos.';
+
+  return `Você tem ${parts.join(' e ')}.`;
+}
+
+export function Greeting({ name, semesterName, dueThisWeekCount, nextExamDays }: GreetingProps) {
   const [greeting, setGreeting] = useState('Olá');
+  const [dateLabel, setDateLabel] = useState('');
 
   useEffect(() => {
-    setGreeting(getGreeting(new Date().getHours()));
+    const now = new Date();
+
+    setGreeting(getGreeting(now.getHours()));
+    setDateLabel(formatTodayLabel(now));
   }, []);
 
   const firstName = name.split(' ')[0] ?? name;
-
-  const summary =
-    overdueCount > 0
-      ? `Você tem ${overdueCount} ${overdueCount === 1 ? 'atividade atrasada' : 'atividades atrasadas'} e ${pendingCount} em aberto.`
-      : pendingCount > 0
-        ? `Você tem ${pendingCount} ${pendingCount === 1 ? 'atividade em aberto' : 'atividades em aberto'}. Nada atrasado.`
-        : 'Nenhuma atividade pendente. Tudo em dia!';
+  const summary = buildSummary(dueThisWeekCount, nextExamDays);
 
   return (
     <div>
-      <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
+      {/* Altura reservada mesmo antes do efeito rodar, para o cabecalho nao
+          "pular" um pixel quando a data aparece. */}
+      <p className="text-xs text-muted-foreground">{dateLabel || ' '}</p>
+
+      <h1 className="mt-0.5 text-xl font-semibold tracking-tight sm:text-2xl">
         {greeting}, {firstName}
       </h1>
 

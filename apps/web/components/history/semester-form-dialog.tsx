@@ -15,6 +15,7 @@ import { useCreateSemester, useUpdateSemester } from '@/hooks/use-semesters';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { FormField } from '@/components/ui/form-field';
+import { DatePicker } from '@/components/ui/date-picker';
 import {
   Dialog,
   DialogContent,
@@ -154,11 +155,35 @@ export function SemesterFormDialog({ open, onOpenChange, semester }: SemesterFor
 
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField label="Início" error={errors.startDate?.message} required>
-              {(field) => <Input {...field} {...register('startDate')} type="date" />}
+              {(field) => (
+                <Controller
+                  control={control}
+                  name="startDate"
+                  render={({ field: controlled }) => (
+                    <DatePicker
+                      {...field}
+                      value={controlled.value ?? ''}
+                      onChange={controlled.onChange}
+                    />
+                  )}
+                />
+              )}
             </FormField>
 
             <FormField label="Término" error={errors.endDate?.message} required>
-              {(field) => <Input {...field} {...register('endDate')} type="date" />}
+              {(field) => (
+                <Controller
+                  control={control}
+                  name="endDate"
+                  render={({ field: controlled }) => (
+                    <DatePicker
+                      {...field}
+                      value={controlled.value ?? ''}
+                      onChange={controlled.onChange}
+                    />
+                  )}
+                />
+              )}
             </FormField>
           </div>
 

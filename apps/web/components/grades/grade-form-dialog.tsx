@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { FormField } from '@/components/ui/form-field';
+import { DatePicker } from '@/components/ui/date-picker';
 import {
   Dialog,
   DialogContent,
@@ -262,7 +263,19 @@ export function GradeFormDialog({
 
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField label="Data" error={errors.gradedAt?.message}>
-              {(field) => <Input {...field} {...register('gradedAt')} type="date" />}
+              {(field) => (
+                <Controller
+                  control={control}
+                  name="gradedAt"
+                  render={({ field: controlled }) => (
+                    <DatePicker
+                      {...field}
+                      value={controlled.value ?? ''}
+                      onChange={controlled.onChange}
+                    />
+                  )}
+                />
+              )}
             </FormField>
           </div>
 

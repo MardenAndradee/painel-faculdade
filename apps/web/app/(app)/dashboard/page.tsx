@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import {
   AlertTriangle,
   CalendarClock,
@@ -7,6 +8,7 @@ import {
   ClipboardList,
   ListChecks,
   PartyPopper,
+  Plus,
   RefreshCw,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
@@ -21,6 +23,13 @@ import { AssignmentRow } from '@/components/dashboard/assignment-row';
 import { ExamRow } from '@/components/dashboard/exam-row';
 import { MiniCalendar } from '@/components/dashboard/mini-calendar';
 import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
+import { AssignmentFormDialog } from '@/components/assignments/assignment-form-dialog';
+import { formatDate } from '@/lib/format';
+import { cn } from '@/lib/utils';
+
+/** Destaque de hover compartilhado pelos cards da tela: leve elevação + tinta de cor. */
+const HOVER_CARD =
+  'transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-accent/40';
 
 /**
  * Dashboard.
@@ -31,6 +40,7 @@ import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
 export default function DashboardPage() {
   const { user } = useAuth();
   const { data, isLoading, isError, error, refetch, isFetching } = useDashboardSummary();
+  const [assignmentFormOpen, setAssignmentFormOpen] = useState(false);
 
   if (isLoading) {
     return (
@@ -63,6 +73,7 @@ export default function DashboardPage() {
   }
 
   const { stats, upcomingAssignments, overdueAssignments, upcomingExams, calendar } = data;
+  const nextExam = upcomingExams[0] ?? null;
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:py-8">
@@ -73,31 +84,40 @@ export default function DashboardPage() {
           <Greeting
             name={user?.name ?? ''}
             semesterName={data.currentSemester?.name ?? null}
-            pendingCount={stats.pendingCount}
-            overdueCount={stats.overdueCount}
+            dueThisWeekCount={stats.dueThisWeekCount}
+            nextExamDays={nextExam?.daysUntilExam ?? null}
           />
         </div>
 
-        <Button
-          variant="outline"
-          size="sm"
-          className="shrink-0"
-          onClick={() => void refetch()}
-          disabled={isFetching}
-          aria-label="Atualizar dados"
-        >
-          <RefreshCw className={isFetching ? 'size-4 animate-spin' : 'size-4'} aria-hidden />
-          <span className="hidden sm:inline">Atualizar</span>
-        </Button>
+        <div className="flex shrink-0 gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void refetch()}
+            disabled={isFetching}
+            aria-label="Atualizar dados"
+          >
+            <RefreshCw className={isFetching ? 'size-4 animate-spin' : 'size-4'} aria-hidden />
+            <span className="hidden sm:inline">Atualizar</span>
+          </Button>
+
+          <Button variant="accent" size="sm" onClick={() => setAssignmentFormOpen(true)}>
+            <Plus className="size-4" aria-hidden />
+            <span className="hidden sm:inline">Nova atividade</span>
+          </Button>
+        </div>
       </div>
 
       {/* Estatísticas rápidas */}
-      <section aria-label="Estatísticas rápidas" className="grid gap-4 sm:grid-cols-2">
+      <section
+        aria-label="Estatísticas rápidas"
+        className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
+      >
         <StatCard
           label="Em aberto"
           value={stats.pendingCount}
           icon={ListChecks}
-          tone={stats.dueTodayCount > 0 ? 'warning' : 'default'}
+          tone={stats.dueTodayCount > 0 ? 'warning' : 'info'}
           hint={
             stats.dueTodayCount > 0
               ? `${stats.dueTodayCount} ${stats.dueTodayCount === 1 ? 'vence' : 'vencem'} hoje`
@@ -112,11 +132,27 @@ export default function DashboardPage() {
           tone={stats.overdueCount > 0 ? 'danger' : 'success'}
           hint={`${stats.completionRate}% concluído no total`}
         />
+
+        <StatCard
+          label="Provas próximas"
+          value={stats.upcomingExamCount}
+          icon={ClipboardList}
+          tone="warning"
+          hint={nextExam ? nextExam.subject.name : 'Nenhuma marcada'}
+        />
+
+        <StatCard
+          label="Próxima prova"
+          value={nextExam ? `${nextExam.daysUntilExam}d` : '—'}
+          icon={CalendarClock}
+          tone={nextExam && nextExam.daysUntilExam <= 3 ? 'warning' : 'violet'}
+          hint={nextExam ? formatDate(nextExam.date) : 'Sem provas marcadas'}
+        />
       </section>
 
       <div className="grid gap-4 lg:grid-cols-3">
         {/* Próximas atividades */}
-        <Card className="lg:col-span-1">
+        <Card className={cn('lg:col-span-1', HOVER_CARD)}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <ListChecks className="size-4 text-muted-foreground" aria-hidden />
@@ -145,7 +181,7 @@ export default function DashboardPage() {
         </Card>
 
         {/* Próximas provas */}
-        <Card className="lg:col-span-1">
+        <Card className={cn('lg:col-span-1', HOVER_CARD)}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <ClipboardList className="size-4 text-muted-foreground" aria-hidden />
@@ -172,7 +208,7 @@ export default function DashboardPage() {
         </Card>
 
         {/* Calendário resumido */}
-        <Card className="lg:col-span-1">
+        <Card className={cn('lg:col-span-1', HOVER_CARD)}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <CalendarClock className="size-4 text-muted-foreground" aria-hidden />
@@ -187,7 +223,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Atrasadas: só aparece quando existe atraso, para não ocupar espaço à toa. */}
-      <Card>
+      <Card className={HOVER_CARD}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <AlertTriangle
@@ -219,6 +255,8 @@ export default function DashboardPage() {
           )}
         </CardContent>
       </Card>
+
+      <AssignmentFormDialog open={assignmentFormOpen} onOpenChange={setAssignmentFormOpen} />
     </div>
   );
 }

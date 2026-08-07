@@ -1,14 +1,5 @@
 import Link from 'next/link';
-import {
-  Archive,
-  ArchiveRestore,
-  ClipboardList,
-  EllipsisVertical,
-  ListChecks,
-  Pencil,
-  Trash2,
-  User,
-} from 'lucide-react';
+import { Archive, ArchiveRestore, EllipsisVertical, Pencil, Trash2, User } from 'lucide-react';
 import type { SubjectListItem } from '@painel/shared';
 import { SUBJECT_STATUS_LABELS } from '@painel/shared';
 import { Card } from '@/components/ui/card';
@@ -41,32 +32,69 @@ function averageTone(average: number | null, passingGrade: number): string {
   return 'text-status-overdue';
 }
 
+/** Sigla curta do chip: usa o código real da disciplina quando existe. */
+function subjectInitials(subject: SubjectListItem): string {
+  if (subject.code) return subject.code.slice(0, 3).toUpperCase();
+
+  const words = subject.name.trim().split(/\s+/).filter(Boolean);
+
+  if (words.length === 1) return (words[0] ?? '').slice(0, 3).toUpperCase();
+
+  return words
+    .slice(0, 2)
+    .map((word) => word[0])
+    .join('')
+    .toUpperCase();
+}
+
+/**
+ * Percentual de atividades concluídas.
+ *
+ * Derivado do que a listagem já traz (assignmentCount/pendingAssignmentCount)
+ * - nao e uma nova chamada, so uma leitura diferente do mesmo dado.
+ */
+function completionPercent(subject: SubjectListItem): number | null {
+  if (subject.assignmentCount === 0) return null;
+
+  const done = subject.assignmentCount - subject.pendingAssignmentCount;
+
+  return Math.round((done / subject.assignmentCount) * 100);
+}
+
 export function SubjectCard({ subject, onEdit, onArchive, onRestore, onDelete }: SubjectCardProps) {
   const isArchived = subject.archivedAt !== null;
+  const pct = completionPercent(subject);
 
   return (
-    <Card className={cn('relative overflow-hidden', isArchived && 'opacity-70')}>
+    <Card
+      className={cn(
+        'relative overflow-hidden transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-accent/40',
+        isArchived && 'opacity-70',
+      )}
+    >
       {/* Faixa superior na cor da disciplina: identifica a matéria de relance. */}
       <span
-        className="absolute inset-x-0 top-0 h-1"
+        className="absolute inset-x-0 top-0 h-0.5 opacity-90"
         style={{ backgroundColor: subject.color }}
         aria-hidden
       />
 
-      <div className="flex items-start justify-between gap-2 p-5 pb-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <Link
-              href={`/disciplinas/${subject.id}`}
-              className="rounded text-sm font-semibold transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-            >
-              {subject.name}
-            </Link>
+      <div className="flex items-start gap-3 p-5 pb-0">
+        <span
+          className="flex size-9 shrink-0 items-center justify-center rounded-lg text-[11px] font-semibold"
+          style={{ backgroundColor: `${subject.color}1f`, color: subject.color }}
+          aria-hidden
+        >
+          {subjectInitials(subject)}
+        </span>
 
-            {subject.code && (
-              <span className="text-xs text-muted-foreground tabular-nums">{subject.code}</span>
-            )}
-          </div>
+        <div className="min-w-0 flex-1">
+          <Link
+            href={`/disciplinas/${subject.id}`}
+            className="rounded text-sm font-medium tracking-tight transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          >
+            {subject.name}
+          </Link>
 
           <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
             <User className="size-3 shrink-0" aria-hidden />
@@ -79,7 +107,7 @@ export function SubjectCard({ subject, onEdit, onArchive, onRestore, onDelete }:
             <Button
               variant="ghost"
               size="icon"
-              className="size-7 shrink-0"
+              className="size-7 shrink-0 text-muted-foreground"
               aria-label={`Ações de ${subject.name}`}
             >
               <EllipsisVertical className="size-4" aria-hidden />
@@ -114,46 +142,65 @@ export function SubjectCard({ subject, onEdit, onArchive, onRestore, onDelete }:
         </DropdownMenu>
       </div>
 
-      <div className="flex items-end justify-between gap-3 px-5 pb-5">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-            <ListChecks className="size-3.5" aria-hidden />
-            <span className="tabular-nums">{subject.assignmentCount}</span>
-            <span className="hidden sm:inline">
-              {subject.assignmentCount === 1 ? 'atividade' : 'atividades'}
-            </span>
-          </span>
+      <div className="flex items-center justify-between gap-3 px-5 pt-4">
+        <div className="flex items-center gap-4">
+          <div>
+            <p className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+              Média
+            </p>
+            <p
+              className={cn(
+                'text-base leading-tight font-semibold tabular-nums',
+                averageTone(subject.average, subject.passingGrade),
+              )}
+            >
+              {formatGrade(subject.average)}
+            </p>
+          </div>
 
-          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-            <ClipboardList className="size-3.5" aria-hidden />
-            <span className="tabular-nums">{subject.examCount}</span>
-            <span className="hidden sm:inline">{subject.examCount === 1 ? 'prova' : 'provas'}</span>
-          </span>
+          <div>
+            <p className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+              Atividades
+            </p>
+            <p className="text-base leading-tight font-semibold tabular-nums">
+              {subject.assignmentCount}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+              Provas
+            </p>
+            <p className="text-base leading-tight font-semibold tabular-nums">
+              {subject.examCount}
+            </p>
+          </div>
         </div>
 
-        <div className="text-right">
-          <p className="text-[11px] text-muted-foreground">Média</p>
-          <p
-            className={cn(
-              'text-lg leading-tight font-semibold tabular-nums',
-              averageTone(subject.average, subject.passingGrade),
-            )}
-          >
-            {formatGrade(subject.average)}
-          </p>
-        </div>
+        {pct !== null && <span className="shrink-0 text-xs text-muted-foreground">{pct}%</span>}
       </div>
 
-      {(isArchived || subject.status !== 'IN_PROGRESS') && (
-        <div className="flex flex-wrap gap-1.5 px-5 pb-5">
-          {isArchived && <Badge variant="secondary">Arquivada</Badge>}
-          {subject.status !== 'IN_PROGRESS' && (
-            <Badge variant={subject.status === 'APPROVED' ? 'completed' : 'overdue'}>
-              {SUBJECT_STATUS_LABELS[subject.status]}
-            </Badge>
-          )}
-        </div>
-      )}
+      <div className="px-5 pt-3 pb-5">
+        {pct !== null && (
+          <div className="h-1 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full opacity-85"
+              style={{ width: `${pct}%`, backgroundColor: subject.color }}
+            />
+          </div>
+        )}
+
+        {(isArchived || subject.status !== 'IN_PROGRESS') && (
+          <div className={cn('flex flex-wrap gap-1.5', pct !== null && 'mt-3')}>
+            {isArchived && <Badge variant="secondary">Arquivada</Badge>}
+            {subject.status !== 'IN_PROGRESS' && (
+              <Badge variant={subject.status === 'APPROVED' ? 'completed' : 'overdue'}>
+                {SUBJECT_STATUS_LABELS[subject.status]}
+              </Badge>
+            )}
+          </div>
+        )}
+      </div>
     </Card>
   );
 }

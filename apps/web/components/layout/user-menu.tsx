@@ -3,6 +3,7 @@
 import { LogOut, MonitorSmartphone } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { authService } from '@/services/auth.service';
+import { getInitials } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   DropdownMenu,
@@ -12,15 +13,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-
-/** Iniciais para o fallback do avatar: primeira letra do nome e do sobrenome. */
-function getInitials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  const first = parts[0]?.charAt(0) ?? '';
-  const last = parts.length > 1 ? (parts[parts.length - 1]?.charAt(0) ?? '') : '';
-
-  return (first + last).toUpperCase();
-}
 
 export function UserMenu() {
   const { user, logout } = useAuth();

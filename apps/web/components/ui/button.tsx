@@ -21,6 +21,15 @@ const buttonVariants = cva(
         secondary: 'bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80',
         ghost: 'hover:bg-accent hover:text-accent-foreground',
         link: 'text-primary underline-offset-4 hover:underline',
+        /**
+         * Contorno tingido na cor primaria - a acao de destaque do redesign
+         * escuro, nunca um preenchimento solido. Fundo parte de `bg-secondary`
+         * (a mesma superficie escura de um botao neutro) em vez de uma tinta
+         * azul: so a borda e o texto entregam a cor em repouso, o azul so
+         * ganha peso no hover.
+         */
+        accent:
+          'border border-primary/40 bg-secondary text-primary shadow-xs hover:border-primary/60 hover:bg-primary/15',
       },
       size: {
         default: 'h-9 px-4 py-2 has-[>svg]:px-3',

@@ -85,7 +85,7 @@ export default function SubjectsPage() {
           </p>
         </div>
 
-        <Button onClick={openCreate} className="shrink-0">
+        <Button variant="accent" onClick={openCreate} className="shrink-0">
           <Plus className="size-4" aria-hidden />
           <span className="hidden sm:inline">Nova disciplina</span>
           <span className="sm:hidden">Nova</span>
@@ -152,7 +152,7 @@ export default function SubjectsPage() {
               title="Nenhuma disciplina cadastrada"
               description="Cadastre suas matérias para acompanhar atividades, provas e notas em um só lugar."
               action={
-                <Button size="sm" onClick={openCreate}>
+                <Button variant="accent" size="sm" onClick={openCreate}>
                   <Plus className="size-4" aria-hidden />
                   Cadastrar disciplina
                 </Button>

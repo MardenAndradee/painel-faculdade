@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { FormField } from '@/components/ui/form-field';
+import { DateTimePicker } from '@/components/ui/date-time-picker';
 import {
   Dialog,
   DialogContent,
@@ -186,7 +187,19 @@ export function AssignmentFormDialog({
               error={errors.dueDate?.message}
               hint="Deixe vazio se não houver"
             >
-              {(field) => <Input {...field} {...register('dueDate')} type="datetime-local" />}
+              {(field) => (
+                <Controller
+                  control={control}
+                  name="dueDate"
+                  render={({ field: controlled }) => (
+                    <DateTimePicker
+                      {...field}
+                      value={controlled.value ?? ''}
+                      onChange={controlled.onChange}
+                    />
+                  )}
+                />
+              )}
             </FormField>
 
             <FormField label="Prioridade" error={errors.priority?.message}>

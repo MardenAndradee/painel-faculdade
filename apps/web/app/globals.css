@@ -68,46 +68,55 @@
 }
 
 .dark {
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.673 0.182 276.935);
-  --primary-foreground: oklch(0.21 0.006 285.885);
-  --secondary: oklch(0.274 0.006 286.033);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.673 0.182 276.935);
+  /*
+   * Paleta "Nocturne", redesenhada em ago/2026 a partir de um mockup feito
+   * com o Claude Design. So o tema escuro foi redesenhado - o claro segue
+   * como estava, e o toggle claro/escuro/sistema continua funcionando
+   * normalmente entre os dois.
+   */
+  --background: #0b0d12;
+  --foreground: #e6ebf3;
+  --card: #11141b;
+  --card-foreground: #e6ebf3;
+  --popover: #11141b;
+  --popover-foreground: #e6ebf3;
+  --primary: #4f7cff;
+  --primary-foreground: #ffffff;
+  --secondary: #171b23;
+  --secondary-foreground: #e6ebf3;
+  --muted: #171b23;
+  --muted-foreground: #94a3b8;
+  --accent: #171b23;
+  --accent-foreground: #e6ebf3;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: #4f7cff;
 
-  --sidebar: oklch(0.21 0.006 285.885);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.673 0.182 276.935);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.274 0.006 286.033);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.673 0.182 276.935);
+  --sidebar: #0b0d12;
+  --sidebar-foreground: #e6ebf3;
+  --sidebar-primary: #4f7cff;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #171b23;
+  --sidebar-accent-foreground: #e6ebf3;
+  --sidebar-border: oklch(1 0 0 / 6%);
+  --sidebar-ring: #4f7cff;
 
-  /* Os mesmos tres tons, reescalonados para a superficie escura - nao uma
-     inversao automatica dos valores do tema claro. */
+  /*
+   * Paleta de graficos: NAO mexer sem rodar o validador de novo (ver o
+   * comentario em :root). Continuam os mesmos tres tons reescalonados para a
+   * superficie escura.
+   */
   --chart-1: #3987e5;
   --chart-2: #d95926;
   --chart-3: #199e70;
 
-  --chart-grid: oklch(0.274 0.006 286.033);
+  --chart-grid: oklch(1 0 0 / 8%);
 
   --status-pending: oklch(0.769 0.188 70.08);
   --status-completed: oklch(0.696 0.17 162.48);
-  --status-overdue: oklch(0.704 0.191 22.216);
+  --status-overdue: #ef4444;
 }
 
 /* Expoe os tokens como utilitarios do Tailwind (bg-card, text-muted-foreground...). */
@@ -176,5 +185,38 @@
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
     }
+  }
+
+  /*
+   * Scrollbar fina em toda a aplicacao - a do navegador (larga, cinza clara)
+   * destoava do resto do redesign escuro. Parte de `--muted-foreground`
+   * porque esse token ja e calibrado para ficar legivel nos dois temas -
+   * `--secondary`/`--border` sozinhos ficariam quase invisiveis no claro.
+   * `scrollbar-color` cobre Firefox; os `::-webkit-scrollbar*` cobrem
+   * Chrome/Edge/Safari.
+   */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--muted-foreground) 40%, transparent) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklab, var(--muted-foreground) 40%, transparent);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    border-radius: 999px;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: var(--muted-foreground);
   }
 }

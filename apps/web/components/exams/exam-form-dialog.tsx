@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { FormField } from '@/components/ui/form-field';
+import { DateTimePicker } from '@/components/ui/date-time-picker';
 import {
   Dialog,
   DialogContent,
@@ -163,7 +164,19 @@ export function ExamFormDialog({
 
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField label="Data e hora" error={errors.date?.message} required>
-              {(field) => <Input {...field} {...register('date')} type="datetime-local" />}
+              {(field) => (
+                <Controller
+                  control={control}
+                  name="date"
+                  render={({ field: controlled }) => (
+                    <DateTimePicker
+                      {...field}
+                      value={controlled.value ?? ''}
+                      onChange={controlled.onChange}
+                    />
+                  )}
+                />
+              )}
             </FormField>
 
             <FormField label="Sala" error={errors.room?.message}>
