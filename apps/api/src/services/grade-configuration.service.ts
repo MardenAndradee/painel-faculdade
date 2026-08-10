@@ -97,16 +97,39 @@ const FACTORY_DEFAULT_COMPONENTS = [
 const FACTORY_DEFAULT_PASSING_GRADE = 6;
 
 export const gradeConfigurationService = {
+  /**
+   * Configuracao da disciplina, criando-a se ainda nao existir.
+   *
+   * Disciplinas criadas ANTES desta funcionalidade existir - e as importadas
+   * pelo Classroom naquela epoca - nao tem configuracao. Falhar com 404 nesse
+   * caso deixava a tela de notas inutilizavel para elas, sem nenhum caminho de
+   * saida: o usuario nao tem como criar a configuracao a nao ser por aqui.
+   *
+   * Criar sob demanda torna o dado legado auto-curavel e alinha o
+   * comportamento ao dos modelos de semestre e do usuario, que ja criavam
+   * quando nao encontravam.
+   */
+  async ensureForSubject(userId: string, subjectId: string): Promise<GradeConfigurationRow> {
+    const existing = await gradeConfigurationRepository.findBySubject(userId, subjectId);
+
+    if (existing) return existing;
+
+    // A projecao de `findById` traz o semestre aninhado, nao o id solto.
+    const subject = await subjectRepository.findById(userId, subjectId);
+    const initial = await this.resolveInitialConfiguration(userId, subject?.semester?.id ?? null);
+
+    return gradeConfigurationRepository.create(
+      userId,
+      { subjectId },
+      initial.passingGrade,
+      initial.components,
+    );
+  },
+
   async getForSubject(userId: string, subjectId: string): Promise<GradeConfigurationItem> {
     await assertSubjectOwnership(userId, subjectId);
 
-    const row = await gradeConfigurationRepository.findBySubject(userId, subjectId);
-
-    // Nao deveria acontecer - toda disciplina ganha uma configuracao ao ser
-    // criada (subjectService.create). Defensivo contra dado legado/corrompido.
-    if (!row) throw AppError.notFound('Configuração de notas');
-
-    return toItem(row);
+    return toItem(await this.ensureForSubject(userId, subjectId));
   },
 
   async replaceForSubject(
@@ -116,11 +139,7 @@ export const gradeConfigurationService = {
   ): Promise<GradeConfigurationItem> {
     await assertSubjectOwnership(userId, subjectId);
 
-    const row = await gradeConfigurationRepository.findBySubject(userId, subjectId);
-
-    if (!row) throw AppError.notFound('Configuração de notas');
-
-    return applyReplace(userId, row, input);
+    return applyReplace(userId, await this.ensureForSubject(userId, subjectId), input);
   },
 
   /** `null` quando o semestre ainda nao tem um modelo padrao definido. */
