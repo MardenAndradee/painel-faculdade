@@ -1,6 +1,14 @@
 'use client';
 
-import { Check, EllipsisVertical, ExternalLink, NotebookPen, Pencil, Trash2 } from 'lucide-react';
+import {
+  Check,
+  EllipsisVertical,
+  ExternalLink,
+  FileText,
+  NotebookPen,
+  Pencil,
+  Trash2,
+} from 'lucide-react';
 import type { AssignmentListItem } from '@painel/shared';
 import { PRIORITY_LABELS } from '@painel/shared';
 import { Badge } from '@/components/ui/badge';
@@ -12,7 +20,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { formatDateTime, formatDueLabel } from '@/lib/format';
+import { formatDate, formatDueLabel } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 interface AssignmentItemProps {
@@ -29,13 +37,14 @@ const PRIORITY_STYLES: Record<AssignmentListItem['priority'], string> = {
   LOW: 'bg-muted text-muted-foreground',
 };
 
+/** Cada atividade e sua propria linha-cartao, no lugar de uma lista com divisorias. */
 export function AssignmentItem({ assignment, onToggle, onEdit, onDelete }: AssignmentItemProps) {
   const isCompleted = assignment.status === 'COMPLETED';
 
   return (
     <li
       className={cn(
-        'flex items-start gap-3 border-b px-4 py-3 transition-colors last:border-b-0 hover:bg-muted/40',
+        'flex items-start gap-3 rounded-xl border bg-card px-4 py-3 transition-colors hover:border-primary/25 hover:bg-accent/40',
         isCompleted && 'opacity-60',
       )}
     >
@@ -56,6 +65,19 @@ export function AssignmentItem({ assignment, onToggle, onEdit, onDelete }: Assig
         {isCompleted && <Check className="size-3.5" aria-hidden />}
       </button>
 
+      {/* Chip da disciplina: mesma linguagem visual dos cards de Disciplinas e da Dashboard. */}
+      <span
+        className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg"
+        style={
+          assignment.subject
+            ? { backgroundColor: `${assignment.subject.color}1f`, color: assignment.subject.color }
+            : undefined
+        }
+        aria-hidden
+      >
+        <FileText className={cn('size-4', !assignment.subject && 'text-muted-foreground')} />
+      </span>
+
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <p className={cn('text-sm font-medium', isCompleted && 'line-through')}>
@@ -63,7 +85,7 @@ export function AssignmentItem({ assignment, onToggle, onEdit, onDelete }: Assig
           </p>
 
           {assignment.source === 'GOOGLE_CLASSROOM' && (
-            <Badge variant="outline" className="gap-1">
+            <Badge variant="outline" className="gap-1 text-[10px] text-muted-foreground">
               Classroom
             </Badge>
           )}
@@ -73,7 +95,7 @@ export function AssignmentItem({ assignment, onToggle, onEdit, onDelete }: Assig
           {assignment.subject && (
             <span className="inline-flex items-center gap-1.5">
               <span
-                className="size-2 shrink-0 rounded-full"
+                className="size-1.5 shrink-0 rounded-full"
                 style={{ backgroundColor: assignment.subject.color }}
                 aria-hidden
               />
@@ -84,7 +106,7 @@ export function AssignmentItem({ assignment, onToggle, onEdit, onDelete }: Assig
           {assignment.dueDate && (
             <>
               {assignment.subject && <span aria-hidden>·</span>}
-              <span>{formatDateTime(assignment.dueDate)}</span>
+              <span>{formatDate(assignment.dueDate)}</span>
             </>
           )}
 
@@ -105,7 +127,7 @@ export function AssignmentItem({ assignment, onToggle, onEdit, onDelete }: Assig
           {!isCompleted && (
             <span
               className={cn(
-                'text-xs font-medium whitespace-nowrap',
+                'text-xs font-medium whitespace-nowrap tabular-nums',
                 assignment.isOverdue
                   ? 'text-status-overdue'
                   : assignment.daysUntilDue === 0
@@ -118,7 +140,8 @@ export function AssignmentItem({ assignment, onToggle, onEdit, onDelete }: Assig
           )}
 
           {!isCompleted && (assignment.priority === 'URGENT' || assignment.priority === 'HIGH') && (
-            <Badge className={cn('border-transparent', PRIORITY_STYLES[assignment.priority])}>
+            <Badge className={cn('gap-1 border-transparent', PRIORITY_STYLES[assignment.priority])}>
+              <span className="size-1.5 rounded-full bg-current" aria-hidden />
               {PRIORITY_LABELS[assignment.priority]}
             </Badge>
           )}
@@ -129,7 +152,7 @@ export function AssignmentItem({ assignment, onToggle, onEdit, onDelete }: Assig
             <Button
               variant="ghost"
               size="icon"
-              className="size-7"
+              className="size-7 text-muted-foreground"
               aria-label={`Ações de ${assignment.title}`}
             >
               <EllipsisVertical className="size-4" aria-hidden />

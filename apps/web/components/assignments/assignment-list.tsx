@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/empty-state';
+import { cn } from '@/lib/utils';
 import { AssignmentItem } from './assignment-item';
 import { AssignmentFormDialog } from './assignment-form-dialog';
 import {
@@ -61,20 +62,19 @@ export function AssignmentList({
 
   if (isLoading) {
     return (
-      <Card>
-        <ul>
-          {Array.from({ length: 5 }, (_, index) => (
-            <li key={index} className="flex items-start gap-3 border-b px-4 py-3 last:border-b-0">
-              <Skeleton className="mt-0.5 size-5 rounded-md" />
-              <div className="flex-1 space-y-2">
-                <Skeleton className="h-4 w-2/3" />
-                <Skeleton className="h-3 w-1/3" />
-              </div>
-              <Skeleton className="h-4 w-20" />
-            </li>
-          ))}
-        </ul>
-      </Card>
+      <ul className="space-y-2">
+        {Array.from({ length: 5 }, (_, index) => (
+          <li key={index} className="flex items-start gap-3 rounded-xl border bg-card px-4 py-3">
+            <Skeleton className="mt-0.5 size-5 rounded-md" />
+            <Skeleton className="mt-0.5 size-8 rounded-lg" />
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-4 w-2/3" />
+              <Skeleton className="h-3 w-1/3" />
+            </div>
+            <Skeleton className="h-4 w-20" />
+          </li>
+        ))}
+      </ul>
     );
   }
 
@@ -131,7 +131,7 @@ export function AssignmentList({
               title="Nenhuma atividade por aqui"
               description="Cadastre atividades para acompanhar prazos e prioridades."
               action={
-                <Button size="sm" onClick={openCreate}>
+                <Button variant="accent" size="sm" onClick={openCreate}>
                   <Plus className="size-4" aria-hidden />
                   Nova atividade
                 </Button>
@@ -140,22 +140,20 @@ export function AssignmentList({
           )}
         </Card>
       ) : (
-        <Card className={isFetching ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
-          <ul>
-            {assignments.map((assignment) => (
-              <AssignmentItem
-                key={assignment.id}
-                assignment={assignment}
-                onToggle={(item) => toggleComplete.mutate(item.id)}
-                onEdit={(item) => {
-                  setEditing(item);
-                  setFormOpen(true);
-                }}
-                onDelete={setDeleting}
-              />
-            ))}
-          </ul>
-        </Card>
+        <ul className={cn('space-y-2 transition-opacity', isFetching && 'opacity-60')}>
+          {assignments.map((assignment) => (
+            <AssignmentItem
+              key={assignment.id}
+              assignment={assignment}
+              onToggle={(item) => toggleComplete.mutate(item.id)}
+              onEdit={(item) => {
+                setEditing(item);
+                setFormOpen(true);
+              }}
+              onDelete={setDeleting}
+            />
+          ))}
+        </ul>
       )}
 
       {meta && meta.totalPages > 1 && (

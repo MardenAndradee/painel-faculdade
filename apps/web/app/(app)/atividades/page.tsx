@@ -16,7 +16,6 @@ import { useSubjects } from '@/hooks/use-subjects';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
@@ -90,16 +89,16 @@ export default function AssignmentsPage() {
           </p>
         </div>
 
-        <Button onClick={() => setFormOpen(true)} className="shrink-0">
+        <Button variant="accent" onClick={() => setFormOpen(true)} className="shrink-0">
           <Plus className="size-4" aria-hidden />
           <span className="hidden sm:inline">Nova atividade</span>
           <span className="sm:hidden">Nova</span>
         </Button>
       </div>
 
-      {/* Recortes rápidos: rolam horizontalmente no celular. */}
+      {/* Recortes rápidos: abas sublinhadas, rolam horizontalmente no celular. */}
       <div
-        className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0"
+        className="-mx-4 flex gap-5 overflow-x-auto border-b px-4 sm:mx-0 sm:px-0"
         role="tablist"
         aria-label="Filtros rápidos"
       >
@@ -118,20 +117,22 @@ export default function AssignmentsPage() {
                 setPage(1);
               }}
               className={cn(
-                'inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+                'relative shrink-0 pb-2.5 text-sm whitespace-nowrap transition-colors focus-visible:outline-none',
                 isActive
-                  ? 'border-transparent bg-primary font-medium text-primary-foreground'
-                  : 'hover:bg-muted',
+                  ? 'font-medium text-foreground'
+                  : 'text-muted-foreground hover:text-foreground',
               )}
             >
               {ASSIGNMENT_VIEW_LABELS[item]}
-              {count !== undefined && count > 0 && (
-                <Badge
-                  variant={isActive ? 'secondary' : 'outline'}
-                  className={cn('px-1.5 py-0 text-[11px]', isActive && 'bg-primary-foreground/20')}
-                >
-                  {count}
-                </Badge>
+              {count !== undefined && (
+                <span className="ml-1.5 text-xs text-muted-foreground/70">{count}</span>
+              )}
+
+              {isActive && (
+                <span
+                  className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-primary"
+                  aria-hidden
+                />
               )}
             </button>
           );
