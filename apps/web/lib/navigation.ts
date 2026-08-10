@@ -7,7 +7,6 @@ import {
   GraduationCap,
   History,
   LayoutDashboard,
-  Layers,
   ListChecks,
   Plug,
   type LucideIcon,
@@ -61,7 +60,8 @@ export const NAV_SECTIONS: NavSection[] = [
     title: 'Estudos',
     items: [
       { href: '/materiais', label: 'Materiais', icon: FileStack },
-      { href: '/flashcards', label: 'Flashcards', icon: Layers },
+      // Flashcards temporariamente fora da nav - visual atual nao ficou bom,
+      // sera refeita antes de voltar. Rotas/paginas seguem intactas.
       { href: '/cronograma', label: 'Cronograma', icon: CalendarDays },
     ],
   },
