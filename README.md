@@ -1073,6 +1073,48 @@ O recorte é sempre de um único usuário num intervalo limitado (365 dias no m�
 
 ## Banco de dados
 
+### ⚠️ `grade_configuration_components` não é segura em banco com notas
+
+A migração `20260810175645_grade_configuration_components` **falha** se a tabela
+`grades` tiver linhas no momento em que for aplicada:
+
+```
+ERRO: a coluna "gradeComponentId" da relação "grades" contém valores nulos
+```
+
+Ela adiciona `gradeComponentId` como `NOT NULL` sem popular as linhas
+existentes — e, no mesmo passo, descarta `grades.type`, `grades.weight` e
+`subjects.passingGrade` sem convertê-los em componentes. Em banco **vazio**
+(instalação nova, ou produção antes de qualquer nota lançada) ela passa sem
+ruído; num banco em uso, quebra.
+
+Pior: ela falha **no meio**, deixando objetos parcialmente criados. Cada nova
+tentativa esbarra num ponto diferente ("índice não existe", "coluna já
+existe"). Para destravar, reverta manualmente o que ficou pela metade e só
+então marque como revertida:
+
+```sql
+ALTER TABLE "exams"  DROP COLUMN IF EXISTS "gradeComponentId";
+ALTER TABLE "grades" DROP COLUMN IF EXISTS "gradeComponentId";
+DROP TABLE IF EXISTS "grade_components" CASCADE;
+DROP TABLE IF EXISTS "grade_configurations" CASCADE;
+CREATE INDEX IF NOT EXISTS "grades_subjectId_type_idx" ON "grades"("subjectId","type");
+```
+
+```bash
+npx prisma migrate resolve --rolled-back 20260810175645_grade_configuration_components
+npx prisma migrate deploy
+```
+
+**O SQL não foi reescrito de propósito.** A migração já consta como aplicada
+onde importa, e editar o arquivo mudaria o checksum que o Prisma compara —
+transformando um problema pontual em divergência permanente. Um banco que
+precise preservar notas antigas deve ganhar uma migração **nova**, que crie os
+componentes a partir de `type`/`weight` e ligue as notas existentes antes de
+impor o `NOT NULL`.
+
+
+
 20 entidades. Toda entidade de usuário usa `onDelete: Cascade` — remover a conta remove os dados derivados.
 
 | Entidade        | Papel                                                                    |
