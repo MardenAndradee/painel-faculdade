@@ -10,6 +10,7 @@ import {
   ClipboardList,
   FileStack,
   History,
+  Link2,
   ListChecks,
   MapPin,
   NotebookText,
@@ -32,15 +33,18 @@ import { ExamList } from '@/components/exams/exam-list';
 import { SubjectGradesCard } from '@/components/grades/subject-grades-card';
 import { GradeFormDialog } from '@/components/grades/grade-form-dialog';
 import { NotesPanel } from '@/components/notes/notes-panel';
+import { AttachmentList } from '@/components/materials/attachment-list';
+import { UploadDropzone } from '@/components/materials/upload-dropzone';
+import { LinkFormDialog } from '@/components/materials/link-form-dialog';
 import { useSubjectGrades } from '@/hooks/use-grades';
 import { formatDate, formatGrade } from '@/lib/format';
 
 /**
  * Detalhes da disciplina.
  *
- * As abas de atividades, provas e notas exibem estado vazio apontando a etapa
- * em que serao construidas - preferivel a esconde-las, porque a estrutura da
- * tela ja fica visivel e nada muda de lugar depois.
+ * Cada aba reaproveita a mesma lista/componente da tela geral correspondente,
+ * apenas recortada por `subjectId` - evita duplicar logica de fetch, dialogo
+ * e paginacao entre a visao geral e a visao por disciplina.
  */
 export default function SubjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   // No Next 16 os params de rota chegam como Promise.
@@ -53,6 +57,8 @@ export default function SubjectDetailPage({ params }: { params: Promise<{ id: st
   const [assignmentPage, setAssignmentPage] = useState(1);
   const [examPage, setExamPage] = useState(1);
   const [historyPage, setHistoryPage] = useState(1);
+  const [materialPage, setMaterialPage] = useState(1);
+  const [linkOpen, setLinkOpen] = useState(false);
   const [gradeFormOpen, setGradeFormOpen] = useState(false);
   const [editingGrade, setEditingGrade] = useState<GradeListItem | null>(null);
 
@@ -304,16 +310,35 @@ export default function SubjectDetailPage({ params }: { params: Promise<{ id: st
           )}
         </TabsContent>
 
-        <TabsContent value="materiais" className="mt-4">
-          <Card>
-            <CardContent className="p-0">
-              <EmptyState
-                icon={FileStack}
-                title="Nenhum material"
-                description="O upload de PDFs, slides e links chega na Etapa 12."
-              />
-            </CardContent>
-          </Card>
+        <TabsContent value="materiais" className="mt-4 space-y-4">
+          <div className="flex items-start justify-between gap-3">
+            <UploadDropzone target={{ subjectId: subject.id }} />
+          </div>
+
+          <div className="flex justify-end">
+            <Button variant="outline" size="sm" onClick={() => setLinkOpen(true)}>
+              <Link2 className="size-4" aria-hidden />
+              Adicionar link
+            </Button>
+          </div>
+
+          {/* Mesma lista da tela de Materiais, recortada por disciplina. */}
+          <AttachmentList
+            params={{
+              subjectId: subject.id,
+              sortBy: 'createdAt',
+              order: 'desc',
+              page: materialPage,
+              perPage: 9,
+            }}
+            onPageChange={setMaterialPage}
+          />
+
+          <LinkFormDialog
+            open={linkOpen}
+            onOpenChange={setLinkOpen}
+            defaultSubjectId={subject.id}
+          />
         </TabsContent>
 
         <TabsContent value="anotacoes" className="mt-4">

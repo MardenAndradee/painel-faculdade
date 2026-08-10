@@ -91,7 +91,9 @@ export const calendarService = {
         location: exam.room,
         startsAt: exam.date.toISOString(),
         endsAt: exam.date.toISOString(),
-        allDay: false,
+        // Prova so guarda o dia (sem hora) - marcar allDay evita exibir um
+        // "00:00" enganoso no calendario.
+        allDay: true,
         color: exam.subject.color,
         subject: exam.subject,
         source: null,
@@ -109,7 +111,9 @@ export const calendarService = {
           location: null,
           startsAt: assignment.dueDate!.toISOString(),
           endsAt: assignment.dueDate!.toISOString(),
-          allDay: false,
+          // Prazo so guarda o dia (sem hora) - marcar allDay evita exibir um
+          // "00:00" enganoso no calendario.
+          allDay: true,
           color: assignment.subject?.color ?? null,
           subject: assignment.subject,
           source: null,

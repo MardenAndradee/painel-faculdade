@@ -26,10 +26,12 @@ import { SubjectSelectField } from './subject-select-field';
 interface LinkFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Pre-seleciona a disciplina ao criar a partir da tela dela. */
+  defaultSubjectId?: string | null;
 }
 
 /** Cadastro de material do tipo link. */
-export function LinkFormDialog({ open, onOpenChange }: LinkFormDialogProps) {
+export function LinkFormDialog({ open, onOpenChange, defaultSubjectId }: LinkFormDialogProps) {
   const createLink = useCreateLinkAttachment();
 
   const {
@@ -44,8 +46,8 @@ export function LinkFormDialog({ open, onOpenChange }: LinkFormDialogProps) {
   });
 
   useEffect(() => {
-    if (open) reset({ name: '', url: '', subjectId: '' });
-  }, [open, reset]);
+    if (open) reset({ name: '', url: '', subjectId: defaultSubjectId ?? '' });
+  }, [open, defaultSubjectId, reset]);
 
   const onSubmit = handleSubmit(async (values) => {
     try {

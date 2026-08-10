@@ -13,6 +13,7 @@ import {
   type SubjectListItem,
 } from '@painel/shared';
 import { useCreateSubject, useTeachers, useUpdateSubject } from '@/hooks/use-subjects';
+import { useSemesters } from '@/hooks/use-semesters';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -51,12 +52,14 @@ interface SubjectFormDialogProps {
 /** Valor sentinela do Select: o Radix nao aceita item com value vazio. */
 const NO_TEACHER = '__none__';
 const NEW_TEACHER = '__new__';
+const NO_SEMESTER = '__none__';
 
 const DEFAULT_COLOR = '#6366f1';
 
 export function SubjectFormDialog({ open, onOpenChange, subject }: SubjectFormDialogProps) {
   const isEditing = Boolean(subject);
   const { data: teachers = [] } = useTeachers();
+  const { data: semesters = [] } = useSemesters();
   const createSubject = useCreateSubject();
   const updateSubject = useUpdateSubject();
 
@@ -77,7 +80,7 @@ export function SubjectFormDialog({ open, onOpenChange, subject }: SubjectFormDi
       code: '',
       description: '',
       color: DEFAULT_COLOR,
-      room: '',
+      semesterId: null,
       passingGrade: 6,
       status: 'IN_PROGRESS',
     },
@@ -94,8 +97,7 @@ export function SubjectFormDialog({ open, onOpenChange, subject }: SubjectFormDi
         code: subject.code ?? '',
         description: '',
         color: subject.color,
-        room: subject.room ?? '',
-        credits: subject.credits ?? undefined,
+        semesterId: subject.semester?.id ?? null,
         passingGrade: subject.passingGrade,
         status: subject.status,
         teacherId: subject.teacher?.id ?? null,
@@ -107,7 +109,7 @@ export function SubjectFormDialog({ open, onOpenChange, subject }: SubjectFormDi
         code: '',
         description: '',
         color: DEFAULT_COLOR,
-        room: '',
+        semesterId: null,
         passingGrade: 6,
         status: 'IN_PROGRESS',
       });
@@ -161,8 +163,34 @@ export function SubjectFormDialog({ open, onOpenChange, subject }: SubjectFormDi
               {(field) => <Input {...field} {...register('code')} placeholder="MA203" />}
             </FormField>
 
-            <FormField label="Sala" error={errors.room?.message}>
-              {(field) => <Input {...field} {...register('room')} placeholder="Sala 21" />}
+            <FormField label="Semestre" error={errors.semesterId?.message}>
+              {(field) => (
+                <Controller
+                  control={control}
+                  name="semesterId"
+                  render={({ field: controlled }) => (
+                    <Select
+                      value={controlled.value ?? NO_SEMESTER}
+                      onValueChange={(value) =>
+                        controlled.onChange(value === NO_SEMESTER ? null : value)
+                      }
+                    >
+                      <SelectTrigger id={field.id}>
+                        <SelectValue placeholder="Selecione" />
+                      </SelectTrigger>
+
+                      <SelectContent>
+                        <SelectItem value={NO_SEMESTER}>Sem semestre</SelectItem>
+                        {semesters.map((semester) => (
+                          <SelectItem key={semester.id} value={semester.id}>
+                            {semester.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              )}
             </FormField>
           </div>
 
@@ -200,42 +228,23 @@ export function SubjectFormDialog({ open, onOpenChange, subject }: SubjectFormDi
             )}
           </FormField>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FormField
-              label="Créditos"
-              error={errors.credits?.message}
-              hint="Carga horária em créditos"
-            >
-              {(field) => (
-                <Input
-                  {...field}
-                  {...register('credits')}
-                  type="number"
-                  min={0}
-                  max={40}
-                  placeholder="4"
-                />
-              )}
-            </FormField>
-
-            <FormField
-              label="Nota para aprovação"
-              error={errors.passingGrade?.message}
-              hint="Varia por instituição"
-              required
-            >
-              {(field) => (
-                <Input
-                  {...field}
-                  {...register('passingGrade')}
-                  type="number"
-                  min={0}
-                  max={10}
-                  step="0.1"
-                />
-              )}
-            </FormField>
-          </div>
+          <FormField
+            label="Nota para aprovação"
+            error={errors.passingGrade?.message}
+            hint="Varia por instituição"
+            required
+          >
+            {(field) => (
+              <Input
+                {...field}
+                {...register('passingGrade')}
+                type="number"
+                min={0}
+                max={10}
+                step="0.1"
+              />
+            )}
+          </FormField>
 
           <FormField label="Situação" error={errors.status?.message}>
             {(field) => (

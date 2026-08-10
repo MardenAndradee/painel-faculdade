@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { format } from 'date-fns';
 import { Loader2, Plus } from 'lucide-react';
 import {
   ASSIGNMENT_STATUS,
@@ -20,7 +21,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { FormField } from '@/components/ui/form-field';
-import { DateTimePicker } from '@/components/ui/date-time-picker';
+import { DatePicker } from '@/components/ui/date-picker';
 import {
   Dialog,
   DialogContent,
@@ -48,18 +49,16 @@ interface AssignmentFormDialogProps {
 const NO_SUBJECT = '__none__';
 
 /**
- * Converte ISO para o formato do input `datetime-local`.
+ * ISO -> "YYYY-MM-DD", formato do `DatePicker`.
  *
- * O input exige "YYYY-MM-DDTHH:mm" em horario LOCAL - passar o ISO em UTC
- * exibiria o prazo deslocado pelo fuso.
+ * `format` le em horario LOCAL: registros antigos guardam um horario real
+ * (ex.: 23:59 local), e um corte cru do ISO (que esta em UTC) poderia cair no
+ * dia seguinte em fusos negativos.
  */
-function toLocalInputValue(iso: string | null): string {
+function toDateOnlyValue(iso: string | null): string {
   if (!iso) return '';
 
-  const date = new Date(iso);
-  const offset = date.getTimezoneOffset() * 60_000;
-
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+  return format(new Date(iso), 'yyyy-MM-dd');
 }
 
 export function AssignmentFormDialog({
@@ -95,7 +94,7 @@ export function AssignmentFormDialog({
         description: assignment.description ?? '',
         notes: assignment.notes ?? '',
         subjectId: assignment.subject?.id ?? null,
-        dueDate: toLocalInputValue(assignment.dueDate),
+        dueDate: toDateOnlyValue(assignment.dueDate),
         priority: assignment.priority,
         status: assignment.status,
         maxPoints: assignment.maxPoints ?? undefined,
@@ -192,7 +191,7 @@ export function AssignmentFormDialog({
                   control={control}
                   name="dueDate"
                   render={({ field: controlled }) => (
-                    <DateTimePicker
+                    <DatePicker
                       {...field}
                       value={controlled.value ?? ''}
                       onChange={controlled.onChange}
