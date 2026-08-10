@@ -15,9 +15,15 @@ import {
   type SubjectListRow,
 } from '../repositories/subject.repository.js';
 import { teacherService } from './teacher.service.js';
+import { gradeService } from './grade.service.js';
+import { gradeConfigurationService } from './grade-configuration.service.js';
 import { AppError } from '../utils/app-error.js';
 import { attachmentService } from './attachment.service.js';
-import { calculateRequiredGrade, calculateWeightedAverage } from '../utils/grade-calculator.js';
+import {
+  calculateWeightedAverage,
+  toGradeLikes,
+  totalConfiguredWeight,
+} from '../utils/grade-calculator.js';
 import { emptyToNull } from '../utils/text.js';
 
 /**
@@ -39,7 +45,8 @@ function toListItem(
     color: row.color,
     room: row.room,
     credits: row.credits,
-    passingGrade: row.passingGrade,
+    // Defensivo: toda disciplina ganha uma configuracao ao ser criada.
+    passingGrade: row.gradeConfiguration?.passingGrade ?? 6,
     status: row.status,
     archivedAt: row.archivedAt?.toISOString() ?? null,
     teacher: row.teacher,
@@ -47,7 +54,12 @@ function toListItem(
     // Disciplina encerrada tem media consolidada em `finalGrade`; so quando
     // ela nao existe a media e derivada das notas lancadas. Sem isso, uma
     // disciplina do historico apareceria sem media.
-    average: row.finalGrade ?? calculateWeightedAverage(row.grades),
+    average:
+      row.finalGrade ??
+      calculateWeightedAverage(
+        toGradeLikes(row.grades),
+        totalConfiguredWeight(row.gradeConfiguration?.components),
+      ),
     assignmentCount: row._count.assignments,
     pendingAssignmentCount: counts.pendingAssignments,
     examCount: row._count.exams,
@@ -57,31 +69,26 @@ function toListItem(
   };
 }
 
-function toDetail(
+/**
+ * `requiredGrade` reaproveita `gradeService.getSubjectSummary` - a mesma
+ * conta que alimenta a tela de Notas, calculada a partir dos componentes de
+ * avaliacao configurados. Antes da Etapa 17 esta funcao tinha sua propria
+ * estimativa (peso total fixo em 10), que podia divergir do numero mostrado
+ * em Notas para a mesma disciplina.
+ */
+async function toDetail(
+  userId: string,
   row: SubjectDetailRow,
   counts: { pendingAssignments: number; upcomingExams: number },
-): SubjectDetail {
-  const average = calculateWeightedAverage(row.grades);
-
-  /**
-   * Peso restante estimado.
-   *
-   * Sem um plano de avaliacoes cadastrado, assumimos que o semestre soma peso
-   * 10 no total; o que sobra desse valor e o que ainda sera avaliado. E uma
-   * estimativa, refinada na Etapa 10 quando as avaliacoes forem planejadas.
-   */
-  const usedWeight = row.grades.reduce((total, grade) => total + (grade.weight || 1), 0);
-  const remainingWeight = Math.max(10 - usedWeight, 0);
+): Promise<SubjectDetail> {
+  const summary = await gradeService.getSubjectSummary(userId, row.id);
 
   return {
     ...toListItem(row, counts),
     description: row.description,
     classroomLink: row.classroomLink,
     googleCourseId: row.googleCourseId,
-    requiredGrade:
-      average === null || remainingWeight === 0
-        ? null
-        : calculateRequiredGrade(row.grades, row.passingGrade, remainingWeight),
+    requiredGrade: summary.requiredGrade,
     updatedAt: row.updatedAt.toISOString(),
   };
 }
@@ -166,9 +173,16 @@ export const subjectService = {
 
     const counts = await subjectRepository.countsByStatus(userId, [row.id]);
 
-    return toDetail(row, counts.get(row.id) ?? { pendingAssignments: 0, upcomingExams: 0 });
+    return toDetail(userId, row, counts.get(row.id) ?? { pendingAssignments: 0, upcomingExams: 0 });
   },
 
+  /**
+   * Cria a disciplina.
+   *
+   * A configuracao de notas nasce junto: copiada do modelo padrao do
+   * semestre quando existir, ou vazia quando nao ha modelo (o usuario
+   * configura os componentes depois, na aba de Notas da disciplina).
+   */
   async create(userId: string, input: CreateSubjectInput): Promise<SubjectDetail> {
     const semesterId = input.semesterId ?? null;
 
@@ -179,23 +193,30 @@ export const subjectService = {
     }
 
     const teacherId = await this.resolveTeacherId(userId, input.teacherId, input.newTeacherName);
+    const gradeConfig = await gradeConfigurationService.resolveInitialConfiguration(
+      userId,
+      semesterId,
+    );
 
-    const row = await subjectRepository.create(userId, {
-      name: input.name,
-      code: emptyToNull(input.code),
-      description: emptyToNull(input.description),
-      color: input.color,
-      room: emptyToNull(input.room),
-      credits: input.credits ?? null,
-      passingGrade: input.passingGrade,
-      status: input.status,
-      ...(semesterId ? { semester: { connect: { id: semesterId } } } : {}),
-      ...(teacherId ? { teacher: { connect: { id: teacherId } } } : {}),
-    });
+    const row = await subjectRepository.createWithGradeConfiguration(
+      userId,
+      {
+        name: input.name,
+        code: emptyToNull(input.code),
+        description: emptyToNull(input.description),
+        color: input.color,
+        room: emptyToNull(input.room),
+        credits: input.credits ?? null,
+        status: input.status,
+        ...(semesterId ? { semester: { connect: { id: semesterId } } } : {}),
+        ...(teacherId ? { teacher: { connect: { id: teacherId } } } : {}),
+      },
+      gradeConfig,
+    );
 
     const counts = await subjectRepository.countsByStatus(userId, [row.id]);
 
-    return toDetail(row, counts.get(row.id) ?? { pendingAssignments: 0, upcomingExams: 0 });
+    return toDetail(userId, row, counts.get(row.id) ?? { pendingAssignments: 0, upcomingExams: 0 });
   },
 
   async update(userId: string, id: string, input: UpdateSubjectInput): Promise<SubjectDetail> {
@@ -228,7 +249,6 @@ export const subjectService = {
       ...(input.color !== undefined ? { color: input.color } : {}),
       ...(input.room !== undefined ? { room: emptyToNull(input.room) } : {}),
       ...(input.credits !== undefined ? { credits: input.credits ?? null } : {}),
-      ...(input.passingGrade !== undefined ? { passingGrade: input.passingGrade } : {}),
       ...(input.status !== undefined ? { status: input.status } : {}),
     };
 
@@ -247,7 +267,7 @@ export const subjectService = {
 
     const counts = await subjectRepository.countsByStatus(userId, [row.id]);
 
-    return toDetail(row, counts.get(row.id) ?? { pendingAssignments: 0, upcomingExams: 0 });
+    return toDetail(userId, row, counts.get(row.id) ?? { pendingAssignments: 0, upcomingExams: 0 });
   },
 
   /**
@@ -263,7 +283,7 @@ export const subjectService = {
 
     const counts = await subjectRepository.countsByStatus(userId, [row.id]);
 
-    return toDetail(row, counts.get(row.id) ?? { pendingAssignments: 0, upcomingExams: 0 });
+    return toDetail(userId, row, counts.get(row.id) ?? { pendingAssignments: 0, upcomingExams: 0 });
   },
 
   async restore(userId: string, id: string): Promise<SubjectDetail> {
@@ -273,7 +293,7 @@ export const subjectService = {
 
     const counts = await subjectRepository.countsByStatus(userId, [row.id]);
 
-    return toDetail(row, counts.get(row.id) ?? { pendingAssignments: 0, upcomingExams: 0 });
+    return toDetail(userId, row, counts.get(row.id) ?? { pendingAssignments: 0, upcomingExams: 0 });
   },
 
   /**

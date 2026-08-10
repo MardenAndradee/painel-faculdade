@@ -2,7 +2,7 @@
 
 Plataforma web de organização acadêmica para estudantes universitários. Centraliza atividades, provas, notas, materiais e cronograma de estudos em um único lugar, com integração ao Google Classroom e ao Google Calendar.
 
-> **Status:** projeto completo — 16 de 16 etapas.
+> **Status:** projeto completo — 17 de 17 etapas.
 
 ---
 
@@ -642,20 +642,46 @@ Diferente do Classroom: sem a integração ativa, os eventos nunca mais seriam a
 
 ## Notas
 
-### Nota necessária para aprovação
+### Componentes de avaliação configuráveis, não um enum fixo
 
-O cálculo usa dados reais, não suposições. O peso restante vem das **provas cadastradas que ainda não têm nota** — por isso vale cadastrar as provas (Etapa 6) antes de esperar uma projeção útil.
+Antes da Etapa 17, `Grade.type` era um enum fixo (`P1, P2, P3, ASSIGNMENT, SEMINAR, ...`) — o sistema "sabia" que existiam P1/P2/P3, preso ao modelo de uma instituição específica. Agora o sistema só sabe que existem **componentes de avaliação configuráveis**, definidos pelo próprio usuário:
+
+```
+Semester
+   │
+   └── GradeConfiguration (modelo padrão, opcional)
+          └── GradeComponent[]  (nome, peso, ordem)
+
+Subject
+   │
+   └── GradeConfiguration (1-1, sempre independente)
+          └── GradeComponent[]  (copiados do modelo do semestre ao criar a disciplina;
+                                  editar depois nunca afeta o modelo nem outras disciplinas)
+
+Grade
+   ├── gradeComponentId  (o peso usado na média vem do componente, não é mais digitado à mão)
+   ├── value / maxValue  (cada lançamento guarda sua própria escala)
+   └── examId?           (vínculo opcional com uma prova)
+
+Exam
+   └── gradeComponentId?  ("esta prova é referente a qual componente")
+```
+
+`GradeConfiguration.subjectId` e `.semesterId` são FKs independentes (mesmo padrão de `Grade.examId`/`.assignmentId`) — uma configuração pertence a exatamente uma coisa: uma disciplina (o caso normal, usado no cálculo) ou um semestre (um modelo padrão, que só serve para pré-preencher disciplinas novas). Um componente com nota já lançada não pode ser excluído (`Grade.gradeComponentId` usa `onDelete: Restrict`) — a API recusa com uma mensagem clara em vez de deixar o erro estourar como violação de constraint.
+
+### Nota necessária para aprovação
 
 ```
 necessária = (aprovação × pesoTotal − pontosObtidos) ÷ pesoRestante
 ```
 
-Exemplo com aprovação 6, P1 (peso 2, nota 5) lançada e P2+P3 (peso 8) pendentes:
-`(6 × 10 − 10) ÷ 8 = 6,25`
+O peso restante vem dos **componentes configurados que ainda não têm nota** — dado real, nunca uma suposição de peso total fixo. Exemplo com aprovação 6, N1 (peso 3, nota 2,5) e N2 (peso 4, nota 8) lançadas, N3 (peso 3) pendente:
 
-Sem provas pendentes cadastradas, `requiredGrade` é **`null`** — a interface diz "cadastre as provas restantes" em vez de inventar um número.
+`(6 × 10 − 39,5) ÷ 3 = 6,83`
 
-### Situação projetada
+Sem componentes pendentes, `requiredGrade` é **`null`** — a interface não inventa um número. Quando mais de um componente está pendente, o resultado assume que todos precisam da mesma nota ("precisa de X em N2, N3").
+
+Essa é a **única** implementação do cálculo — antes da Etapa 17, a tela de Notas e o detalhe da disciplina tinham cada uma a sua própria estimativa, que podiam divergir para a mesma disciplina. Hoje ambas chamam `gradeService.getSubjectSummary`.
 
 | Status | Condição |
 | --- | --- |
@@ -665,24 +691,30 @@ Sem provas pendentes cadastradas, `requiredGrade` é **`null`** — a interface 
 | Reprovado | Nem com nota máxima alcança a média |
 | Sem notas | Nada lançado ainda |
 
-### Escalas diferentes convivem
-
 Uma prova de 100 pontos e um trabalho de 10 são comparáveis: tudo é normalizado para 0–10 antes de ponderar. A interface mostra o valor original **e** o equivalente (`80/100 = 8,0`).
+
+### Simulação
+
+Calculadora client-side (`apps/web/lib/grade-math.ts` espelha `apps/api/src/utils/grade-calculator.ts` — mesma álgebra dos dois lados). Carrega as notas reais já lançadas como ponto de partida, mas qualquer campo — inclusive os já lançados — pode ser editado livremente para explorar cenários. **Nada é salvo**: fechar o diálogo descarta tudo. Para uma nota simulada virar real, o caminho é o formulário normal de lançamento.
 
 ### Vínculo com provas
 
-`Grade.examId` é único — uma prova tem no máximo uma nota. Ao lançar, dá para escolher entre as provas ainda sem nota da disciplina. O vínculo faz a lista de provas realizadas (Etapa 6) mostrar o resultado.
+Lançar a nota direto no formulário da prova (campo "Nota" + seletor de "Componente de nota") cria ou atualiza a `Grade` vinculada automaticamente. Apagar a nota no formulário da prova remove a `Grade` junto — os dois lados são tratados como uma coisa só. `Grade.examId` continua único: uma prova tem no máximo uma nota.
 
 ### Endpoints
 
 | Método | Rota | Descrição |
 | --- | --- | --- |
-| GET | `/grades/overview` | Boletim de todas as disciplinas em andamento |
+| GET | `/grades/overview` | Boletim de todas as disciplinas em andamento (aceita `semesterId`) |
 | GET | `/grades/subject/:id` | Boletim de uma disciplina, com projeção |
 | GET | `/grades` | Lista de notas (aceita `subjectId`) |
 | POST | `/grades` | Lança uma nota |
 | PATCH | `/grades/:id` | Atualiza |
 | DELETE | `/grades/:id` | Exclui |
+| GET | `/subjects/:id/grade-configuration` | Configuração de notas da disciplina |
+| PUT | `/subjects/:id/grade-configuration` | Substitui os componentes e a nota de aprovação |
+| GET | `/semesters/:id/grade-configuration-template` | Modelo padrão do semestre (`null` se ainda não definido) |
+| PUT | `/semesters/:id/grade-configuration-template` | Substitui o modelo padrão |
 
 ## Histórico
 
@@ -995,7 +1027,7 @@ O recorte é sempre de um único usuário num intervalo limitado (365 dias no m�
 
 ## Banco de dados
 
-17 entidades. Toda entidade de usuário usa `onDelete: Cascade` — remover a conta remove os dados derivados.
+20 entidades. Toda entidade de usuário usa `onDelete: Cascade` — remover a conta remove os dados derivados.
 
 | Entidade        | Papel                                                                    |
 | --------------- | ------------------------------------------------------------------------ |
@@ -1003,12 +1035,16 @@ O recorte é sempre de um único usuário num intervalo limitado (365 dias no m�
 | `RefreshToken`  | Sessões ativas (hash SHA-256, revogáveis individualmente)                |
 | `Semester`      | Período letivo; base do Histórico                                        |
 | `Teacher`       | Professor, vinculável a várias disciplinas                               |
-| `Subject`       | Disciplina, com cor, nota de aprovação e situação                        |
+| `Subject`       | Disciplina, com cor e situação                                           |
 | `Assignment`    | Atividade manual **ou** importada do Classroom (`source` discrimina)     |
-| `Exam`          | Prova com data, conteúdo e peso                                          |
+| `Exam`          | Prova com data, conteúdo, peso e componente de nota vinculado            |
 | `Grade`         | Nota avulsa ou vinculada a uma prova/atividade                           |
+| `GradeConfiguration` | Componentes de avaliação e nota de aprovação — de uma disciplina, ou modelo padrão de um semestre |
+| `GradeComponent` | Um componente de avaliação configurável (ex.: "N1", peso 3)             |
 | `CalendarEvent` | Evento manual ou do Google Calendar                                      |
 | `Attachment`    | Material: upload, link ou arquivo do Classroom/Drive                     |
+| `NoteFolder`    | Pasta de anotações de uma disciplina, com aninhamento livre              |
+| `Note`          | Anotação de texto rico presa a uma disciplina ou pasta                   |
 | `StudySession`  | Bloco de estudo planejado ou gerado pelo cronograma                      |
 | `Notification`  | Avisos de prazo, prova, nota e sincronização                             |
 | `Deck`          | Baralho de flashcards, opcionalmente ligado a uma disciplina             |
@@ -1276,5 +1312,6 @@ O Husky roda `lint-staged` no pre-commit: ESLint e Prettier nos arquivos em stag
 | 14 | Cronograma de Estudos | ✅ |
 | 15 | Estatísticas | ✅ |
 | 16 | Testes, refatoração, documentação, deploy | ✅ |
+| 17 | Notas configuráveis (componentes de avaliação, Simulação) | ✅ |
 
 Contribuições: veja [CONTRIBUTING.md](CONTRIBUTING.md).

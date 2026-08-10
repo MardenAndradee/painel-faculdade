@@ -13,6 +13,7 @@ import { logger } from '../config/logger.js';
 import { env } from '../config/env.js';
 import { userRepository } from '../repositories/user.repository.js';
 import { refreshTokenRepository } from '../repositories/refresh-token.repository.js';
+import { gradeConfigurationService } from './grade-configuration.service.js';
 import { AppError } from '../utils/app-error.js';
 import { hashToken, randomToken } from '../utils/crypto.js';
 import {
@@ -122,6 +123,11 @@ export const authService = {
       );
     }
 
+    // Precisa ser checado ANTES do upsert: depois dele o registro sempre
+    // existe, entao nao haveria mais como distinguir "acabou de nascer" de
+    // "ja existia".
+    const isNewUser = !(await userRepository.findByGoogleId(profile.googleId));
+
     const user = await userRepository.upsertFromGoogle(profile);
 
     // Autorizacao incremental: os escopos novos somam aos ja concedidos, para
@@ -137,7 +143,20 @@ export const authService = {
       grantedScopes: mergedScopes,
     });
 
-    logger.info('Login realizado', { userId: user.id });
+    if (isNewUser) {
+      // Modelo de notas padrao (Etapa 19): da um ponto de partida (N1/N2/N3)
+      // em vez de deixar o usuario novo sem nenhuma configuracao. Nao pode
+      // derrubar o login se falhar - o pior caso e o usuario configurar as
+      // notas manualmente depois, o que ele ja podia fazer de qualquer jeito.
+      await gradeConfigurationService.ensureUserDefault(user.id).catch((error: unknown) => {
+        logger.warn('Falha ao criar o modelo padrao de notas do usuario novo', {
+          userId: user.id,
+          message: error instanceof Error ? error.message : 'erro desconhecido',
+        });
+      });
+    }
+
+    logger.info('Login realizado', { userId: user.id, isNewUser });
 
     return issueSession(user, context);
   },

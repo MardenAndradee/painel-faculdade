@@ -10,6 +10,8 @@ import {
 import { type Prisma } from '../config/prisma.js';
 import { examRepository, type ExamListRow } from '../repositories/exam.repository.js';
 import { subjectRepository } from '../repositories/subject.repository.js';
+import { gradeRepository } from '../repositories/grade.repository.js';
+import { gradeService } from './grade.service.js';
 import { AppError } from '../utils/app-error.js';
 import { attachmentService } from './attachment.service.js';
 import { emptyToNull } from '../utils/text.js';
@@ -39,6 +41,7 @@ function toListItem(row: ExamListRow, now: Date): ExamListItem {
     subject: row.subject,
     daysUntilExam: daysBetween(now, row.date),
     isPast: row.date < now,
+    gradeComponent: row.gradeComponent,
     grade: row.grade,
     attachmentCount: row._count.attachments,
     createdAt: row.createdAt.toISOString(),
@@ -51,6 +54,56 @@ async function assertSubjectOwnership(userId: string, subjectId: string): Promis
   const subject = await subjectRepository.findById(userId, subjectId);
 
   if (!subject) throw AppError.badRequest('Disciplina inválida');
+}
+
+/**
+ * Lancamento rapido da nota direto no formulario da prova (Etapa 17).
+ *
+ * `gradeValue` ausente do payload (undefined) nao mexe na nota ja lancada -
+ * so um valor explicito (numero ou `null`) altera algo. `null` remove a nota
+ * vinculada a esta prova; um numero cria ou atualiza. Reaproveita
+ * `gradeService` (nao o repositorio direto) para herdar as mesmas validacoes
+ * do lancamento manual: escala, componente valido para a disciplina.
+ */
+async function syncGrade(
+  userId: string,
+  exam: { id: string; subjectId: string },
+  gradeComponentId: string | null,
+  gradeValue: number | null | undefined,
+): Promise<void> {
+  if (gradeValue === undefined) return;
+
+  const existing = await gradeRepository.findByExam(userId, exam.id);
+
+  if (gradeValue === null) {
+    if (existing) await gradeService.remove(userId, existing.id);
+    return;
+  }
+
+  if (!gradeComponentId) {
+    throw AppError.badRequest('Selecione o componente de avaliação para lançar a nota', {
+      gradeComponentId: ['Selecione o componente de avaliação'],
+    });
+  }
+
+  if (existing) {
+    await gradeService.update(userId, existing.id, {
+      gradeComponentId,
+      value: gradeValue,
+    });
+    return;
+  }
+
+  await gradeService.create(userId, {
+    subjectId: exam.subjectId,
+    gradeComponentId,
+    value: gradeValue,
+    maxValue: 10,
+    examId: exam.id,
+    gradedAt: new Date(),
+    // Uma prova e uma avaliacao unica, nao um lancamento em partes.
+    isFinal: true,
+  });
 }
 
 export const examService = {
@@ -113,9 +166,17 @@ export const examService = {
       room: emptyToNull(input.room),
       weight: input.weight,
       durationMinutes: input.durationMinutes ?? null,
+      gradeComponentId: input.gradeComponentId ?? null,
     });
 
-    return toListItem(row, new Date());
+    await syncGrade(
+      userId,
+      { id: row.id, subjectId: row.subject.id },
+      input.gradeComponentId ?? null,
+      input.gradeValue,
+    );
+
+    return this.getById(userId, row.id);
   },
 
   async update(userId: string, id: string, input: UpdateExamInput): Promise<ExamListItem> {
@@ -138,13 +199,26 @@ export const examService = {
       ...(input.durationMinutes !== undefined
         ? { durationMinutes: input.durationMinutes ?? null }
         : {}),
+      ...(input.gradeComponentId !== undefined ? { gradeComponentId: input.gradeComponentId } : {}),
     };
 
     const row = await examRepository.update(userId, id, data);
 
     if (!row) throw AppError.notFound('Prova');
 
-    return toListItem(row, new Date());
+    const gradeComponentId =
+      input.gradeComponentId !== undefined
+        ? input.gradeComponentId
+        : (current.gradeComponent?.id ?? null);
+
+    await syncGrade(
+      userId,
+      { id: row.id, subjectId: input.subjectId ?? current.subject.id },
+      gradeComponentId,
+      input.gradeValue,
+    );
+
+    return this.getById(userId, row.id);
   },
 
   async remove(userId: string, id: string): Promise<void> {

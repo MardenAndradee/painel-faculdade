@@ -78,17 +78,6 @@ enum Priority {
   URGENT
 }
 
-enum GradeType {
-  P1
-  P2
-  P3
-  ASSIGNMENT
-  SEMINAR
-  PROJECT
-  PARTICIPATION
-  OTHER
-}
-
 enum CalendarEventSource {
   MANUAL
   GOOGLE_CALENDAR
@@ -160,23 +149,31 @@ model User {
   updatedAt DateTime  @updatedAt
   lastLogin DateTime?
 
-  refreshTokens     RefreshToken[]
-  semesters         Semester[]
-  teachers          Teacher[]
-  subjects          Subject[]
-  assignments       Assignment[]
-  exams             Exam[]
-  grades            Grade[]
-  calendarEvents    CalendarEvent[]
-  attachments       Attachment[]
-  studySessions     StudySession[]
-  notifications     Notification[]
-  decks             Deck[]
-  flashcards        Flashcard[]
-  flashcardReviews  FlashcardReview[]
-  studyAvailability StudyAvailability[]
-  noteFolders       NoteFolder[]
-  notes             Note[]
+  refreshTokens       RefreshToken[]
+  semesters           Semester[]
+  teachers            Teacher[]
+  subjects            Subject[]
+  assignments         Assignment[]
+  exams               Exam[]
+  grades              Grade[]
+  gradeConfigurations GradeConfiguration[]
+  gradeComponents     GradeComponent[]
+
+  /// Modelo padrao pessoal do usuario (Etapa 19): pre-preenche o modelo de
+  /// um semestre novo e disciplinas importadas do Classroom quando o
+  /// semestre ainda nao tem modelo proprio. Criado automaticamente no
+  /// primeiro login (N1/N2/N3), editavel depois como qualquer outro modelo.
+  defaultGradeConfiguration GradeConfiguration? @relation("UserDefaultGradeConfiguration")
+  calendarEvents            CalendarEvent[]
+  attachments               Attachment[]
+  studySessions             StudySession[]
+  notifications             Notification[]
+  decks                     Deck[]
+  flashcards                Flashcard[]
+  flashcardReviews          FlashcardReview[]
+  studyAvailability         StudyAvailability[]
+  noteFolders               NoteFolder[]
+  notes                     Note[]
 
   @@index([email])
   @@map("users")
@@ -231,6 +228,10 @@ model Semester {
 
   subjects Subject[]
 
+  /// Modelo padrao de notas do semestre: so serve para pre-preencher os
+  /// componentes de disciplinas novas (copia, nunca compartilha o registro).
+  gradeConfigurationTemplate GradeConfiguration?
+
   @@unique([userId, year, term])
   @@index([userId, isCurrent])
   @@map("semesters")
@@ -271,9 +272,6 @@ model Subject {
   room    String?
   credits Int?
 
-  /// Nota minima para aprovacao. Varia por instituicao, entao e por disciplina.
-  passingGrade Float @default(6)
-
   status SubjectStatus @default(IN_PROGRESS)
 
   /// Media final consolidada quando o semestre encerra. Enquanto a disciplina
@@ -306,6 +304,14 @@ model Subject {
   decks          Deck[]
   noteFolders    NoteFolder[]
   notes          Note[]
+
+  /// Componentes de avaliacao e nota de aprovacao da disciplina. 1-1 e sempre
+  /// independente: pode ter sido copiada do modelo padrao do semestre ao criar
+  /// a disciplina, mas editar depois nunca afeta o modelo nem outras disciplinas.
+  /// Obrigatoria na pratica - garantido pelo service, ver comentario em
+  /// GradeConfiguration (Prisma nao expressa 1-1 obrigatorio quando a FK mora
+  /// do outro lado da relacao).
+  gradeConfiguration GradeConfiguration?
 
   @@unique([userId, googleCourseId])
   @@index([userId, semesterId])
@@ -393,6 +399,12 @@ model Exam {
   subjectId String
   subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
 
+  /// A que componente de avaliacao esta prova se refere (N1, N2...), quando
+  /// a disciplina tem uma configuracao de notas. Opcional: nem toda prova
+  /// precisa lancar nota diretamente.
+  gradeComponentId String?
+  gradeComponent   GradeComponent? @relation(fields: [gradeComponentId], references: [id], onDelete: SetNull)
+
   grade          Grade?
   attachments    Attachment[]
   calendarEvents CalendarEvent[]
@@ -400,6 +412,7 @@ model Exam {
 
   @@index([userId, date])
   @@index([subjectId])
+  @@index([gradeComponentId])
   @@map("exams")
 }
 
@@ -409,15 +422,26 @@ model Exam {
 
 /// Uma nota pode existir sozinha (lancamento avulso) ou vinculada a uma prova
 /// ou atividade. A relacao e 1-1 opcional em ambos os lados.
+///
+/// O sistema nao sabe que existem "N1/N2/N3" - ele sabe que existem
+/// componentes de avaliacao configuraveis (GradeComponent). Antes dessa
+/// Etapa 17 havia um enum fixo (GradeType: P1/P2/P3/...) aqui, que prendia o
+/// calculo ao modelo de uma unica instituicao.
 model Grade {
-  id    String    @id @default(cuid())
-  type  GradeType
-  /// Rotulo livre, util para tipos OTHER ("Prova substitutiva", "Lista 3").
+  id    String  @id @default(cuid())
+  /// Rotulo livre opcional, util para distinguir varios lancamentos do mesmo
+  /// componente ("Lista 3", "Trabalho em grupo").
   label String?
 
   value    Float
   maxValue Float @default(10)
-  weight   Float @default(1)
+
+  /// Falso quando o professor ainda vai somar pontos a este componente (um
+  /// trabalho lancado em partes, por exemplo). Enquanto falso, o componente
+  /// conta como pendente no calculo da media/nota necessaria - a nota parcial
+  /// fica visivel, mas nao "fecha" o componente. Editar a nota mais tarde
+  /// para marcar como final e o que consolida o valor na media.
+  isFinal Boolean @default(true)
 
   gradedAt DateTime @default(now())
   notes    String?  @db.Text
@@ -431,6 +455,11 @@ model Grade {
   subjectId String
   subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
 
+  /// Substitui o antigo `type`. O peso usado no calculo vem daqui (do
+  /// componente), nao e mais digitado a mao em cada nota.
+  gradeComponentId String
+  gradeComponent   GradeComponent @relation(fields: [gradeComponentId], references: [id], onDelete: Restrict)
+
   examId String? @unique
   exam   Exam?   @relation(fields: [examId], references: [id], onDelete: SetNull)
 
@@ -438,8 +467,72 @@ model Grade {
   assignment   Assignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
 
   @@index([userId, subjectId])
-  @@index([subjectId, type])
+  @@index([subjectId, gradeComponentId])
   @@map("grades")
+}
+
+/// Configuracao de notas: componentes de avaliacao + nota de aprovacao.
+///
+/// Sempre pertence a exatamente uma coisa - uma disciplina (`subjectId`, o
+/// caso normal, usado de fato no calculo), um semestre (`semesterId`, um
+/// modelo padrao que so serve para pre-preencher disciplinas novas) OU o
+/// usuario (`defaultForUserId`, o modelo pessoal padrao - Etapa 19). As tres
+/// FKs sao independentes (mesmo padrao ja usado em Grade.examId/assignmentId)
+/// porque o Prisma nao tem uma forma nativa de expressar "exatamente uma das
+/// tres" - a regra e garantida pelo service.
+model GradeConfiguration {
+  id           String @id @default(cuid())
+  passingGrade Float  @default(6)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  subjectId String?  @unique
+  subject   Subject? @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  semesterId String?   @unique
+  semester   Semester? @relation(fields: [semesterId], references: [id], onDelete: Cascade)
+
+  /// Setado apenas na linha que e o modelo pessoal padrao do usuario - ver
+  /// `User.defaultGradeConfiguration`.
+  defaultForUserId String? @unique
+  defaultForUser   User?   @relation("UserDefaultGradeConfiguration", fields: [defaultForUserId], references: [id], onDelete: Cascade)
+
+  components GradeComponent[]
+
+  @@index([userId])
+  @@map("grade_configurations")
+}
+
+/// Um componente de avaliacao configuravel (ex.: "N1", peso 3).
+model GradeComponent {
+  id     String @id @default(cuid())
+  name   String
+  weight Float
+
+  /// Ordem de exibicao (N1, N2, N3...). Nao e alfabetica nem por peso.
+  order Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  gradeConfigurationId String
+  gradeConfiguration   GradeConfiguration @relation(fields: [gradeConfigurationId], references: [id], onDelete: Cascade)
+
+  /// Restrict em Grade.gradeComponent impede excluir um componente que ainda
+  /// tem nota lancada (ver acima) - por isso essa lista importa para o
+  /// service validar antes de tentar.
+  grades Grade[]
+  exams  Exam[]
+
+  @@index([gradeConfigurationId])
+  @@map("grade_components")
 }
 
 // =============================================================================

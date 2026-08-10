@@ -19,6 +19,8 @@ import {
   calculateOverallAverage,
   calculateWeightedAverage,
   roundGrade,
+  toGradeLikes,
+  totalConfiguredWeight,
 } from '../utils/grade-calculator.js';
 
 /** Regra de negocio de semestres e historico. */
@@ -54,9 +56,15 @@ function toHistorySubject(row: HistorySubjectRow): HistorySubject {
     code: row.code,
     color: row.color,
     credits: row.credits,
-    passingGrade: row.passingGrade,
+    // Defensivo: toda disciplina ganha uma configuracao ao ser criada.
+    passingGrade: row.gradeConfiguration?.passingGrade ?? 6,
     status: row.status,
-    average: consolidated ? row.finalGrade : calculateWeightedAverage(row.grades),
+    average: consolidated
+      ? row.finalGrade
+      : calculateWeightedAverage(
+          toGradeLikes(row.grades),
+          totalConfiguredWeight(row.gradeConfiguration?.components),
+        ),
     isConsolidated: consolidated,
     gradeCount: row.grades.length,
     teacherName: row.teacher?.name ?? null,

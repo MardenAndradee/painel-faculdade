@@ -25,12 +25,11 @@ describe('PATCH não pode aplicar defaults (o bug mais grave do projeto)', () =>
    * CRIACAO.
    */
 
-  it('atualização de disciplina não reintroduz cor, nota de corte nem situação', () => {
+  it('atualização de disciplina não reintroduz cor nem situação', () => {
     const parsed = updateSubjectSchema.parse({ room: 'Lab 04' });
 
     expect(parsed).toEqual({ room: 'Lab 04' });
     expect(parsed).not.toHaveProperty('color');
-    expect(parsed).not.toHaveProperty('passingGrade');
     expect(parsed).not.toHaveProperty('status');
   });
 
@@ -38,7 +37,6 @@ describe('PATCH não pode aplicar defaults (o bug mais grave do projeto)', () =>
     const parsed = createSubjectSchema.parse({ name: 'Cálculo III' });
 
     expect(parsed.color).toBe('#6366f1');
-    expect(parsed.passingGrade).toBe(6);
     expect(parsed.status).toBe('IN_PROGRESS');
   });
 
@@ -60,13 +58,35 @@ describe('PATCH não pode aplicar defaults (o bug mais grave do projeto)', () =>
     expect(parsed.weight).toBe(1);
   });
 
-  it('atualização de nota não reescreve a escala nem o peso', () => {
+  it('campo de nota vazio na prova não vira zero', () => {
+    // Caso real: uma prova futura sem nota lançada ainda estava fechando a
+    // média em 0 porque o input HTML vazio ('') virava 0 via z.coerce.
+    const parsed = createExamSchema.parse({
+      title: 'P2',
+      subjectId: 'abc',
+      date: '2026-09-14T19:00',
+      gradeComponentId: 'comp-1',
+      gradeValue: '',
+    });
+
+    expect(parsed.gradeValue).toBeNull();
+  });
+
+  it('atualização de nota não reescreve isFinal para true', () => {
+    // isFinal (Etapa 18) tem default(true) no schema de criação - se ele
+    // vazasse para o de edição, um PATCH que só muda o rótulo destravaria
+    // silenciosamente um componente marcado como "ainda em aberto".
+    const parsed = updateGradeSchema.parse({ label: 'Prova substitutiva' });
+
+    expect(parsed).not.toHaveProperty('isFinal');
+  });
+
+  it('atualização de nota não reescreve a escala', () => {
     // Uma nota lancada em escala 100 voltava para 10 ao editar o rotulo,
     // dividindo o valor do aluno por dez.
     const parsed = updateGradeSchema.parse({ label: 'Prova substitutiva' });
 
     expect(parsed).not.toHaveProperty('maxValue');
-    expect(parsed).not.toHaveProperty('weight');
   });
 
   it('atualização de atividade não reescreve prioridade nem situação', () => {

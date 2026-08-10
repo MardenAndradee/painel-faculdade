@@ -12,6 +12,7 @@ import {
 } from '@painel/shared';
 import { useCreateExam, useUpdateExam } from '@/hooks/use-exams';
 import { useSubjects } from '@/hooks/use-subjects';
+import { useSubjectGradeConfiguration } from '@/hooks/use-grade-configuration';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -40,6 +41,8 @@ interface ExamFormDialogProps {
   defaultSubjectId?: string | null;
 }
 
+const NO_COMPONENT = '__none__';
+
 export function ExamFormDialog({
   open,
   onOpenChange,
@@ -58,11 +61,17 @@ export function ExamFormDialog({
     handleSubmit,
     control,
     reset,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<ExamFormValues, unknown, CreateExamInput>({
     resolver: zodResolver(createExamSchema),
     defaultValues: { subjectId: '', date: '', weight: 1 },
   });
+
+  // Os componentes de nota oferecidos dependem da disciplina escolhida.
+  const selectedSubjectId = watch('subjectId');
+  const { data: config } = useSubjectGradeConfiguration(selectedSubjectId || '');
+  const hasComponents = (config?.components.length ?? 0) > 0;
 
   useEffect(() => {
     if (!open) return;
@@ -73,6 +82,8 @@ export function ExamFormDialog({
         date: exam.date.slice(0, 10),
         content: exam.content ?? '',
         weight: exam.weight,
+        gradeComponentId: exam.gradeComponent?.id ?? null,
+        gradeValue: exam.grade?.value ?? null,
       });
     } else {
       reset({
@@ -80,6 +91,8 @@ export function ExamFormDialog({
         date: '',
         content: '',
         weight: 1,
+        gradeComponentId: null,
+        gradeValue: null,
       });
     }
   }, [open, exam, defaultSubjectId, reset]);
@@ -160,6 +173,64 @@ export function ExamFormDialog({
             >
               {(field) => (
                 <Input {...field} {...register('weight')} type="number" min={0} step="0.5" />
+              )}
+            </FormField>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField
+              label="Componente de nota"
+              error={errors.gradeComponentId?.message}
+              hint={
+                selectedSubjectId && !hasComponents
+                  ? 'Configure os componentes de notas da disciplina primeiro'
+                  : 'Opcional'
+              }
+            >
+              {(field) => (
+                <Controller
+                  control={control}
+                  name="gradeComponentId"
+                  render={({ field: controlled }) => (
+                    <Select
+                      value={controlled.value ?? NO_COMPONENT}
+                      onValueChange={(value) =>
+                        controlled.onChange(value === NO_COMPONENT ? null : value)
+                      }
+                      disabled={!hasComponents}
+                    >
+                      <SelectTrigger id={field.id}>
+                        <SelectValue placeholder="Nenhum" />
+                      </SelectTrigger>
+
+                      <SelectContent>
+                        <SelectItem value={NO_COMPONENT}>Nenhum</SelectItem>
+                        {config?.components.map((component) => (
+                          <SelectItem key={component.id} value={component.id}>
+                            {component.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              )}
+            </FormField>
+
+            <FormField
+              label="Nota"
+              error={errors.gradeValue?.message}
+              hint="Lança em Notas automaticamente"
+            >
+              {(field) => (
+                <Input
+                  {...field}
+                  {...register('gradeValue')}
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="0 a 10"
+                />
               )}
             </FormField>
           </div>

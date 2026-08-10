@@ -25,12 +25,12 @@ const historySubjectSelect = {
   code: true,
   color: true,
   credits: true,
-  passingGrade: true,
   status: true,
   finalGrade: true,
   semesterId: true,
   teacher: { select: { name: true } },
-  grades: { select: { value: true, maxValue: true, weight: true } },
+  gradeConfiguration: { select: { passingGrade: true, components: { select: { weight: true } } } },
+  grades: { select: { value: true, maxValue: true, gradeComponent: { select: { weight: true } } } },
 } satisfies Prisma.SubjectSelect;
 
 export type HistorySubjectRow = Prisma.SubjectGetPayload<{ select: typeof historySubjectSelect }>;

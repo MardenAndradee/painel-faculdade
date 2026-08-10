@@ -50,6 +50,33 @@ describe('calculateWeightedAverage', () => {
   it('usa peso 1 quando o peso vem zerado', () => {
     expect(calculateWeightedAverage([{ value: 7, maxValue: 10, weight: 0 }])).toBe(7);
   });
+
+  describe('com totalWeight (componente pendente nao pode contar como zero)', () => {
+    it('usa o peso total configurado no denominador, nao so o das notas lançadas', () => {
+      // Caso real: N1 peso3 nota7, N2 peso4 nota6, N3 peso3 ainda sem nota.
+      // (7x3 + 6x4) / 10 = 4,5 - o peso de N3 entra no denominador mesmo sem
+      // nota lancada, mas sem contribuir nada no numerador.
+      const grades = [
+        { value: 7, maxValue: 10, weight: 3 },
+        { value: 6, maxValue: 10, weight: 4 },
+      ];
+
+      expect(calculateWeightedAverage(grades, 10)).toBe(4.5);
+    });
+
+    it('ignora totalWeight menor que o peso já lançado', () => {
+      // Nao deveria acontecer (peso configurado sempre >= peso lancado), mas
+      // um totalWeight incoerente nao pode inflar a media dividindo por menos
+      // do que o peso real das notas.
+      const grades = [{ value: 8, maxValue: 10, weight: 5 }];
+
+      expect(calculateWeightedAverage(grades, 2)).toBe(calculateWeightedAverage(grades));
+    });
+
+    it('sem notas lançadas continua nulo mesmo com totalWeight', () => {
+      expect(calculateWeightedAverage([], 10)).toBeNull();
+    });
+  });
 });
 
 describe('calculateOverallAverage', () => {

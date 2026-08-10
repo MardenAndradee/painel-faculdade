@@ -6,14 +6,14 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Loader2, Plus } from 'lucide-react';
 import {
   createGradeSchema,
-  GRADE_TYPE,
-  GRADE_TYPE_LABELS,
   type CreateGradeInput,
   type GradeFormValues,
   type GradeListItem,
 } from '@painel/shared';
-import { useCreateGrade, useSubjectGrades, useUpdateGrade } from '@/hooks/use-grades';
+import { useCreateGrade, useUpdateGrade } from '@/hooks/use-grades';
+import { useSubjectGradeConfiguration } from '@/hooks/use-grade-configuration';
 import { useSubjects } from '@/hooks/use-subjects';
+import { useExams } from '@/hooks/use-exams';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -68,12 +68,17 @@ export function GradeFormDialog({
     formState: { errors, isSubmitting },
   } = useForm<GradeFormValues, unknown, CreateGradeInput>({
     resolver: zodResolver(createGradeSchema),
-    defaultValues: { subjectId: '', type: 'OTHER', value: 0, maxValue: 10, weight: 1 },
+    defaultValues: { subjectId: '', gradeComponentId: '', value: 0, maxValue: 10, isFinal: true },
   });
 
-  // As provas oferecidas dependem da disciplina escolhida no momento.
+  // Os componentes e as provas oferecidos dependem da disciplina escolhida.
   const selectedSubjectId = watch('subjectId');
-  const { data: summary } = useSubjectGrades(selectedSubjectId || '');
+  const { data: config } = useSubjectGradeConfiguration(selectedSubjectId || '');
+  const { data: examsData } = useExams({
+    subjectId: selectedSubjectId || undefined,
+    view: 'todas',
+    perPage: 100,
+  });
 
   /**
    * Provas disponíveis para vínculo.
@@ -81,10 +86,9 @@ export function GradeFormDialog({
    * Só as sem nota, mais a que já está vinculada nesta nota (na edição) —
    * do contrário ela sumiria da lista ao reabrir o formulário.
    */
-  const availableExams = [
-    ...(summary?.pendingExams ?? []),
-    ...(grade?.exam ? [{ ...grade.exam, weight: 0 }] : []),
-  ];
+  const availableExams = (examsData?.data ?? []).filter(
+    (exam) => exam.grade === null || exam.id === grade?.exam?.id,
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -92,26 +96,26 @@ export function GradeFormDialog({
     if (grade) {
       reset({
         subjectId: grade.subject.id,
-        type: grade.type,
+        gradeComponentId: grade.gradeComponent.id,
         label: grade.label ?? '',
         value: grade.value,
         maxValue: grade.maxValue,
-        weight: grade.weight,
         examId: grade.exam?.id ?? null,
         gradedAt: grade.gradedAt.slice(0, 10),
         notes: grade.notes ?? '',
+        isFinal: grade.isFinal,
       });
     } else {
       reset({
         subjectId: defaultSubjectId ?? '',
-        type: 'OTHER',
+        gradeComponentId: '',
         label: '',
         value: 0,
         maxValue: 10,
-        weight: 1,
         examId: null,
         gradedAt: new Date().toISOString().slice(0, 10),
         notes: '',
+        isFinal: true,
       });
     }
   }, [open, grade, defaultSubjectId, reset]);
@@ -168,21 +172,34 @@ export function GradeFormDialog({
           </FormField>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <FormField label="Tipo" error={errors.type?.message}>
+            <FormField
+              label="Componente"
+              error={errors.gradeComponentId?.message}
+              hint={
+                selectedSubjectId && config?.components.length === 0
+                  ? 'Configure os componentes de notas da disciplina primeiro'
+                  : undefined
+              }
+              required
+            >
               {(field) => (
                 <Controller
                   control={control}
-                  name="type"
+                  name="gradeComponentId"
                   render={({ field: controlled }) => (
-                    <Select value={controlled.value} onValueChange={controlled.onChange}>
+                    <Select
+                      value={controlled.value || undefined}
+                      onValueChange={controlled.onChange}
+                      disabled={!selectedSubjectId || (config?.components.length ?? 0) === 0}
+                    >
                       <SelectTrigger id={field.id}>
-                        <SelectValue />
+                        <SelectValue placeholder="Selecione" />
                       </SelectTrigger>
 
                       <SelectContent>
-                        {GRADE_TYPE.map((type) => (
-                          <SelectItem key={type} value={type}>
-                            {GRADE_TYPE_LABELS[type]}
+                        {config?.components.map((component) => (
+                          <SelectItem key={component.id} value={component.id}>
+                            {component.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -197,7 +214,7 @@ export function GradeFormDialog({
             </FormField>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2">
             <FormField label="Nota" error={errors.value?.message} required>
               {(field) => (
                 <Input
@@ -216,13 +233,33 @@ export function GradeFormDialog({
                 <Input {...field} {...register('maxValue')} type="number" min={1} step="1" />
               )}
             </FormField>
-
-            <FormField label="Peso" error={errors.weight?.message} hint="Na média">
-              {(field) => (
-                <Input {...field} {...register('weight')} type="number" min={0} step="0.5" />
-              )}
-            </FormField>
           </div>
+
+          <FormField
+            label="Situação"
+            error={errors.isFinal?.message}
+            hint="Marque quando o professor ainda vai lançar mais pontos neste componente"
+          >
+            {() => (
+              <Controller
+                control={control}
+                name="isFinal"
+                render={({ field: controlled }) => (
+                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={controlled.value === false}
+                      onChange={(event) => controlled.onChange(!event.target.checked)}
+                      className="size-4 rounded border-input accent-primary"
+                    />
+                    <span className="text-muted-foreground">
+                      Ainda não é a nota final (mais pontos vão somar depois)
+                    </span>
+                  </label>
+                )}
+              />
+            )}
+          </FormField>
 
           {/* Vínculo com prova: só faz sentido se a disciplina tiver provas. */}
           {availableExams.length > 0 && (
@@ -250,7 +287,7 @@ export function GradeFormDialog({
                         <SelectItem value={NO_EXAM}>Nenhuma</SelectItem>
                         {availableExams.map((exam) => (
                           <SelectItem key={exam.id} value={exam.id}>
-                            {exam.title} · {formatDate(exam.date)}
+                            {exam.subject.name} · {formatDate(exam.date)}
                           </SelectItem>
                         ))}
                       </SelectContent>

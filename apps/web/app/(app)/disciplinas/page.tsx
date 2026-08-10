@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { AlertTriangle, GraduationCap, Plus, RefreshCw, SearchX } from 'lucide-react';
+import { AlertTriangle, GraduationCap, Plus, RefreshCw, SearchX, Settings } from 'lucide-react';
 import type { SubjectListItem } from '@painel/shared';
 import { useArchiveSubject, useRestoreSubject, useSubjects } from '@/hooks/use-subjects';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
@@ -12,6 +12,7 @@ import { EmptyState } from '@/components/empty-state';
 import { SubjectCard } from '@/components/subjects/subject-card';
 import { SubjectFormDialog } from '@/components/subjects/subject-form-dialog';
 import { DeleteSubjectDialog } from '@/components/subjects/delete-subject-dialog';
+import { GradeTemplateDialog } from '@/components/grades/grade-template-dialog';
 import {
   SubjectFilters,
   ALL_STATUS,
@@ -31,6 +32,7 @@ export default function SubjectsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<SubjectListItem | null>(null);
   const [deleting, setDeleting] = useState<SubjectListItem | null>(null);
+  const [defaultTemplateOpen, setDefaultTemplateOpen] = useState(false);
 
   // A busca só vai à API depois que o usuário para de digitar.
   const debouncedSearch = useDebouncedValue(filters.search);
@@ -85,11 +87,18 @@ export default function SubjectsPage() {
           </p>
         </div>
 
-        <Button variant="accent" onClick={openCreate} className="shrink-0">
-          <Plus className="size-4" aria-hidden />
-          <span className="hidden sm:inline">Nova disciplina</span>
-          <span className="sm:hidden">Nova</span>
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button variant="outline" onClick={() => setDefaultTemplateOpen(true)}>
+            <Settings className="size-4" aria-hidden />
+            <span className="hidden sm:inline">Notas padrão</span>
+          </Button>
+
+          <Button variant="accent" onClick={openCreate}>
+            <Plus className="size-4" aria-hidden />
+            <span className="hidden sm:inline">Nova disciplina</span>
+            <span className="sm:hidden">Nova</span>
+          </Button>
+        </div>
       </div>
 
       <SubjectFilters value={filters} onChange={handleFiltersChange} />
@@ -215,6 +224,12 @@ export default function SubjectsPage() {
       <SubjectFormDialog open={formOpen} onOpenChange={setFormOpen} subject={editing} />
 
       <DeleteSubjectDialog subject={deleting} onOpenChange={(open) => !open && setDeleting(null)} />
+
+      <GradeTemplateDialog
+        open={defaultTemplateOpen}
+        onOpenChange={setDefaultTemplateOpen}
+        target={{ type: 'default' }}
+      />
     </div>
   );
 }

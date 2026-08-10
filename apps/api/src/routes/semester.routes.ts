@@ -1,6 +1,11 @@
 import { Router } from 'express';
-import { createSemesterSchema, updateSemesterSchema } from '@painel/shared';
+import {
+  createSemesterSchema,
+  gradeConfigurationInputSchema,
+  updateSemesterSchema,
+} from '@painel/shared';
 import { semesterController } from '../controllers/semester.controller.js';
+import { gradeConfigurationController } from '../controllers/grade-configuration.controller.js';
 import { authenticate } from '../middlewares/authenticate.js';
 import { validate } from '../middlewares/validate.js';
 import { idParamSchema } from '../validators/subject.validators.js';
@@ -55,4 +60,20 @@ semesterRoutes.delete(
   '/semesters/:id',
   validate({ params: idParamSchema }),
   semesterController.remove,
+);
+
+// --- Modelo padrao de notas (Etapa 17) ----------------------------------------
+// So pre-preenche disciplinas novas - nunca compartilhado, cada disciplina tem
+// sua propria configuracao independente.
+
+semesterRoutes.get(
+  '/semesters/:id/grade-configuration-template',
+  validate({ params: idParamSchema }),
+  gradeConfigurationController.getTemplateForSemester,
+);
+
+semesterRoutes.put(
+  '/semesters/:id/grade-configuration-template',
+  validate({ params: idParamSchema, body: gradeConfigurationInputSchema }),
+  gradeConfigurationController.replaceTemplateForSemester,
 );

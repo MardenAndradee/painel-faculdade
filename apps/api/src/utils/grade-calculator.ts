@@ -13,20 +13,54 @@ export interface GradeLike {
   weight: number;
 }
 
+/** Nota como vem do banco: o peso mora no componente vinculado, nao na nota. */
+export interface GradeRowLike {
+  value: number;
+  maxValue: number;
+  gradeComponent: { weight: number };
+}
+
+/** Achata o peso do componente para o formato que o calculo consome. */
+export function toGradeLikes(rows: GradeRowLike[]): GradeLike[] {
+  return rows.map((row) => ({
+    value: row.value,
+    maxValue: row.maxValue,
+    weight: row.gradeComponent.weight,
+  }));
+}
+
+/** Soma o peso de todos os componentes configurados, lancados ou nao. */
+export function totalConfiguredWeight(
+  components: { weight: number }[] | undefined,
+): number | undefined {
+  if (!components) return undefined;
+
+  return components.reduce((total, component) => total + component.weight, 0);
+}
+
 /**
  * Media ponderada de uma lista de notas, na escala 0-10.
  *
  * As notas sao normalizadas antes da ponderacao: uma prova valendo 100 pontos
  * precisa ser comparavel a um trabalho valendo 10.
  *
+ * `totalWeight`, quando informado, e o peso de TODOS os componentes
+ * configurados (lancados ou nao) - a media entao conta o que falta como peso
+ * no denominador, sem inventar nota para ele. Uma prova futura sem nota nao
+ * pode "fechar" a media como se valesse zero; seu peso so entra na conta
+ * quando alguem efetivamente lanca uma nota nela. Sem esse parametro (ou
+ * quando ele vem menor que o peso ja lancado - nao deveria acontecer, mas nao
+ * confiamos cegamente), o denominador cai para o peso das notas lancadas, o
+ * comportamento historico.
+ *
  * Retorna null quando nao ha nota - disciplina sem avaliacao nao e disciplina
  * com media zero, e exibir 0,0 sugeriria reprovacao.
  */
-export function calculateWeightedAverage(grades: GradeLike[]): number | null {
+export function calculateWeightedAverage(grades: GradeLike[], totalWeight?: number): number | null {
   if (grades.length === 0) return null;
 
   let weightedSum = 0;
-  let totalWeight = 0;
+  let gradedWeight = 0;
 
   for (const grade of grades) {
     // Valores invalidos vindos de importacao usam o padrao em vez de zerar a conta.
@@ -34,12 +68,15 @@ export function calculateWeightedAverage(grades: GradeLike[]): number | null {
     const weight = grade.weight > 0 ? grade.weight : 1;
 
     weightedSum += (grade.value / maxValue) * 10 * weight;
-    totalWeight += weight;
+    gradedWeight += weight;
   }
 
-  if (totalWeight === 0) return null;
+  const denominator =
+    totalWeight !== undefined ? Math.max(totalWeight, gradedWeight) : gradedWeight;
 
-  return roundGrade(weightedSum / totalWeight);
+  if (denominator === 0) return null;
+
+  return roundGrade(weightedSum / denominator);
 }
 
 /**

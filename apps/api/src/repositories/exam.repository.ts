@@ -33,6 +33,7 @@ const listSelect = {
   createdAt: true,
   updatedAt: true,
   subject: { select: { id: true, name: true, color: true } },
+  gradeComponent: { select: { id: true, name: true } },
   grade: { select: { id: true, value: true, maxValue: true } },
   _count: { select: { attachments: true } },
 } satisfies Prisma.ExamSelect;

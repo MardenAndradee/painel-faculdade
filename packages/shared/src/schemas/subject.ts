@@ -52,8 +52,6 @@ const subjectBaseSchema = z.object({
     .max(40, 'Valor muito alto')
     .optional(),
 
-  passingGrade: z.coerce.number().min(0, 'Não pode ser negativo').max(10, 'A nota máxima é 10'),
-
   status: z.enum(SUBJECT_STATUS),
 
   semesterId: z.string().min(1).nullable().optional(),
@@ -71,11 +69,6 @@ const subjectBaseSchema = z.object({
 /** Criacao: aplica os valores padrao. */
 export const createSubjectSchema = subjectBaseSchema.extend({
   color: hexColorSchema.default('#6366f1'),
-  passingGrade: z.coerce
-    .number()
-    .min(0, 'Não pode ser negativo')
-    .max(10, 'A nota máxima é 10')
-    .default(6),
   status: z.enum(SUBJECT_STATUS).default('IN_PROGRESS'),
 });
 
@@ -132,6 +125,7 @@ export interface SubjectListItem {
   color: string;
   room: string | null;
   credits: number | null;
+  /** Somente leitura aqui - editar mora na configuração de notas (Etapa 17). */
   passingGrade: number;
   status: SubjectStatus;
   archivedAt: string | null;

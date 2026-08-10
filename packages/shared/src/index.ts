@@ -8,6 +8,7 @@ export * from './schemas/exam.js';
 export * from './schemas/calendar.js';
 export * from './schemas/integration.js';
 export * from './schemas/grade.js';
+export * from './schemas/grade-configuration.js';
 export * from './schemas/semester.js';
 export * from './schemas/teacher.js';
 export * from './schemas/attachment.js';

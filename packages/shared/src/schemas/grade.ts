@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { GRADE_TYPE, type GradeType } from '../enums.js';
 import type { SubjectRef } from './dashboard.js';
 
 /**
@@ -7,15 +6,21 @@ import type { SubjectRef } from './dashboard.js';
  *
  * Uma nota pode existir sozinha (lancamento avulso) ou vinculada a uma prova
  * ja cadastrada - `Grade.examId` e unico, entao a relacao e 1-1.
+ *
+ * Nao ha mais um `type` fixo (P1/P2/P3/...): toda nota se refere a um
+ * `GradeComponent` configurado pelo usuario (ver `grade-configuration.ts`),
+ * de onde tambem vem o peso usado no calculo da media.
  */
 
 /** Campos da nota SEM defaults - ver a explicacao em `subject.ts`. */
 const gradeBaseSchema = z.object({
   subjectId: z.string({ error: 'Selecione a disciplina' }).min(1, 'Selecione a disciplina'),
 
-  type: z.enum(GRADE_TYPE),
+  gradeComponentId: z
+    .string({ error: 'Selecione o componente de avaliação' })
+    .min(1, 'Selecione o componente de avaliação'),
 
-  /** Rotulo livre, util para tipos genericos ("Lista 3", "Prova substitutiva"). */
+  /** Rotulo livre, util para distinguir varios lancamentos do mesmo componente. */
   label: z.string().trim().max(120, 'Máximo de 120 caracteres').optional().or(z.literal('')),
 
   value: z.coerce
@@ -28,8 +33,6 @@ const gradeBaseSchema = z.object({
     .number()
     .positive('A escala precisa ser maior que zero')
     .max(1000, 'Valor muito alto'),
-
-  weight: z.coerce.number().min(0, 'O peso não pode ser negativo').max(100, 'Peso muito alto'),
 
   /** Prova correspondente, quando a nota vier de uma avaliacao cadastrada. */
   examId: z.string().min(1).nullable().optional(),
@@ -45,21 +48,27 @@ const gradeBaseSchema = z.object({
     }),
 
   notes: z.string().trim().max(1000, 'Máximo de 1000 caracteres').optional().or(z.literal('')),
+
+  /**
+   * Falso quando o professor ainda vai somar pontos a este componente (um
+   * trabalho lancado em partes). Enquanto falso, o componente conta como
+   * pendente no calculo da media/nota necessaria, mesmo ja tendo uma nota
+   * lancada.
+   *
+   * Sem default aqui - ver a explicacao em `subject.ts` sobre por que o
+   * default mora so no schema de criacao, nunca no de edicao.
+   */
+  isFinal: z.boolean().optional(),
 });
 
-/** Criacao: escala 0-10 e peso 1 por padrao. */
+/** Criacao: escala 0-10 por padrao, nota final por padrao. */
 export const createGradeSchema = gradeBaseSchema.extend({
-  type: z.enum(GRADE_TYPE).default('OTHER'),
   maxValue: z.coerce
     .number()
     .positive('A escala precisa ser maior que zero')
     .max(1000, 'Valor muito alto')
     .default(10),
-  weight: z.coerce
-    .number()
-    .min(0, 'O peso não pode ser negativo')
-    .max(100, 'Peso muito alto')
-    .default(1),
+  isFinal: z.boolean().optional().default(true),
 });
 
 export type CreateGradeInput = z.output<typeof createGradeSchema>;
@@ -71,11 +80,10 @@ export type UpdateGradeInput = z.infer<typeof updateGradeSchema>;
 
 export interface GradeListItem {
   id: string;
-  type: GradeType;
+  gradeComponent: { id: string; name: string; weight: number };
   label: string | null;
   value: number;
   maxValue: number;
-  weight: number;
   /** Nota convertida para a escala 0-10, que e como a media e calculada. */
   normalized: number;
   gradedAt: string;
@@ -84,6 +92,8 @@ export interface GradeListItem {
   /** Prova vinculada, quando houver. */
   exam: { id: string; title: string; date: string } | null;
   createdAt: string;
+  /** Falso quando ainda faltam pontos a somar neste componente (Etapa 18). */
+  isFinal: boolean;
 }
 
 /** Situacao de uma disciplina em relacao a aprovacao. */
@@ -107,8 +117,9 @@ export interface SubjectGradeSummary {
   /** Soma dos pesos ja avaliados. */
   usedWeight: number;
   /**
-   * Peso ainda por avaliar, deduzido das provas cadastradas sem nota.
-   * `null` quando nao ha como saber o que falta.
+   * Peso ainda por avaliar, deduzido dos componentes configurados sem nota.
+   * `null` quando a disciplina nao tem componentes pendentes (ou nenhuma
+   * configuracao de notas ainda).
    */
   remainingWeight: number | null;
   /**
@@ -119,8 +130,12 @@ export interface SubjectGradeSummary {
    */
   requiredGrade: number | null;
   status: SubjectGradeStatus;
-  /** Provas cadastradas que ainda nao tem nota lancada. */
-  pendingExams: Array<{ id: string; title: string; date: string; weight: number }>;
+  /**
+   * Componentes ainda em aberto: sem nenhuma nota lancada, OU com nota
+   * lancada mas marcada como nao-final (`isFinal: false` - mais pontos ainda
+   * vao somar). Cruze com `grades` para saber qual dos dois casos e cada um.
+   */
+  pendingComponents: Array<{ id: string; name: string; weight: number }>;
 }
 
 /** Visao geral do desempenho, usada na tela de Notas. */

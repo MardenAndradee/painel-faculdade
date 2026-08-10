@@ -13,7 +13,12 @@ import { subjectRepository } from '../repositories/subject.repository.js';
 import { studySessionRepository } from '../repositories/study-session.repository.js';
 import { semesterRepository } from '../repositories/semester.repository.js';
 import { calendarService } from './calendar.service.js';
-import { calculateOverallAverage, calculateWeightedAverage } from '../utils/grade-calculator.js';
+import {
+  calculateOverallAverage,
+  calculateWeightedAverage,
+  toGradeLikes,
+  totalConfiguredWeight,
+} from '../utils/grade-calculator.js';
 
 /**
  * Agregacao do dashboard.
@@ -115,7 +120,12 @@ export const dashboardService = {
     const stats: DashboardStats = {
       subjectCount: subjects.length,
       overallAverage: calculateOverallAverage(
-        subjects.map((subject) => calculateWeightedAverage(subject.grades)),
+        subjects.map((subject) =>
+          calculateWeightedAverage(
+            toGradeLikes(subject.grades),
+            totalConfiguredWeight(subject.gradeConfiguration?.components),
+          ),
+        ),
       ),
       pendingCount: counts.pending,
       overdueCount: counts.overdue,

@@ -10,6 +10,8 @@ import {
   calculateOverallAverage,
   calculateWeightedAverage,
   roundGrade,
+  toGradeLikes,
+  totalConfiguredWeight,
 } from '../utils/grade-calculator.js';
 import { MS_PER_DAY, dayKey, startOfDay, startOfWeek } from '../utils/date.js';
 import { MASTERED_INTERVAL_DAYS } from './deck.service.js';
@@ -148,7 +150,10 @@ export const statisticsService = {
     // --- Comparacoes por categoria ------------------------------------------------
     const subjectAverages = subjects.map((subject) => ({
       subject,
-      average: calculateWeightedAverage(subject.grades),
+      average: calculateWeightedAverage(
+        toGradeLikes(subject.grades),
+        totalConfiguredWeight(subject.gradeConfiguration?.components),
+      ),
     }));
 
     const averageBySubject: CategoryValue[] = subjectAverages

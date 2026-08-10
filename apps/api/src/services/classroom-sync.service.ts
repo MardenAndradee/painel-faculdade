@@ -12,6 +12,8 @@ import type {
   ClassroomTimeOfDay,
 } from '../integrations/classroom/classroom.types.js';
 import { semesterRepository } from '../repositories/semester.repository.js';
+import { subjectRepository } from '../repositories/subject.repository.js';
+import { gradeConfigurationService } from './grade-configuration.service.js';
 import { AppError } from '../utils/app-error.js';
 
 /**
@@ -281,19 +283,29 @@ export const classroomSyncService = {
       subjectId = existingSubject.id;
       report.subjects.updated += 1;
     } else {
-      const created = await prisma.subject.create({
-        data: {
-          userId,
+      // Mesma resolucao usada na criacao manual (Etapa 17/19): copia o
+      // modelo do semestre quando existir, senao o modelo pessoal do
+      // usuario (N1/N2/N3 por padrao) - a disciplina importada nao pode
+      // nascer sem nenhuma configuracao de notas.
+      const gradeConfig = await gradeConfigurationService.resolveInitialConfiguration(
+        userId,
+        semesterId,
+      );
+
+      const created = await subjectRepository.createWithGradeConfiguration(
+        userId,
+        {
           name: course.name,
           code: course.section ?? null,
           room: course.room ?? null,
           color: IMPORT_COLORS[index % IMPORT_COLORS.length] ?? '#6366f1',
           googleCourseId: course.id,
           classroomLink: course.alternateLink ?? null,
-          teacherId,
-          semesterId,
+          ...(teacherId ? { teacher: { connect: { id: teacherId } } } : {}),
+          ...(semesterId ? { semester: { connect: { id: semesterId } } } : {}),
         },
-      });
+        gradeConfig,
+      );
       subjectId = created.id;
       report.subjects.created += 1;
     }

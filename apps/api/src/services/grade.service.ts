@@ -9,12 +9,14 @@ import type {
 import { type Prisma } from '../config/prisma.js';
 import { gradeRepository, type GradeRow } from '../repositories/grade.repository.js';
 import { subjectRepository } from '../repositories/subject.repository.js';
+import { gradeConfigurationRepository } from '../repositories/grade-configuration.repository.js';
 import { AppError } from '../utils/app-error.js';
 import {
   calculateOverallAverage,
   calculateRequiredGrade,
   calculateWeightedAverage,
   roundGrade,
+  toGradeLikes,
 } from '../utils/grade-calculator.js';
 import { emptyToNull } from '../utils/text.js';
 
@@ -30,11 +32,10 @@ function normalize(value: number, maxValue: number): number {
 function toListItem(row: GradeRow): GradeListItem {
   return {
     id: row.id,
-    type: row.type,
+    gradeComponent: row.gradeComponent,
     label: row.label,
     value: row.value,
     maxValue: row.maxValue,
-    weight: row.weight,
     normalized: normalize(row.value, row.maxValue),
     gradedAt: row.gradedAt.toISOString(),
     notes: row.notes,
@@ -43,6 +44,7 @@ function toListItem(row: GradeRow): GradeListItem {
       ? { id: row.exam.id, title: row.exam.title, date: row.exam.date.toISOString() }
       : null,
     createdAt: row.createdAt.toISOString(),
+    isFinal: row.isFinal,
   };
 }
 
@@ -88,32 +90,54 @@ export const gradeService = {
   /**
    * Boletim de uma disciplina.
    *
-   * O peso restante vem das PROVAS CADASTRADAS sem nota - dado real, e nao a
-   * suposicao de que o semestre soma peso 10. Quando nao ha provas pendentes,
-   * `remainingWeight` fica null e nenhuma projecao e inventada.
+   * O peso restante vem dos COMPONENTES CONFIGURADOS sem nota - dado real, e
+   * nao a suposicao de que o semestre soma peso 10. Sem uma configuracao de
+   * notas (ou sem componentes pendentes), `remainingWeight` fica null e
+   * nenhuma projecao e inventada.
+   *
+   * Esta e a UNICA implementacao do calculo (Etapa 17) - antes dela o
+   * detalhe da disciplina tinha sua propria estimativa, que podia divergir
+   * deste numero para a mesma disciplina.
    */
   async getSubjectSummary(userId: string, subjectId: string): Promise<SubjectGradeSummary> {
     const subject = await subjectRepository.findById(userId, subjectId);
 
     if (!subject) throw AppError.notFound('Disciplina');
 
-    const [rows, pendingExams] = await Promise.all([
+    const [rows, config] = await Promise.all([
       gradeRepository.findBySubject(userId, subjectId),
-      gradeRepository.findExamsWithoutGrade(userId, subjectId),
+      gradeConfigurationRepository.findBySubject(userId, subjectId),
     ]);
 
-    const grades = rows.map(toListItem);
-    const average = calculateWeightedAverage(rows);
+    const passingGrade = config?.passingGrade ?? 6;
 
-    const usedWeight = rows.reduce((total, row) => total + (row.weight || 1), 0);
+    // Uma nota nao-final (`isFinal: false` - mais pontos ainda vao somar,
+    // Etapa 18) fica visivel em `grades`, mas nao fecha o componente: ele
+    // continua contando como pendente na media/nota necessaria, exatamente
+    // como um componente sem nota nenhuma.
+    const finalRows = rows.filter((row) => row.isFinal);
+    const gradedComponentIds = new Set(finalRows.map((row) => row.gradeComponent.id));
+    const pendingComponents = (config?.components ?? []).filter(
+      (component) => !gradedComponentIds.has(component.id),
+    );
+
+    const grades = rows.map(toListItem);
+    const gradeLikes = toGradeLikes(finalRows);
+
+    const usedWeight = gradeLikes.reduce((total, grade) => total + (grade.weight || 1), 0);
     const remainingWeight =
-      pendingExams.length > 0
-        ? pendingExams.reduce((total, exam) => total + (exam.weight || 1), 0)
+      pendingComponents.length > 0
+        ? pendingComponents.reduce((total, component) => total + component.weight, 0)
         : null;
+
+    // O peso restante conta no denominador da media, sem inventar nota para
+    // ele: uma prova futura sem nota lancada nao pode "fechar" a media como
+    // se valesse zero (ver a explicacao em `calculateWeightedAverage`).
+    const average = calculateWeightedAverage(gradeLikes, usedWeight + (remainingWeight ?? 0));
 
     const requiredGrade =
       average !== null && remainingWeight !== null && remainingWeight > 0
-        ? calculateRequiredGrade(rows, subject.passingGrade, remainingWeight)
+        ? calculateRequiredGrade(gradeLikes, passingGrade, remainingWeight)
         : null;
 
     return {
@@ -121,26 +145,25 @@ export const gradeService = {
         id: subject.id,
         name: subject.name,
         color: subject.color,
-        passingGrade: subject.passingGrade,
+        passingGrade,
       },
       grades,
       average,
       usedWeight: roundGrade(usedWeight),
       remainingWeight: remainingWeight === null ? null : roundGrade(remainingWeight),
       requiredGrade,
-      status: resolveStatus(average, subject.passingGrade, requiredGrade, remainingWeight),
-      pendingExams: pendingExams.map((exam) => ({
-        id: exam.id,
-        title: exam.title,
-        date: exam.date.toISOString(),
-        weight: exam.weight,
+      status: resolveStatus(average, passingGrade, requiredGrade, remainingWeight),
+      pendingComponents: pendingComponents.map((component) => ({
+        id: component.id,
+        name: component.name,
+        weight: component.weight,
       })),
     };
   },
 
-  /** Boletim de todas as disciplinas em andamento. */
-  async getOverview(userId: string): Promise<GradesOverview> {
-    const subjects = await subjectRepository.findActiveWithGrades(userId);
+  /** Boletim de todas as disciplinas em andamento, opcionalmente recortado por semestre. */
+  async getOverview(userId: string, semesterId?: string): Promise<GradesOverview> {
+    const subjects = await subjectRepository.findActiveWithGrades(userId, semesterId);
 
     const summaries = await Promise.all(
       subjects.map((subject) => this.getSubjectSummary(userId, subject.id)),
@@ -166,6 +189,7 @@ export const gradeService = {
 
   async create(userId: string, input: CreateGradeInput): Promise<GradeListItem> {
     await assertSubject(userId, input.subjectId);
+    await this.assertComponentAvailable(userId, input.subjectId, input.gradeComponentId);
 
     if (input.examId) {
       await this.assertExamAvailable(userId, input.examId);
@@ -179,14 +203,14 @@ export const gradeService = {
 
     const row = await gradeRepository.create(userId, {
       subjectId: input.subjectId,
-      type: input.type,
+      gradeComponentId: input.gradeComponentId,
       label: emptyToNull(input.label),
       value: input.value,
       maxValue: input.maxValue,
-      weight: input.weight,
       examId: input.examId ?? null,
       gradedAt: input.gradedAt ?? new Date(),
       notes: emptyToNull(input.notes),
+      isFinal: input.isFinal,
     });
 
     return toListItem(row);
@@ -198,6 +222,14 @@ export const gradeService = {
     if (!current) throw AppError.notFound('Nota');
 
     if (input.subjectId) await assertSubject(userId, input.subjectId);
+
+    if (input.gradeComponentId) {
+      await this.assertComponentAvailable(
+        userId,
+        input.subjectId ?? current.subject.id,
+        input.gradeComponentId,
+      );
+    }
 
     if (input.examId) {
       await this.assertExamAvailable(userId, input.examId, id);
@@ -215,14 +247,14 @@ export const gradeService = {
 
     const data: Prisma.GradeUncheckedUpdateInput = {
       ...(input.subjectId !== undefined ? { subjectId: input.subjectId } : {}),
-      ...(input.type !== undefined ? { type: input.type } : {}),
+      ...(input.gradeComponentId !== undefined ? { gradeComponentId: input.gradeComponentId } : {}),
       ...(input.label !== undefined ? { label: emptyToNull(input.label) } : {}),
       ...(input.value !== undefined ? { value: input.value } : {}),
       ...(input.maxValue !== undefined ? { maxValue: input.maxValue } : {}),
-      ...(input.weight !== undefined ? { weight: input.weight } : {}),
       ...(input.examId !== undefined ? { examId: input.examId ?? null } : {}),
       ...(input.gradedAt !== undefined ? { gradedAt: input.gradedAt } : {}),
       ...(input.notes !== undefined ? { notes: emptyToNull(input.notes) } : {}),
+      ...(input.isFinal !== undefined ? { isFinal: input.isFinal } : {}),
     };
 
     const row = await gradeRepository.update(userId, id, data);
@@ -253,6 +285,20 @@ export const gradeService = {
 
     if (existing) {
       throw AppError.conflict('Esta prova já tem uma nota lançada');
+    }
+  },
+
+  /** Confirma que o componente pertence a configuracao de notas da disciplina. */
+  async assertComponentAvailable(
+    userId: string,
+    subjectId: string,
+    gradeComponentId: string,
+  ): Promise<void> {
+    const config = await gradeConfigurationRepository.findBySubject(userId, subjectId);
+    const exists = config?.components.some((component) => component.id === gradeComponentId);
+
+    if (!exists) {
+      throw AppError.badRequest('Componente de avaliação inválido para esta disciplina');
     }
   },
 };

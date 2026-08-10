@@ -18,14 +18,14 @@ import { errorMessage } from '@/lib/api-error';
 
 export const gradeKeys = {
   all: ['grades'] as const,
-  overview: ['grades', 'overview'] as const,
+  overview: (semesterId?: string) => ['grades', 'overview', semesterId ?? 'all'] as const,
   subject: (subjectId: string) => ['grades', 'subject', subjectId] as const,
 };
 
-export function useGradesOverview() {
+export function useGradesOverview(semesterId?: string) {
   return useQuery({
-    queryKey: gradeKeys.overview,
-    queryFn: () => gradeService.overview(),
+    queryKey: gradeKeys.overview(semesterId),
+    queryFn: () => gradeService.overview(semesterId),
   });
 }
 

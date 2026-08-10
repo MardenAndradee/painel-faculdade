@@ -1,6 +1,8 @@
 import { Router } from 'express';
+import { gradeConfigurationInputSchema } from '@painel/shared';
 import { subjectController } from '../controllers/subject.controller.js';
 import { teacherController } from '../controllers/teacher.controller.js';
+import { gradeConfigurationController } from '../controllers/grade-configuration.controller.js';
 import { authenticate } from '../middlewares/authenticate.js';
 import { validate } from '../middlewares/validate.js';
 import {
@@ -50,6 +52,20 @@ subjectRoutes.post(
   '/subjects/:id/restore',
   validate({ params: idParamSchema }),
   subjectController.restore,
+);
+
+// --- Configuracao de notas (Etapa 17) -----------------------------------------
+
+subjectRoutes.get(
+  '/subjects/:id/grade-configuration',
+  validate({ params: idParamSchema }),
+  gradeConfigurationController.getForSubject,
+);
+
+subjectRoutes.put(
+  '/subjects/:id/grade-configuration',
+  validate({ params: idParamSchema, body: gradeConfigurationInputSchema }),
+  gradeConfigurationController.replaceForSubject,
 );
 
 // --- Professores -------------------------------------------------------------

@@ -14,7 +14,11 @@ gradeRoutes.use(authenticate);
 const listQuerySchema = z.object({ subjectId: z.string().min(1).optional() });
 
 // Rotas fixas precedem `/grades/:id`, para nao serem lidas como identificador.
-gradeRoutes.get('/grades/overview', gradeController.overview);
+gradeRoutes.get(
+  '/grades/overview',
+  validate({ query: z.object({ semesterId: z.string().min(1).optional() }) }),
+  gradeController.overview,
+);
 
 gradeRoutes.get(
   '/grades/subject/:id',

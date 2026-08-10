@@ -96,6 +96,32 @@ const examBaseSchema = z.object({
     .min(0, 'Não pode ser negativo')
     .max(600, 'Duração muito longa')
     .optional(),
+
+  /**
+   * A que componente de avaliacao esta prova se refere (N1, N2...), quando a
+   * disciplina tem uma configuracao de notas (Etapa 17).
+   */
+  gradeComponentId: z.string().min(1).nullable().optional(),
+
+  /**
+   * Lancamento rapido da nota, direto no formulario da prova. `null`/vazio
+   * remove a nota ja lancada; um numero cria ou atualiza a `Grade` vinculada
+   * a este componente. Exige `gradeComponentId` preenchido.
+   *
+   * O preprocess e necessario porque o input HTML vazio chega como `''`, e
+   * `z.coerce.number()` converteria isso para `0` (uma nota real de zero) em
+   * vez de "ainda sem nota" - exatamente o bug de provas futuras contarem
+   * como zero na media.
+   */
+  gradeValue: z.preprocess(
+    (value) => (value === '' ? null : value),
+    z.coerce
+      .number()
+      .min(0, 'A nota não pode ser negativa')
+      .max(1000, 'Valor muito alto')
+      .nullable()
+      .optional(),
+  ),
 });
 
 /** Criacao: peso padrao 1. */
@@ -141,6 +167,8 @@ export interface ExamListItem {
   daysUntilExam: number;
   /** Verdadeiro quando a data ja passou. */
   isPast: boolean;
+  /** Componente de avaliacao que esta prova representa, quando escolhido. */
+  gradeComponent: { id: string; name: string } | null;
   /** Nota lancada, quando houver. Alimenta o historico da disciplina. */
   grade: ExamGradeRef | null;
   attachmentCount: number;

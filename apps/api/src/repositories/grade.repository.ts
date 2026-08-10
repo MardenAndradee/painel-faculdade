@@ -4,15 +4,15 @@ import { prisma, type Prisma } from '../config/prisma.js';
 
 const listSelect = {
   id: true,
-  type: true,
   label: true,
   value: true,
   maxValue: true,
-  weight: true,
+  isFinal: true,
   gradedAt: true,
   notes: true,
   createdAt: true,
   subject: { select: { id: true, name: true, color: true } },
+  gradeComponent: { select: { id: true, name: true, weight: true } },
   exam: { select: { id: true, title: true, date: true } },
 } satisfies Prisma.GradeSelect;
 
@@ -77,23 +77,6 @@ export const gradeRepository = {
         ...(excludeGradeId ? { id: { not: excludeGradeId } } : {}),
       },
       select: listSelect,
-    });
-  },
-
-  /**
-   * Provas da disciplina que ainda nao tem nota.
-   *
-   * E o que permite calcular o peso restante com precisao, em vez de assumir
-   * um total arbitrario para o semestre.
-   */
-  findExamsWithoutGrade(
-    userId: string,
-    subjectId: string,
-  ): Promise<Array<{ id: string; title: string; date: Date; weight: number }>> {
-    return prisma.exam.findMany({
-      where: { userId, subjectId, grade: null },
-      select: { id: true, title: true, date: true, weight: true },
-      orderBy: { date: 'asc' },
     });
   },
 };

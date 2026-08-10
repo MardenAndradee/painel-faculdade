@@ -2,13 +2,28 @@ import { prisma, type Prisma } from '../config/prisma.js';
 
 /** Acesso a dados de disciplinas. */
 
+/** Nota com o peso do componente vinculado - formato que `toGradeLikes` consome. */
+const gradeWeightSelect = {
+  value: true,
+  maxValue: true,
+  gradeComponent: { select: { weight: true } },
+} satisfies Prisma.GradeSelect;
+
+/** Peso de todos os componentes configurados, lancados ou nao - para o denominador da media. */
+const gradeConfigurationSelect = {
+  select: {
+    passingGrade: true,
+    components: { select: { weight: true } },
+  },
+} satisfies Prisma.Subject$gradeConfigurationArgs;
+
 /** Disciplina com as notas necessarias para calcular a media (usado no dashboard). */
 const withGradesSelect = {
   id: true,
   name: true,
   color: true,
-  passingGrade: true,
-  grades: { select: { value: true, maxValue: true, weight: true } },
+  gradeConfiguration: gradeConfigurationSelect,
+  grades: { select: gradeWeightSelect },
 } satisfies Prisma.SubjectSelect;
 
 export type SubjectWithGrades = Prisma.SubjectGetPayload<{ select: typeof withGradesSelect }>;
@@ -27,14 +42,14 @@ const listSelect = {
   color: true,
   room: true,
   credits: true,
-  passingGrade: true,
   finalGrade: true,
   status: true,
   archivedAt: true,
   createdAt: true,
   teacher: { select: { id: true, name: true, email: true } },
   semester: { select: { id: true, name: true } },
-  grades: { select: { value: true, maxValue: true, weight: true } },
+  gradeConfiguration: gradeConfigurationSelect,
+  grades: { select: gradeWeightSelect },
   _count: { select: { assignments: true, exams: true, grades: true } },
 } satisfies Prisma.SubjectSelect;
 
@@ -86,9 +101,14 @@ function buildWhere(userId: string, filters: SubjectFilters): Prisma.SubjectWher
 }
 
 export const subjectRepository = {
-  findActiveWithGrades(userId: string): Promise<SubjectWithGrades[]> {
+  findActiveWithGrades(userId: string, semesterId?: string): Promise<SubjectWithGrades[]> {
     return prisma.subject.findMany({
-      where: { userId, status: 'IN_PROGRESS', archivedAt: null },
+      where: {
+        userId,
+        status: 'IN_PROGRESS',
+        archivedAt: null,
+        ...(semesterId ? { semesterId } : {}),
+      },
       select: withGradesSelect,
       orderBy: { name: 'asc' },
     });
@@ -140,10 +160,42 @@ export const subjectRepository = {
     });
   },
 
-  create(userId: string, data: Omit<Prisma.SubjectCreateInput, 'user'>): Promise<SubjectDetailRow> {
-    return prisma.subject.create({
-      data: { ...data, user: { connect: { id: userId } } },
-      select: detailSelect,
+  /**
+   * Cria a disciplina e sua configuracao de notas juntas, na mesma transacao.
+   *
+   * Toda disciplina precisa ter uma `GradeConfiguration` (1-1 garantido pelo
+   * service, nao pelo schema - ver o comentario em `Subject.gradeConfiguration`
+   * no Prisma) - criar as duas em separado deixaria uma janela onde a
+   * disciplina existe sem configuracao caso o segundo insert falhe.
+   */
+  createWithGradeConfiguration(
+    userId: string,
+    data: Omit<Prisma.SubjectCreateInput, 'user'>,
+    gradeConfig: { passingGrade: number; components: Array<{ name: string; weight: number }> },
+  ): Promise<SubjectDetailRow> {
+    return prisma.$transaction(async (tx) => {
+      const subject = await tx.subject.create({
+        data: { ...data, user: { connect: { id: userId } } },
+        select: { id: true },
+      });
+
+      await tx.gradeConfiguration.create({
+        data: {
+          userId,
+          subjectId: subject.id,
+          passingGrade: gradeConfig.passingGrade,
+          components: {
+            create: gradeConfig.components.map((component, index) => ({
+              userId,
+              name: component.name,
+              weight: component.weight,
+              order: index,
+            })),
+          },
+        },
+      });
+
+      return tx.subject.findFirstOrThrow({ where: { id: subject.id }, select: detailSelect });
     });
   },
 

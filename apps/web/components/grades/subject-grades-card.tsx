@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { EllipsisVertical, Pencil, Plus, Target, Trash2 } from 'lucide-react';
+import { Calculator, EllipsisVertical, Pencil, Plus, Settings, Target, Trash2 } from 'lucide-react';
 import type { GradeListItem, SubjectGradeSummary } from '@painel/shared';
-import { GRADE_TYPE_LABELS, SUBJECT_GRADE_STATUS_LABELS } from '@painel/shared';
+import { SUBJECT_GRADE_STATUS_LABELS } from '@painel/shared';
 import { useDeleteGrade } from '@/hooks/use-grades';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -30,10 +30,12 @@ interface SubjectGradesCardProps {
   summary: SubjectGradeSummary;
   onAddGrade: (subjectId: string) => void;
   onEditGrade: (grade: GradeListItem) => void;
+  onConfigure: (subjectId: string) => void;
+  onSimulate: (subjectId: string) => void;
 }
 
-/** Cor do badge conforme a situação projetada. */
-const STATUS_VARIANT: Record<
+/** Cor do badge conforme a situação projetada. Reaproveitado pelo card de resumo. */
+export const STATUS_VARIANT: Record<
   SubjectGradeSummary['status'],
   'completed' | 'overdue' | 'pending' | 'secondary'
 > = {
@@ -50,7 +52,13 @@ const STATUS_VARIANT: Record<
  * Além das notas, mostra a projeção de aprovação — a informação que o
  * estudante realmente quer: "quanto preciso tirar no que falta".
  */
-export function SubjectGradesCard({ summary, onAddGrade, onEditGrade }: SubjectGradesCardProps) {
+export function SubjectGradesCard({
+  summary,
+  onAddGrade,
+  onEditGrade,
+  onConfigure,
+  onSimulate,
+}: SubjectGradesCardProps) {
   const [deleting, setDeleting] = useState<GradeListItem | null>(null);
   const deleteGrade = useDeleteGrade();
 
@@ -99,6 +107,26 @@ export function SubjectGradesCard({ summary, onAddGrade, onEditGrade }: SubjectG
             variant="ghost"
             size="icon"
             className="size-7"
+            onClick={() => onSimulate(subject.id)}
+            aria-label={`Simular notas de ${subject.name}`}
+          >
+            <Calculator className="size-4" aria-hidden />
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7"
+            onClick={() => onConfigure(subject.id)}
+            aria-label={`Configurar notas de ${subject.name}`}
+          >
+            <Settings className="size-4" aria-hidden />
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7"
             onClick={() => onAddGrade(subject.id)}
             aria-label={`Lançar nota em ${subject.name}`}
           >
@@ -123,10 +151,10 @@ export function SubjectGradesCard({ summary, onAddGrade, onEditGrade }: SubjectG
             </span>
           )}
 
-          {/* Sem provas pendentes não há como projetar — e dizemos isso. */}
+          {/* Sem componentes pendentes não há como projetar — e dizemos isso. */}
           {requiredGrade === null && average !== null && remainingWeight === null && (
             <span className="text-xs text-muted-foreground">
-              Cadastre as provas restantes para ver a projeção
+              Todos os componentes já têm nota lançada
             </span>
           )}
         </div>
@@ -144,20 +172,25 @@ export function SubjectGradesCard({ summary, onAddGrade, onEditGrade }: SubjectG
               >
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm">
-                    {grade.label || GRADE_TYPE_LABELS[grade.type]}
-                    {/* O tipo só aparece quando acrescenta informação: um
-                        rótulo igual ao tipo viraria "Seminário Seminário". */}
+                    {grade.label || grade.gradeComponent.name}
+                    {/* O componente só aparece quando acrescenta informação:
+                        um rótulo igual ao nome viraria "Seminário Seminário". */}
                     {grade.label &&
-                      grade.label.toLowerCase() !== GRADE_TYPE_LABELS[grade.type].toLowerCase() && (
+                      grade.label.toLowerCase() !== grade.gradeComponent.name.toLowerCase() && (
                         <span className="ml-1.5 text-xs text-muted-foreground">
-                          {GRADE_TYPE_LABELS[grade.type]}
+                          {grade.gradeComponent.name}
                         </span>
                       )}
+                    {!grade.isFinal && (
+                      <Badge variant="pending" className="ml-1.5 align-middle">
+                        em aberto
+                      </Badge>
+                    )}
                   </p>
 
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     {formatDate(grade.gradedAt)}
-                    {grade.weight !== 1 && ` · peso ${grade.weight}`}
+                    {grade.gradeComponent.weight !== 1 && ` · peso ${grade.gradeComponent.weight}`}
                     {grade.exam && ' · vinculada à prova'}
                   </p>
                 </div>
@@ -183,7 +216,7 @@ export function SubjectGradesCard({ summary, onAddGrade, onEditGrade }: SubjectG
                       variant="ghost"
                       size="icon"
                       className="size-7 shrink-0"
-                      aria-label={`Ações da nota ${grade.label || GRADE_TYPE_LABELS[grade.type]}`}
+                      aria-label={`Ações da nota ${grade.label || grade.gradeComponent.name}`}
                     >
                       <EllipsisVertical className="size-4" aria-hidden />
                     </Button>
@@ -206,10 +239,15 @@ export function SubjectGradesCard({ summary, onAddGrade, onEditGrade }: SubjectG
           </ul>
         )}
 
-        {summary.pendingExams.length > 0 && (
+        {summary.pendingComponents.length > 0 && (
           <p className="mt-3 border-t pt-3 text-xs text-muted-foreground">
-            {summary.pendingExams.length}{' '}
-            {summary.pendingExams.length === 1 ? 'prova sem nota' : 'provas sem nota'} · peso{' '}
+            {summary.pendingComponents.length}{' '}
+            {summary.pendingComponents.length === 1
+              ? 'componente em aberto'
+              : 'componentes em aberto'}{' '}
+            {/* "Em aberto" cobre dois casos: sem nota nenhuma ainda, ou com
+                nota parcial marcada como não-final (Etapa 18). */}
+            ({summary.pendingComponents.map((component) => component.name).join(', ')}) · peso{' '}
             {formatGrade(remainingWeight)} restante
           </p>
         )}

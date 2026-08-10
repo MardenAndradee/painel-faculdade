@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Loader2, Plus } from 'lucide-react';
+import { ListChecks, Loader2, Plus } from 'lucide-react';
 import {
   createSubjectSchema,
   SUBJECT_STATUS,
@@ -19,6 +19,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { FormField } from '@/components/ui/form-field';
 import { ColorPicker } from './color-picker';
+import { GradeTemplateDialog } from '@/components/grades/grade-template-dialog';
 import {
   Dialog,
   DialogContent,
@@ -64,6 +65,7 @@ export function SubjectFormDialog({ open, onOpenChange, subject }: SubjectFormDi
   const updateSubject = useUpdateSubject();
 
   const [teacherMode, setTeacherMode] = useState<string>(NO_TEACHER);
+  const [templateOpen, setTemplateOpen] = useState(false);
 
   // Tres generics: valores do formulario (entrada), contexto e valores
   // transformados (saida do Zod, com os defaults ja aplicados).
@@ -72,6 +74,7 @@ export function SubjectFormDialog({ open, onOpenChange, subject }: SubjectFormDi
     handleSubmit,
     control,
     reset,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<SubjectFormValues, unknown, CreateSubjectInput>({
     resolver: zodResolver(createSubjectSchema),
@@ -81,7 +84,6 @@ export function SubjectFormDialog({ open, onOpenChange, subject }: SubjectFormDi
       description: '',
       color: DEFAULT_COLOR,
       semesterId: null,
-      passingGrade: 6,
       status: 'IN_PROGRESS',
     },
   });
@@ -98,7 +100,6 @@ export function SubjectFormDialog({ open, onOpenChange, subject }: SubjectFormDi
         description: '',
         color: subject.color,
         semesterId: subject.semester?.id ?? null,
-        passingGrade: subject.passingGrade,
         status: subject.status,
         teacherId: subject.teacher?.id ?? null,
       });
@@ -110,12 +111,17 @@ export function SubjectFormDialog({ open, onOpenChange, subject }: SubjectFormDi
         description: '',
         color: DEFAULT_COLOR,
         semesterId: null,
-        passingGrade: 6,
         status: 'IN_PROGRESS',
       });
       setTeacherMode(NO_TEACHER);
     }
   }, [open, subject, reset]);
+
+  // Configurar o modelo de notas do semestre faz mais sentido aqui do que no
+  // Histórico: é justamente ao escolher o semestre de uma disciplina nova que
+  // a pergunta "que componentes essa disciplina já devia trazer?" aparece.
+  const selectedSemesterId = watch('semesterId');
+  const selectedSemester = semesters.find((semester) => semester.id === selectedSemesterId);
 
   const onSubmit = handleSubmit(async (values) => {
     // Traduz o modo escolhido no Select para os campos que a API espera.
@@ -140,50 +146,121 @@ export function SubjectFormDialog({ open, onOpenChange, subject }: SubjectFormDi
   });
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{isEditing ? 'Editar disciplina' : 'Nova disciplina'}</DialogTitle>
-          <DialogDescription>
-            {isEditing
-              ? 'Atualize as informações da disciplina.'
-              : 'Cadastre uma disciplina para organizar atividades, provas e notas.'}
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{isEditing ? 'Editar disciplina' : 'Nova disciplina'}</DialogTitle>
+            <DialogDescription>
+              {isEditing
+                ? 'Atualize as informações da disciplina.'
+                : 'Cadastre uma disciplina para organizar atividades, provas e notas.'}
+            </DialogDescription>
+          </DialogHeader>
 
-        <form onSubmit={(event) => void onSubmit(event)} className="space-y-4" noValidate>
-          <FormField label="Nome" error={errors.name?.message} required>
-            {(field) => (
-              <Input {...field} {...register('name')} placeholder="Cálculo III" autoFocus />
-            )}
-          </FormField>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FormField label="Código" error={errors.code?.message}>
-              {(field) => <Input {...field} {...register('code')} placeholder="MA203" />}
+          <form onSubmit={(event) => void onSubmit(event)} className="space-y-4" noValidate>
+            <FormField label="Nome" error={errors.name?.message} required>
+              {(field) => (
+                <Input {...field} {...register('name')} placeholder="Cálculo III" autoFocus />
+              )}
             </FormField>
 
-            <FormField label="Semestre" error={errors.semesterId?.message}>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField label="Código" error={errors.code?.message}>
+                {(field) => <Input {...field} {...register('code')} placeholder="MA203" />}
+              </FormField>
+
+              <FormField label="Semestre" error={errors.semesterId?.message}>
+                {(field) => (
+                  <Controller
+                    control={control}
+                    name="semesterId"
+                    render={({ field: controlled }) => (
+                      <Select
+                        value={controlled.value ?? NO_SEMESTER}
+                        onValueChange={(value) =>
+                          controlled.onChange(value === NO_SEMESTER ? null : value)
+                        }
+                      >
+                        <SelectTrigger id={field.id}>
+                          <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
+
+                        <SelectContent>
+                          <SelectItem value={NO_SEMESTER}>Sem semestre</SelectItem>
+                          {semesters.map((semester) => (
+                            <SelectItem key={semester.id} value={semester.id}>
+                              {semester.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                )}
+              </FormField>
+            </div>
+
+            {selectedSemester && (
+              <button
+                type="button"
+                onClick={() => setTemplateOpen(true)}
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <ListChecks className="size-3.5" aria-hidden />
+                Configurar modelo de notas de {selectedSemester.name}
+              </button>
+            )}
+
+            <FormField label="Professor" error={errors.newTeacherName?.message}>
+              {(field) => (
+                <div className="space-y-2">
+                  <Select value={teacherMode} onValueChange={setTeacherMode}>
+                    <SelectTrigger id={field.id}>
+                      <SelectValue placeholder="Selecione" />
+                    </SelectTrigger>
+
+                    <SelectContent>
+                      <SelectItem value={NO_TEACHER}>Sem professor</SelectItem>
+
+                      {teachers.map((teacher) => (
+                        <SelectItem key={teacher.id} value={teacher.id}>
+                          {teacher.name}
+                        </SelectItem>
+                      ))}
+
+                      <SelectItem value={NEW_TEACHER}>+ Cadastrar novo professor</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  {/* Cadastro inline: evita sair da tela e voltar só para
+                      registrar um professor. */}
+                  {teacherMode === NEW_TEACHER && (
+                    <Input
+                      {...register('newTeacherName')}
+                      placeholder="Nome do professor"
+                      aria-label="Nome do novo professor"
+                    />
+                  )}
+                </div>
+              )}
+            </FormField>
+
+            <FormField label="Situação" error={errors.status?.message}>
               {(field) => (
                 <Controller
                   control={control}
-                  name="semesterId"
+                  name="status"
                   render={({ field: controlled }) => (
-                    <Select
-                      value={controlled.value ?? NO_SEMESTER}
-                      onValueChange={(value) =>
-                        controlled.onChange(value === NO_SEMESTER ? null : value)
-                      }
-                    >
+                    <Select value={controlled.value} onValueChange={controlled.onChange}>
                       <SelectTrigger id={field.id}>
-                        <SelectValue placeholder="Selecione" />
+                        <SelectValue />
                       </SelectTrigger>
 
                       <SelectContent>
-                        <SelectItem value={NO_SEMESTER}>Sem semestre</SelectItem>
-                        {semesters.map((semester) => (
-                          <SelectItem key={semester.id} value={semester.id}>
-                            {semester.name}
+                        {SUBJECT_STATUS.map((status) => (
+                          <SelectItem key={status} value={status}>
+                            {SUBJECT_STATUS_LABELS[status]}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -192,129 +269,65 @@ export function SubjectFormDialog({ open, onOpenChange, subject }: SubjectFormDi
                 />
               )}
             </FormField>
-          </div>
 
-          <FormField label="Professor" error={errors.newTeacherName?.message}>
-            {(field) => (
-              <div className="space-y-2">
-                <Select value={teacherMode} onValueChange={setTeacherMode}>
-                  <SelectTrigger id={field.id}>
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-
-                  <SelectContent>
-                    <SelectItem value={NO_TEACHER}>Sem professor</SelectItem>
-
-                    {teachers.map((teacher) => (
-                      <SelectItem key={teacher.id} value={teacher.id}>
-                        {teacher.name}
-                      </SelectItem>
-                    ))}
-
-                    <SelectItem value={NEW_TEACHER}>+ Cadastrar novo professor</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                {/* Cadastro inline: evita sair da tela e voltar só para
-                    registrar um professor. */}
-                {teacherMode === NEW_TEACHER && (
-                  <Input
-                    {...register('newTeacherName')}
-                    placeholder="Nome do professor"
-                    aria-label="Nome do novo professor"
-                  />
-                )}
-              </div>
-            )}
-          </FormField>
-
-          <FormField
-            label="Nota para aprovação"
-            error={errors.passingGrade?.message}
-            hint="Varia por instituição"
-            required
-          >
-            {(field) => (
-              <Input
-                {...field}
-                {...register('passingGrade')}
-                type="number"
-                min={0}
-                max={10}
-                step="0.1"
-              />
-            )}
-          </FormField>
-
-          <FormField label="Situação" error={errors.status?.message}>
-            {(field) => (
-              <Controller
-                control={control}
-                name="status"
-                render={({ field: controlled }) => (
-                  <Select value={controlled.value} onValueChange={controlled.onChange}>
-                    <SelectTrigger id={field.id}>
-                      <SelectValue />
-                    </SelectTrigger>
-
-                    <SelectContent>
-                      {SUBJECT_STATUS.map((status) => (
-                        <SelectItem key={status} value={status}>
-                          {SUBJECT_STATUS_LABELS[status]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-            )}
-          </FormField>
-
-          <FormField label="Cor" error={errors.color?.message}>
-            {(field) => (
-              <Controller
-                control={control}
-                name="color"
-                render={({ field: controlled }) => (
-                  // `color` tem `.default()` no schema, entao no tipo de
-                  // entrada e opcional; o fallback cobre o primeiro render.
-                  <ColorPicker
-                    id={field.id}
-                    value={controlled.value ?? DEFAULT_COLOR}
-                    onChange={controlled.onChange}
-                  />
-                )}
-              />
-            )}
-          </FormField>
-
-          <FormField label="Observações" error={errors.description?.message}>
-            {(field) => (
-              <Textarea
-                {...field}
-                {...register('description')}
-                placeholder="Ementa, bibliografia, critérios de avaliação..."
-                rows={3}
-              />
-            )}
-          </FormField>
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancelar
-            </Button>
-
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? (
-                <Loader2 className="size-4 animate-spin" aria-hidden />
-              ) : (
-                !isEditing && <Plus className="size-4" aria-hidden />
+            <FormField label="Cor" error={errors.color?.message}>
+              {(field) => (
+                <Controller
+                  control={control}
+                  name="color"
+                  render={({ field: controlled }) => (
+                    // `color` tem `.default()` no schema, entao no tipo de
+                    // entrada e opcional; o fallback cobre o primeiro render.
+                    <ColorPicker
+                      id={field.id}
+                      value={controlled.value ?? DEFAULT_COLOR}
+                      onChange={controlled.onChange}
+                    />
+                  )}
+                />
               )}
-              {isEditing ? 'Salvar' : 'Criar disciplina'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+            </FormField>
+
+            <FormField label="Observações" error={errors.description?.message}>
+              {(field) => (
+                <Textarea
+                  {...field}
+                  {...register('description')}
+                  placeholder="Ementa, bibliografia, critérios de avaliação..."
+                  rows={3}
+                />
+              )}
+            </FormField>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                Cancelar
+              </Button>
+
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                ) : (
+                  !isEditing && <Plus className="size-4" aria-hidden />
+                )}
+                {isEditing ? 'Salvar' : 'Criar disciplina'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {selectedSemester && (
+        <GradeTemplateDialog
+          open={templateOpen}
+          onOpenChange={setTemplateOpen}
+          target={{
+            type: 'semester',
+            semesterId: selectedSemester.id,
+            semesterName: selectedSemester.name,
+          }}
+        />
+      )}
+    </>
   );
 }

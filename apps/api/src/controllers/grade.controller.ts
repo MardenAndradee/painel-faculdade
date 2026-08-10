@@ -8,8 +8,9 @@ export const gradeController = {
   /** Boletim de todas as disciplinas em andamento. */
   async overview(req: Request, res: Response): Promise<void> {
     const user = getAuthUser(req);
+    const { semesterId } = req.query as { semesterId?: string };
 
-    ok(res, await gradeService.getOverview(user.id));
+    ok(res, await gradeService.getOverview(user.id, semesterId));
   },
 
   /** Boletim de uma disciplina, com projeção de aprovação. */

@@ -21,18 +21,6 @@ export type AssignmentStatus = (typeof ASSIGNMENT_STATUS)[number];
 export const PRIORITY = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const;
 export type Priority = (typeof PRIORITY)[number];
 
-export const GRADE_TYPE = [
-  'P1',
-  'P2',
-  'P3',
-  'ASSIGNMENT',
-  'SEMINAR',
-  'PROJECT',
-  'PARTICIPATION',
-  'OTHER',
-] as const;
-export type GradeType = (typeof GRADE_TYPE)[number];
-
 export const CALENDAR_EVENT_SOURCE = ['MANUAL', 'GOOGLE_CALENDAR'] as const;
 export type CalendarEventSource = (typeof CALENDAR_EVENT_SOURCE)[number];
 
@@ -88,15 +76,4 @@ export const SUBJECT_STATUS_LABELS: Record<SubjectStatus, string> = {
   APPROVED: 'Aprovado',
   FAILED: 'Reprovado',
   WITHDRAWN: 'Trancado',
-};
-
-export const GRADE_TYPE_LABELS: Record<GradeType, string> = {
-  P1: 'P1',
-  P2: 'P2',
-  P3: 'P3',
-  ASSIGNMENT: 'Trabalho',
-  SEMINAR: 'Seminario',
-  PROJECT: 'Projeto',
-  PARTICIPATION: 'Participacao',
-  OTHER: 'Outro',
 };

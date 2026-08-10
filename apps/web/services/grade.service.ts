@@ -8,8 +8,8 @@ import type {
 import { httpClient } from './http-client';
 
 export const gradeService = {
-  overview(): Promise<GradesOverview> {
-    return httpClient.get<GradesOverview>('/grades/overview');
+  overview(semesterId?: string): Promise<GradesOverview> {
+    return httpClient.get<GradesOverview>('/grades/overview', { query: { semesterId } });
   },
 
   subjectSummary(subjectId: string): Promise<SubjectGradeSummary> {

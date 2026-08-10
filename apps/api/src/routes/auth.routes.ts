@@ -1,5 +1,7 @@
 import { Router } from 'express';
+import { gradeConfigurationInputSchema } from '@painel/shared';
 import { authController } from '../controllers/auth.controller.js';
+import { gradeConfigurationController } from '../controllers/grade-configuration.controller.js';
 import { authenticate } from '../middlewares/authenticate.js';
 import { authRateLimiter, refreshRateLimiter } from '../middlewares/rate-limit.js';
 import { validate } from '../middlewares/validate.js';
@@ -61,3 +63,21 @@ authRoutes.patch(
 );
 
 authRoutes.post('/auth/logout-all', authRateLimiter, authenticate, authController.logoutAll);
+
+// --- Modelo pessoal de notas (Etapa 19) ---------------------------------------
+// Pre-preenche disciplinas novas (inclusive as importadas do Classroom) quando
+// o semestre delas nao tem um modelo proprio. Criado automaticamente no
+// primeiro login, com N1/N2/N3.
+
+authRoutes.get(
+  '/auth/me/default-grade-configuration',
+  authenticate,
+  gradeConfigurationController.getUserDefault,
+);
+
+authRoutes.put(
+  '/auth/me/default-grade-configuration',
+  authenticate,
+  validate({ body: gradeConfigurationInputSchema }),
+  gradeConfigurationController.replaceUserDefault,
+);

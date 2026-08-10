@@ -24,6 +24,52 @@ function daysFromNow(days: number, hour = 23, minute = 59): Date {
   return date;
 }
 
+/**
+ * Modelo padrao de notas (Etapa 17): N1/N2/N3, pesos 3/4/3, aprovacao 6.
+ *
+ * E o modelo real do usuario (ver o pedido original da Etapa 17) - o seed
+ * padroniza nisso em vez de inventar outro exemplo, para o ambiente de
+ * desenvolvimento já nascer testável com o cenário real.
+ */
+const STANDARD_GRADE_COMPONENTS = [
+  { name: 'N1', weight: 3 },
+  { name: 'N2', weight: 4 },
+  { name: 'N3', weight: 3 },
+];
+
+/** Garante a configuracao de notas da disciplina, criando se ainda nao existir. */
+async function ensureGradeConfiguration(
+  userId: string,
+  subjectId: string,
+): Promise<Map<string, string>> {
+  const existing = await prisma.gradeConfiguration.findFirst({
+    where: { userId, subjectId },
+    select: { components: { select: { id: true, name: true } } },
+  });
+
+  if (existing)
+    return new Map(existing.components.map((component) => [component.name, component.id]));
+
+  const created = await prisma.gradeConfiguration.create({
+    data: {
+      userId,
+      subjectId,
+      passingGrade: 6,
+      components: {
+        create: STANDARD_GRADE_COMPONENTS.map((component, index) => ({
+          userId,
+          name: component.name,
+          weight: component.weight,
+          order: index,
+        })),
+      },
+    },
+    select: { components: { select: { id: true, name: true } } },
+  });
+
+  return new Map(created.components.map((component) => [component.name, component.id]));
+}
+
 async function main(): Promise<void> {
   console.log('Iniciando seed...');
 
@@ -194,6 +240,26 @@ async function main(): Promise<void> {
 
   console.log(`Disciplinas (semestre atual): ${subjects.length}`);
 
+  // Modelo padrao de notas do semestre atual: pre-preenche disciplinas novas
+  // criadas manualmente durante o desenvolvimento (Etapa 17).
+  await prisma.gradeConfiguration.upsert({
+    where: { semesterId: currentSemester.id },
+    update: {},
+    create: {
+      userId: user.id,
+      semesterId: currentSemester.id,
+      passingGrade: 6,
+      components: {
+        create: STANDARD_GRADE_COMPONENTS.map((component, index) => ({
+          userId: user.id,
+          name: component.name,
+          weight: component.weight,
+          order: index,
+        })),
+      },
+    },
+  });
+
   // ---------------------------------------------------------------------------
   // Disciplinas do semestre anterior (Historico)
   // ---------------------------------------------------------------------------
@@ -215,7 +281,7 @@ async function main(): Promise<void> {
     },
   ];
 
-  await Promise.all(
+  const historySubjects = await Promise.all(
     historyData.map((subject) => {
       // O semestre anterior representa um periodo ja encerrado: o seed reafirma
       // a consolidacao para que rodar `db:seed` devolva o historico ao estado
@@ -243,6 +309,15 @@ async function main(): Promise<void> {
   );
 
   console.log(`Disciplinas (historico): ${historyData.length}`);
+
+  // Toda disciplina precisa de uma configuracao de notas (Etapa 17) - o seed
+  // usa o mesmo modelo padrao (N1/N2/N3) para as do semestre atual e as do
+  // historico, e guarda os ids dos componentes para os lancamentos abaixo.
+  const gradeComponentsBySubject = new Map<string, Map<string, string>>();
+
+  for (const subject of [...subjects, ...historySubjects]) {
+    gradeComponentsBySubject.set(subject.id, await ensureGradeConfiguration(user.id, subject.id));
+  }
 
   // ---------------------------------------------------------------------------
   // Atividades: atrasadas, de hoje, desta semana e futuras
@@ -421,29 +496,21 @@ async function main(): Promise<void> {
   // Notas ja lancadas
   // ---------------------------------------------------------------------------
   const gradesData = [
-    { subjectId: calculo?.id, type: 'P1' as const, value: 6.5, weight: 2 },
-    {
-      subjectId: algoritmos?.id,
-      type: 'SEMINAR' as const,
-      value: 9,
-      weight: 1,
-      label: 'Seminario',
-    },
-    {
-      subjectId: engSoftware?.id,
-      type: 'ASSIGNMENT' as const,
-      value: 8.5,
-      weight: 1,
-      label: 'Requisitos',
-    },
-    { subjectId: banco?.id, type: 'ASSIGNMENT' as const, value: 7, weight: 1, label: 'Lista 1' },
+    { subjectId: calculo?.id, component: 'N1', value: 6.5 },
+    { subjectId: algoritmos?.id, component: 'N1', value: 9, label: 'Seminario' },
+    { subjectId: engSoftware?.id, component: 'N1', value: 8.5, label: 'Requisitos' },
+    { subjectId: banco?.id, component: 'N1', value: 7, label: 'Lista 1' },
   ];
 
   for (const item of gradesData) {
     if (!item.subjectId) continue;
 
+    const componentId = gradeComponentsBySubject.get(item.subjectId)?.get(item.component);
+
+    if (!componentId) continue;
+
     const existing = await prisma.grade.findFirst({
-      where: { userId: user.id, subjectId: item.subjectId, type: item.type },
+      where: { userId: user.id, subjectId: item.subjectId, gradeComponentId: componentId },
     });
 
     if (existing) continue;
@@ -452,11 +519,10 @@ async function main(): Promise<void> {
       data: {
         userId: user.id,
         subjectId: item.subjectId,
-        type: item.type,
+        gradeComponentId: componentId,
         label: item.label ?? null,
         value: item.value,
         maxValue: 10,
-        weight: item.weight,
       },
     });
   }
