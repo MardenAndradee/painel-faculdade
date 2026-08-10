@@ -137,7 +137,7 @@ export default function CalendarPage() {
           </p>
         </div>
 
-        <Button onClick={openCreate} className="shrink-0">
+        <Button variant="accent" onClick={openCreate} className="shrink-0">
           <Plus className="size-4" aria-hidden />
           <span className="hidden sm:inline">Novo evento</span>
           <span className="sm:hidden">Novo</span>
@@ -192,7 +192,7 @@ export default function CalendarPage() {
           </Button>
 
           <div
-            className="flex rounded-lg bg-muted p-0.5"
+            className="flex rounded-lg border bg-card p-0.5"
             role="tablist"
             aria-label="Modo de visualização"
           >
@@ -206,7 +206,7 @@ export default function CalendarPage() {
                 className={cn(
                   'rounded-md px-3 py-1 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
                   view === item
-                    ? 'bg-background font-medium shadow-sm'
+                    ? 'bg-secondary font-medium text-foreground'
                     : 'text-muted-foreground hover:text-foreground',
                 )}
               >

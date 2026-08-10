@@ -79,12 +79,12 @@ export function MonthView({ reference, items, onSelectItem, onSelectDay }: ViewP
   }, [reference]);
 
   return (
-    <div className="overflow-hidden rounded-xl border">
-      <div className="grid grid-cols-7 border-b bg-muted/40">
+    <div className="rounded-xl border bg-card p-3">
+      <div className="grid grid-cols-7 gap-1.5 pb-2">
         {WEEKDAYS_SHORT.map((label, index) => (
           <div
             key={label}
-            className="py-2 text-center text-xs font-medium text-muted-foreground"
+            className="text-center text-[10px] font-semibold tracking-wider text-muted-foreground uppercase"
             aria-label={label}
           >
             <span className="hidden sm:inline">{label}</span>
@@ -93,7 +93,7 @@ export function MonthView({ reference, items, onSelectItem, onSelectDay }: ViewP
         ))}
       </div>
 
-      <div className="grid grid-cols-7">
+      <div className="grid grid-cols-7 gap-1.5">
         {days.map((day) => {
           const dayItems = byDay.get(format(day, 'yyyy-MM-dd')) ?? [];
           const inMonth = isSameMonth(day, reference);
@@ -104,8 +104,8 @@ export function MonthView({ reference, items, onSelectItem, onSelectDay }: ViewP
             <div
               key={day.toISOString()}
               className={cn(
-                'flex min-h-24 flex-col gap-0.5 border-r border-b p-1 last:border-r-0 sm:min-h-28',
-                !inMonth && 'bg-muted/20',
+                'flex min-h-24 flex-col gap-1 rounded-lg border p-1.5 transition-colors hover:border-primary/25 hover:bg-accent/40 sm:min-h-28',
+                !inMonth && 'border-transparent',
               )}
             >
               <button
@@ -113,7 +113,7 @@ export function MonthView({ reference, items, onSelectItem, onSelectDay }: ViewP
                 onClick={() => onSelectDay(day)}
                 aria-label={`Ver ${format(day, "d 'de' MMMM", { locale: ptBR })}`}
                 className={cn(
-                  'mb-0.5 self-start rounded px-1 text-xs tabular-nums transition-colors hover:bg-muted',
+                  'self-start rounded px-1 text-xs tabular-nums transition-colors hover:bg-muted',
                   isToday(day) && 'bg-primary font-semibold text-primary-foreground',
                   !inMonth && 'text-muted-foreground/50',
                 )}
@@ -168,7 +168,7 @@ export function WeekView({ reference, items, onSelectItem, onSelectDay }: ViewPr
           <div
             key={day.toISOString()}
             className={cn(
-              'overflow-hidden rounded-lg border',
+              'overflow-hidden rounded-xl border bg-card',
               isToday(day) && 'border-primary/50 bg-primary/5',
             )}
           >
@@ -214,7 +214,7 @@ export function DayView({ reference, items, onSelectItem }: ViewProps) {
 
   if (dayItems.length === 0) {
     return (
-      <div className="rounded-xl border">
+      <div className="rounded-xl border bg-card">
         <EmptyState
           icon={CalendarOff}
           title="Nada agendado"
@@ -225,52 +225,53 @@ export function DayView({ reference, items, onSelectItem }: ViewProps) {
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border">
-      <ul className="divide-y">
-        {dayItems.map((item) => {
-          const isMultiDay = !isSameDay(new Date(item.startsAt), new Date(item.endsAt));
+    <ul className="space-y-2">
+      {dayItems.map((item) => {
+        const isMultiDay = !isSameDay(new Date(item.startsAt), new Date(item.endsAt));
 
-          return (
-            <li key={item.key} className="transition-colors hover:bg-muted/40">
-              <div className="flex items-start gap-3 p-3">
-                <span
-                  className="mt-1 h-10 w-1 shrink-0 rounded-full"
-                  style={{ backgroundColor: item.color ?? 'var(--primary)' }}
-                  aria-hidden
-                />
+        return (
+          <li
+            key={item.key}
+            className="rounded-xl border bg-card p-3 transition-colors hover:border-primary/25 hover:bg-accent/40"
+          >
+            <div className="flex items-start gap-3">
+              <span
+                className="mt-1 h-10 w-1 shrink-0 rounded-full"
+                style={{ backgroundColor: item.color ?? 'var(--primary)' }}
+                aria-hidden
+              />
 
-                <div className="min-w-0 flex-1">
-                  <CalendarItemChip item={item} onClick={onSelectItem} variant="full" />
+              <div className="min-w-0 flex-1">
+                <CalendarItemChip item={item} onClick={onSelectItem} variant="full" />
 
-                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 pl-1.5 text-xs text-muted-foreground">
-                    <span>
-                      {item.allDay
-                        ? 'Dia inteiro'
-                        : isMultiDay
-                          ? `${format(new Date(item.startsAt), "d 'de' MMM 'às' HH:mm", { locale: ptBR })} → ${format(new Date(item.endsAt), "d 'de' MMM 'às' HH:mm", { locale: ptBR })}`
-                          : format(new Date(item.startsAt), 'HH:mm', { locale: ptBR })}
-                    </span>
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 pl-1.5 text-xs text-muted-foreground">
+                  <span>
+                    {item.allDay
+                      ? 'Dia inteiro'
+                      : isMultiDay
+                        ? `${format(new Date(item.startsAt), "d 'de' MMM 'às' HH:mm", { locale: ptBR })} → ${format(new Date(item.endsAt), "d 'de' MMM 'às' HH:mm", { locale: ptBR })}`
+                        : format(new Date(item.startsAt), 'HH:mm', { locale: ptBR })}
+                  </span>
 
-                    {item.subject && (
-                      <>
-                        <span aria-hidden>·</span>
-                        <span>{item.subject.name}</span>
-                      </>
-                    )}
+                  {item.subject && (
+                    <>
+                      <span aria-hidden>·</span>
+                      <span>{item.subject.name}</span>
+                    </>
+                  )}
 
-                    {item.location && (
-                      <>
-                        <span aria-hidden>·</span>
-                        <span>{item.location}</span>
-                      </>
-                    )}
-                  </div>
+                  {item.location && (
+                    <>
+                      <span aria-hidden>·</span>
+                      <span>{item.location}</span>
+                    </>
+                  )}
                 </div>
               </div>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
