@@ -2,7 +2,7 @@
 
 Plataforma web de organização acadêmica para estudantes universitários. Centraliza atividades, provas, notas, materiais e cronograma de estudos em um único lugar, com integração ao Google Classroom e ao Google Calendar.
 
-> **Status:** projeto completo — 17 de 17 etapas.
+> **Status:** 17 de 19 etapas concluídas — Etapas 18 e 19 planejadas.
 
 ---
 
@@ -318,6 +318,38 @@ As notas são normalizadas para a escala 0–10 antes da ponderação (uma prova
 - **Breadcrumbs**: derivados do pathname — telas novas entram automaticamente ao serem registradas na navegação.
 - **Dark mode**: `next-themes` com `attribute="class"`, alimentando o `@custom-variant dark` do `globals.css`. Um script inline roda antes da pintura, evitando flash branco.
 - **Skeletons** reproduzem o formato do conteúdo real, para o layout não saltar quando os dados chegam.
+
+### Plano (Etapa 19 — planejado): busca global e central de notificações
+
+Duas peças de um mockup de referência que **nunca existiram no app real**: o cabeçalho hoje (`components/layout/app-shell.tsx`) só tem breadcrumbs, o botão de sincronizar o Classroom, o toggle de tema e o menu do usuário — nem barra de busca nem sino. A Etapa 19 é criar os dois do zero, sem tocar em sidebar, cards, cores, tipografia ou espaçamento existentes — só soma dois itens ao cabeçalho.
+
+**Busca global (⌘K / Ctrl+K)**
+
+- Backend: `GET /search?q=` agrega em paralelo (mesmo padrão de `Promise.all` do `dashboard.service.ts`) os endpoints que **já aceitam busca por texto** — `subjects`, `assignments`, `exams` e `attachments` já têm `search` nos schemas (`packages/shared/src/schemas/*.ts`). Só `calendarEvents` precisa ganhar o parâmetro (hoje filtra por intervalo de datas, não por texto). Cada categoria limitada a ~5 resultados.
+- Como a busca por texto já existe em 4 das 5 fontes, a implementação nasce com **dado real desde o início** — sem fase de mock. O hook `useGlobalSearch(query)` fica isolado num arquivo próprio, então trocar a fonte no futuro não exige tocar no componente visual.
+- Frontend: novo componente de paleta de comando, usando a dependência `cmdk` (padrão de mercado para este padrão de interação, mesma família do Radix que o projeto já usa em `Select`/`Dialog`/`DropdownMenu` — evita reimplementar navegação por teclado e foco do zero). Busca com `useDebouncedValue` (já existe, usado em `disciplinas/page.tsx`), estado vazio com `EmptyState` (já existe), termo destacado com `<mark>`.
+- Atalho global `⌘K`/`Ctrl+K` — primeiro *listener* de teclado global do projeto, registrado no `AppShell`. `↑`/`↓` navegam os resultados, `Enter` abre, `Esc` fecha.
+- Cada resultado leva à tela correspondente — `/disciplinas/:id` tem rota própria; atividades, provas, eventos e materiais não têm página de detalhe, então o resultado leva à lista (com parâmetro para realçar o item, quando fizer sentido).
+
+**Central de notificações**
+
+- O modelo `Notification` **já existe no schema** (`id, type, title, message, entityType, entityId, readAt, createdAt` — ver `schema.prisma`), criado numa etapa anterior e nunca usado: sem repositório, serviço, rota ou tela. Falta uma coluna pedida explicitamente — `priority` (novo enum `URGENT`/`ATTENTION`/`INFO`/`DONE`, mapeando 🔴/🟡/🔵/🟢) — migração aditiva.
+- Backend novo seguindo a camada já usada no projeto inteiro (repository → service → controller → route).
+- Geração **sob demanda, não por cron** (o projeto não tem worker/fila): `GET /notifications` roda uma varredura curta antes de responder, criando ou atualizando notificações de atividades vencendo hoje/amanhã/atrasadas e provas no dia ou nos próximos dias — sem duplicar a mesma notificação enquanto ela seguir não lida. Mesmo princípio de "o servidor decide" já usado em `useAutoSync` (sincronização automática do Classroom ao abrir o app).
+- "Nova atividade adicionada" nasce quando a sincronização do Classroom cria uma atividade (`classroom-sync.service.ts`, `report.assignments.created`) — não quando o próprio usuário cadastra algo manualmente, já que ele sabe que acabou de fazer isso.
+- "Nova prova adicionada" **não tem fonte automática hoje**: o Classroom não sincroniza provas, só atividades. Proponho tirar esse gatilho do escopo da Etapa 19 até o Classroom (ou outra origem) realmente criar provas sozinho.
+- Frontend: `NotificationBell` no cabeçalho, `DropdownMenu` (já usado em várias telas) para a lista, indicador de não lidas sobre o ícone. Prioridade colorida reaproveita as variantes que já existem no `Badge` (`overdue`=🔴, `pending`=🟡, `completed`=🟢, `default`=🔵) — nenhuma cor nova em `globals.css`.
+- Clique marca como lida e navega pela `entityType`: `SUBJECT → /disciplinas/:id`, `ASSIGNMENT → /atividades`, `EXAM → /provas`, `CALENDAR_EVENT → /calendario`.
+
+### Endpoints (Etapa 19, planejados)
+
+| Método | Rota | Descrição |
+| --- | --- | --- |
+| GET | `/search` | Busca agregada (disciplinas, atividades, provas, eventos, materiais) |
+| GET | `/notifications` | Lista, gerando as pendentes antes de responder |
+| GET | `/notifications/unread-count` | Contagem para o indicador do sino |
+| PATCH | `/notifications/:id/read` | Marca uma notificação como lida |
+| POST | `/notifications/read-all` | Marca todas como lidas |
 
 ## Disciplinas
 
@@ -715,6 +747,20 @@ Lançar a nota direto no formulário da prova (campo "Nota" + seletor de "Compon
 | PUT | `/subjects/:id/grade-configuration` | Substitui os componentes e a nota de aprovação |
 | GET | `/semesters/:id/grade-configuration-template` | Modelo padrão do semestre (`null` se ainda não definido) |
 | PUT | `/semesters/:id/grade-configuration-template` | Substitui o modelo padrão |
+
+### Plano (Etapa 18 — planejado): modelo de semestre sólido
+
+Duas lacunas identificadas no modelo de semestre/componentes depois de uso real:
+
+**1. Semestre novo nasce vazio.** `semesterService.create` hoje não cria nenhum `GradeConfiguration` — o usuário precisa configurar os componentes manualmente a cada semestre. Passa a copiar o **modelo pessoal** (o mesmo criado automaticamente no primeiro login, N1/3, N2/4, N3/3) como template inicial, na mesma transação que cria o semestre — mesmo padrão já usado em `subjectRepository.createWithGradeConfiguration`.
+
+**2. Editar o modelo de um semestre não afeta disciplinas já criadas nele.** Comportamento intencional da Etapa 17 (`GradeConfiguration` é copiada, nunca compartilhada — editar uma disciplina nunca deveria afetar outra), mas que surpreende quando o usuário espera que adicionar um componente ao modelo "2026.2" apareça nas disciplinas que já existem nesse semestre. A correção preserva a garantia original (nenhuma disciplina muda sem confirmação explícita) e adiciona um passo de propagação **opt-in**:
+
+1. Ao salvar o modelo de um semestre, o backend compara com a configuração de cada disciplina do período e monta a diferença (componente presente no modelo e ausente na disciplina, peso divergente, `passingGrade` divergente).
+2. Havendo diferenças, a tela mostra a lista de disciplinas afetadas com checkbox (marcadas por padrão), destacando quando o componente em questão já tem nota lançada — mudar o peso ali recalcula a média de verdade.
+3. Confirmando, só as disciplinas marcadas são atualizadas. A fusão é sempre **aditiva**: componente do modelo ausente na disciplina é criado; componente presente nos dois tem peso/ordem sincronizados; componente que só a disciplina tem **nunca** é removido automaticamente (remoção continua manual, pela configuração da própria disciplina).
+
+Também move o atalho "Configurar modelo de notas de [semestre]" — hoje preso dentro do formulário de uma disciplina específica, o que já causou confusão ("parece que estou editando esta disciplina") — para um atalho próprio ao lado de "Notas padrão" na tela de Disciplinas, mantendo o link contextual no formulário só como conveniência.
 
 ## Histórico
 
@@ -1313,5 +1359,7 @@ O Husky roda `lint-staged` no pre-commit: ESLint e Prettier nos arquivos em stag
 | 15 | Estatísticas | ✅ |
 | 16 | Testes, refatoração, documentação, deploy | ✅ |
 | 17 | Notas configuráveis (componentes de avaliação, Simulação) | ✅ |
+| 18 | Modelo de semestre sólido (padrão N1/N2/N3, propagação para disciplinas) | 🚧 planejado |
+| 19 | Busca global (⌘K) e central de notificações | 🚧 planejado |
 
 Contribuições: veja [CONTRIBUTING.md](CONTRIBUTING.md).
