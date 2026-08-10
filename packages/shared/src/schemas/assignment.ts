@@ -6,7 +6,7 @@ import {
   type AssignmentStatus,
   type Priority,
 } from '../enums.js';
-import { booleanQueryParam, paginationQuerySchema } from '../common.js';
+import { booleanQueryParam, paginationQuerySchema, parseLocalDate } from '../common.js';
 import type { SubjectRef } from './dashboard.js';
 
 /**
@@ -72,7 +72,7 @@ const dueDateSchema = z
     if (value === null || value === undefined || value === '') return null;
     if (value instanceof Date) return value;
 
-    const parsed = new Date(value);
+    const parsed = parseLocalDate(value);
 
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   });

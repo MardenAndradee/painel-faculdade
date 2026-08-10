@@ -32,7 +32,6 @@ export interface DashboardExam {
   title: string;
   date: string;
   room: string | null;
-  weight: number;
   subject: SubjectRef;
   daysUntilExam: number;
 }

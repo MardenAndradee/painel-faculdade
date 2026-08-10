@@ -1,4 +1,10 @@
-import type { GradeConfigurationInput, GradeConfigurationItem } from '@painel/shared';
+import type {
+  GradeConfigurationInput,
+  GradeConfigurationItem,
+  GradeTemplatePropagationPreview,
+  GradeTemplatePropagationResult,
+  GradeTemplateSubjectDiff,
+} from '@painel/shared';
 import {
   gradeConfigurationRepository,
   type GradeConfigurationRow,
@@ -6,6 +12,12 @@ import {
 import { subjectRepository } from '../repositories/subject.repository.js';
 import { semesterRepository } from '../repositories/semester.repository.js';
 import { AppError } from '../utils/app-error.js';
+import {
+  diffTemplateAgainstSubject,
+  mergeTemplateIntoSubject,
+  type GradeConfigurationShape,
+  type SubjectComponent,
+} from '../utils/grade-template-merge.js';
 
 /**
  * Regra de negocio de configuracao de notas (Etapa 17).
@@ -69,6 +81,25 @@ async function applyReplace(
   );
 
   return toItem(row);
+}
+
+/**
+ * Achata uma configuracao para o formato que a fusao consome (Etapa 18).
+ *
+ * `null` vira uma configuracao vazia com a nota de aprovacao padrao: assim uma
+ * disciplina sem configuracao aparece na previa como "recebe todos os
+ * componentes do modelo", em vez de sumir da lista.
+ */
+function toShape(config: GradeConfigurationRow | null): GradeConfigurationShape<SubjectComponent> {
+  return {
+    passingGrade: config?.passingGrade ?? FACTORY_DEFAULT_PASSING_GRADE,
+    components: (config?.components ?? []).map((component) => ({
+      id: component.id,
+      name: component.name,
+      weight: component.weight,
+      hasGrade: component._count.grades > 0,
+    })),
+  };
 }
 
 async function assertSubjectOwnership(userId: string, subjectId: string): Promise<void> {
@@ -221,6 +252,103 @@ export const gradeConfigurationService = {
       FACTORY_DEFAULT_PASSING_GRADE,
       FACTORY_DEFAULT_COMPONENTS,
     );
+  },
+
+  // --- Propagacao do modelo do semestre (Etapa 18) -----------------------------
+
+  /**
+   * O que mudaria em cada disciplina do periodo se o modelo fosse aplicado.
+   *
+   * Nao grava nada - existe justamente para que a confirmacao seja informada.
+   * Disciplinas ja alinhadas com o modelo ficam fora da resposta: listar
+   * "nenhuma mudanca" so faria a pessoa procurar o que mudou.
+   */
+  async previewPropagation(
+    userId: string,
+    semesterId: string,
+  ): Promise<GradeTemplatePropagationPreview> {
+    const semester = await semesterRepository.findById(userId, semesterId);
+
+    if (!semester) throw AppError.notFound('Semestre');
+
+    const template = await gradeConfigurationRepository.findByTemplateSemester(userId, semesterId);
+    const header = { id: semester.id, name: semester.name };
+
+    if (!template) return { semester: header, subjects: [] };
+
+    const rows = await gradeConfigurationRepository.findSubjectsWithConfiguration(
+      userId,
+      semesterId,
+    );
+
+    const subjects: GradeTemplateSubjectDiff[] = [];
+
+    for (const row of rows) {
+      const changes = diffTemplateAgainstSubject(
+        toShape(template),
+        toShape(row.gradeConfiguration),
+      );
+
+      if (changes.length === 0) continue;
+
+      subjects.push({
+        subjectId: row.id,
+        subjectName: row.name,
+        subjectColor: row.color,
+        changes,
+      });
+    }
+
+    return { semester: header, subjects };
+  },
+
+  /**
+   * Aplica o modelo nas disciplinas escolhidas.
+   *
+   * So as marcadas mudam, e a fusao e aditiva (ver `grade-template-merge`).
+   * Ids que nao pertencem ao semestre sao ignorados em silencio em vez de
+   * derrubarem a operacao inteira: a lista veio de uma previa que pode ter
+   * envelhecido enquanto a pessoa decidia.
+   */
+  async propagateToSubjects(
+    userId: string,
+    semesterId: string,
+    subjectIds: string[],
+  ): Promise<GradeTemplatePropagationResult> {
+    await assertSemesterOwnership(userId, semesterId);
+
+    const template = await gradeConfigurationRepository.findByTemplateSemester(userId, semesterId);
+
+    if (!template) throw AppError.notFound('Modelo de notas do semestre');
+
+    const rows = await gradeConfigurationRepository.findSubjectsWithConfiguration(
+      userId,
+      semesterId,
+    );
+
+    const selected = new Set(subjectIds);
+    let updatedSubjects = 0;
+
+    for (const row of rows) {
+      if (!selected.has(row.id)) continue;
+
+      // Disciplina anterior a Etapa 17 pode nao ter configuracao ainda.
+      const config = await this.ensureForSubject(userId, row.id);
+      const merged = mergeTemplateIntoSubject(toShape(template), toShape(config));
+
+      await gradeConfigurationRepository.replace(
+        userId,
+        config.id,
+        merged.passingGrade,
+        merged.components,
+        // Fusao aditiva: propagar um modelo nunca exclui componente.
+        [],
+      );
+
+      updatedSubjects += 1;
+    }
+
+    return { updatedSubjects };
   },
 
   /**

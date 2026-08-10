@@ -9,7 +9,6 @@ const dashboardSelect = {
   title: true,
   date: true,
   room: true,
-  weight: true,
   subject: { select: { id: true, name: true, color: true } },
 } satisfies Prisma.ExamSelect;
 
@@ -28,12 +27,12 @@ const listSelect = {
   notes: true,
   room: true,
   date: true,
-  weight: true,
   durationMinutes: true,
   createdAt: true,
   updatedAt: true,
   subject: { select: { id: true, name: true, color: true } },
-  gradeComponent: { select: { id: true, name: true } },
+  // `weight` vem daqui: o peso da prova e o do componente (Etapa 18).
+  gradeComponent: { select: { id: true, name: true, weight: true } },
   grade: { select: { id: true, value: true, maxValue: true } },
   _count: { select: { attachments: true } },
 } satisfies Prisma.ExamSelect;

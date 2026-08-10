@@ -43,6 +43,26 @@ export const gradeConfigurationController = {
     );
   },
 
+  /** Previa da propagacao do modelo para as disciplinas do periodo (Etapa 18). */
+  async previewPropagation(req: Request, res: Response): Promise<void> {
+    const user = getAuthUser(req);
+
+    ok(res, await gradeConfigurationService.previewPropagation(user.id, req.params.id as string));
+  },
+
+  async propagateToSubjects(req: Request, res: Response): Promise<void> {
+    const user = getAuthUser(req);
+
+    ok(
+      res,
+      await gradeConfigurationService.propagateToSubjects(
+        user.id,
+        req.params.id as string,
+        req.body.subjectIds,
+      ),
+    );
+  },
+
   async getUserDefault(req: Request, res: Response): Promise<void> {
     const user = getAuthUser(req);
 

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { paginationQuerySchema } from '../common.js';
+import { paginationQuerySchema, parseLocalDate } from '../common.js';
 import type { SubjectRef } from './dashboard.js';
 
 /**
@@ -43,7 +43,7 @@ const examDateSchema = z
     error: 'Informe a data da prova',
   })
   .transform((value, ctx) => {
-    const parsed = value instanceof Date ? value : new Date(value);
+    const parsed = value instanceof Date ? value : parseLocalDate(value);
 
     if (Number.isNaN(parsed.getTime())) {
       ctx.addIssue({ code: 'custom', message: 'Data inválida' });
@@ -87,9 +87,6 @@ const examBaseSchema = z.object({
 
   room: z.string().trim().max(60, 'Máximo de 60 caracteres').optional().or(z.literal('')),
 
-  /** Peso no calculo da media da disciplina (Etapa 10). */
-  weight: z.coerce.number().min(0, 'Não pode ser negativo').max(100, 'Peso muito alto'),
-
   durationMinutes: z.coerce
     .number()
     .int('Use um número inteiro')
@@ -124,15 +121,18 @@ const examBaseSchema = z.object({
   ),
 });
 
-/** Criacao: peso padrao 1. */
-export const createExamSchema = examBaseSchema.extend({
-  weight: z.coerce.number().min(0, 'Não pode ser negativo').max(100, 'Peso muito alto').default(1),
-});
+/**
+ * Criacao.
+ *
+ * Nao ha campo de peso: o peso de uma prova e o do componente escolhido
+ * (Etapa 18). Ver `ExamListItem.weight`.
+ */
+export const createExamSchema = examBaseSchema;
 
 export type CreateExamInput = z.output<typeof createExamSchema>;
 export type ExamFormValues = z.input<typeof createExamSchema>;
 
-/** Edicao: sem defaults. Um PATCH da sala nao pode zerar o peso. */
+/** Edicao: sem defaults - ver a explicacao do padrao `xBaseSchema` em `subject.ts`. */
 export const updateExamSchema = examBaseSchema.partial();
 export type UpdateExamInput = z.infer<typeof updateExamSchema>;
 
@@ -160,7 +160,14 @@ export interface ExamListItem {
   notes: string | null;
   room: string | null;
   date: string;
-  weight: number;
+  /**
+   * Peso da prova - sempre o do componente escolhido, derivado na leitura.
+   *
+   * `null` quando a prova nao aponta para nenhum componente: uma prova fora da
+   * configuracao de notas nao tem peso, e exibir "1" sugeriria que ela entra
+   * na media.
+   */
+  weight: number | null;
   durationMinutes: number | null;
   subject: SubjectRef;
   /** Negativo se ja aconteceu, 0 se e hoje. */
@@ -168,7 +175,7 @@ export interface ExamListItem {
   /** Verdadeiro quando a data ja passou. */
   isPast: boolean;
   /** Componente de avaliacao que esta prova representa, quando escolhido. */
-  gradeComponent: { id: string; name: string } | null;
+  gradeComponent: { id: string; name: string; weight: number } | null;
   /** Nota lancada, quando houver. Alimenta o historico da disciplina. */
   grade: ExamGradeRef | null;
   attachmentCount: number;

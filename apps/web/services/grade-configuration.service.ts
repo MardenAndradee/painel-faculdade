@@ -1,4 +1,9 @@
-import type { GradeConfigurationInput, GradeConfigurationItem } from '@painel/shared';
+import type {
+  GradeConfigurationInput,
+  GradeConfigurationItem,
+  GradeTemplatePropagationPreview,
+  GradeTemplatePropagationResult,
+} from '@painel/shared';
 import { httpClient } from './http-client';
 
 export const gradeConfigurationService = {
@@ -29,6 +34,23 @@ export const gradeConfigurationService = {
     return httpClient.put<GradeConfigurationItem>(
       `/semesters/${semesterId}/grade-configuration-template`,
       data,
+    );
+  },
+
+  /** Previa da propagacao do modelo para as disciplinas ja criadas (Etapa 18). */
+  previewPropagation(semesterId: string): Promise<GradeTemplatePropagationPreview> {
+    return httpClient.get<GradeTemplatePropagationPreview>(
+      `/semesters/${semesterId}/grade-configuration-template/propagation-preview`,
+    );
+  },
+
+  propagateTemplate(
+    semesterId: string,
+    subjectIds: string[],
+  ): Promise<GradeTemplatePropagationResult> {
+    return httpClient.post<GradeTemplatePropagationResult>(
+      `/semesters/${semesterId}/grade-configuration-template/propagate`,
+      { subjectIds },
     );
   },
 

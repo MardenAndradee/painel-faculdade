@@ -30,7 +30,9 @@ const historySubjectSelect = {
   semesterId: true,
   teacher: { select: { name: true } },
   gradeConfiguration: { select: { passingGrade: true, components: { select: { weight: true } } } },
-  grades: { select: { value: true, maxValue: true, gradeComponent: { select: { weight: true } } } },
+  grades: {
+    select: { value: true, maxValue: true, gradeComponent: { select: { id: true, weight: true } } },
+  },
 } satisfies Prisma.SubjectSelect;
 
 export type HistorySubjectRow = Prisma.SubjectGetPayload<{ select: typeof historySubjectSelect }>;
@@ -84,6 +86,45 @@ export const semesterRepository = {
     data: Omit<Prisma.SemesterUncheckedCreateInput, 'userId'>,
   ): Promise<SemesterRow> {
     return prisma.semester.create({ data: { ...data, userId }, select: listSelect });
+  },
+
+  /**
+   * Cria o semestre ja com um modelo de notas (Etapa 18).
+   *
+   * Uma transacao, pelo mesmo motivo de
+   * `subjectRepository.createWithGradeConfiguration`: semestre criado sem o
+   * modelo deixaria o usuario configurando componentes a mao a cada periodo,
+   * que e justamente o que o modelo existe para evitar.
+   */
+  createWithGradeTemplate(
+    userId: string,
+    data: Omit<Prisma.SemesterUncheckedCreateInput, 'userId'>,
+    template: { passingGrade: number; components: Array<{ name: string; weight: number }> },
+  ): Promise<SemesterRow> {
+    return prisma.$transaction(async (tx) => {
+      const semester = await tx.semester.create({
+        data: { ...data, userId },
+        select: { id: true },
+      });
+
+      await tx.gradeConfiguration.create({
+        data: {
+          userId,
+          semesterId: semester.id,
+          passingGrade: template.passingGrade,
+          components: {
+            create: template.components.map((component, index) => ({
+              userId,
+              name: component.name,
+              weight: component.weight,
+              order: index,
+            })),
+          },
+        },
+      });
+
+      return tx.semester.findFirstOrThrow({ where: { id: semester.id }, select: listSelect });
+    });
   },
 
   async update(

@@ -73,10 +73,11 @@ export function ExamItem({ exam, onEdit, onDelete }: ExamItemProps) {
             <p className="truncate text-[15px] font-semibold tracking-tight">{exam.subject.name}</p>
           </div>
 
-          {exam.weight !== 1 && (
+          {/* O peso vem do componente (Etapa 18) - por isso os dois juntos. */}
+          {exam.gradeComponent && (
             <Badge variant="outline" className="mt-2 gap-1">
               <Weight className="size-3" aria-hidden />
-              peso {exam.weight}
+              {exam.gradeComponent.name} · peso {exam.gradeComponent.weight}
             </Badge>
           )}
 
@@ -134,12 +135,15 @@ export function ExamItem({ exam, onEdit, onDelete }: ExamItemProps) {
             <p className="mt-0.5 text-xs font-medium">{formatDate(exam.date)}</p>
           </div>
 
-          <div>
-            <p className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
-              Peso
-            </p>
-            <p className="mt-0.5 text-xs font-medium">{exam.weight}</p>
-          </div>
+          {/* Sem componente nao ha peso: a prova nao entra na media. */}
+          {exam.weight !== null && (
+            <div>
+              <p className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+                Peso
+              </p>
+              <p className="mt-0.5 text-xs font-medium">{exam.weight}</p>
+            </div>
+          )}
 
           {exam.room && (
             <div>

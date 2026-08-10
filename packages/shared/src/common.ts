@@ -8,6 +8,25 @@ import { z } from 'zod';
 
 export const cuidSchema = z.string().min(1, 'Identificador obrigatorio');
 
+/** "2026-10-05" - o formato do input `date`, sem hora nem fuso. */
+const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Interpreta o que um formulario digitou como horario LOCAL.
+ *
+ * O JavaScript trata "2026-10-05" como meia-noite UTC e "2026-10-05T00:00"
+ * como meia-noite local - regra da especificacao, e a origem de um bug real:
+ * uma prova cadastrada para 05/10 era gravada as 00:00Z e exibida como 04/10
+ * no calendario, porque no horario de Brasilia isso e 21h do dia anterior.
+ *
+ * Acrescentar a hora explicita alinha os dois casos com o que a pessoa
+ * digitou. Strings que ja trazem hora (`datetime-local`) passam direto: o
+ * JavaScript ja as le como locais.
+ */
+export function parseLocalDate(value: string): Date {
+  return new Date(DATE_ONLY_PATTERN.test(value) ? `${value}T00:00:00` : value);
+}
+
 export const paginationQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   perPage: z.coerce.number().int().positive().max(100).default(20),

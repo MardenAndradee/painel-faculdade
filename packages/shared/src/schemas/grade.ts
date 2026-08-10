@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { parseLocalDate } from '../common.js';
 import type { SubjectRef } from './dashboard.js';
 
 /**
@@ -43,7 +44,7 @@ const gradeBaseSchema = z.object({
     .transform((value) => {
       if (!value) return undefined;
 
-      const parsed = value instanceof Date ? value : new Date(value);
+      const parsed = value instanceof Date ? value : parseLocalDate(value);
       return Number.isNaN(parsed.getTime()) ? undefined : parsed;
     }),
 
@@ -51,9 +52,9 @@ const gradeBaseSchema = z.object({
 
   /**
    * Falso quando o professor ainda vai somar pontos a este componente (um
-   * trabalho lancado em partes). Enquanto falso, o componente conta como
-   * pendente no calculo da media/nota necessaria, mesmo ja tendo uma nota
-   * lancada.
+   * trabalho lancado em partes). Os pontos ja lancados CONTAM normalmente na
+   * media e na projecao - a marca so mantem o componente aberto para receber
+   * lancamentos adicionais, que somam ao que ja esta la.
    *
    * Sem default aqui - ver a explicacao em `subject.ts` sobre por que o
    * default mora so no schema de criacao, nunca no de edicao.
@@ -131,9 +132,11 @@ export interface SubjectGradeSummary {
   requiredGrade: number | null;
   status: SubjectGradeStatus;
   /**
-   * Componentes ainda em aberto: sem nenhuma nota lancada, OU com nota
-   * lancada mas marcada como nao-final (`isFinal: false` - mais pontos ainda
-   * vao somar). Cruze com `grades` para saber qual dos dois casos e cada um.
+   * Componentes sem NENHUMA nota lancada - o que de fato ainda falta.
+   *
+   * Um componente com nota parcial (`isFinal: false`) nao entra aqui: os
+   * pontos ja lancados contam na media e na projecao, e apenas admitem
+   * lancamentos adicionais depois.
    */
   pendingComponents: Array<{ id: string; name: string; weight: number }>;
 }

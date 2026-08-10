@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { parseLocalDate } from '../common.js';
 import { SEMESTER_STATUS, type SemesterStatus, type SubjectStatus } from '../enums.js';
 
 /**
@@ -8,7 +9,7 @@ import { SEMESTER_STATUS, type SemesterStatus, type SubjectStatus } from '../enu
 const semesterDateSchema = z
   .union([z.string().min(1, 'Informe a data'), z.date()])
   .transform((value, ctx) => {
-    const parsed = value instanceof Date ? value : new Date(value);
+    const parsed = value instanceof Date ? value : parseLocalDate(value);
 
     if (Number.isNaN(parsed.getTime())) {
       ctx.addIssue({ code: 'custom', message: 'Data inválida' });

@@ -243,10 +243,10 @@ export function SubjectGradesCard({
           <p className="mt-3 border-t pt-3 text-xs text-muted-foreground">
             {summary.pendingComponents.length}{' '}
             {summary.pendingComponents.length === 1
-              ? 'componente em aberto'
-              : 'componentes em aberto'}{' '}
-            {/* "Em aberto" cobre dois casos: sem nota nenhuma ainda, ou com
-                nota parcial marcada como não-final (Etapa 18). */}
+              ? 'componente sem nota'
+              : 'componentes sem nota'}{' '}
+            {/* Só o que não tem NENHUM lançamento: uma nota parcial já conta
+                na média, mesmo continuando aberta para mais pontos. */}
             ({summary.pendingComponents.map((component) => component.name).join(', ')}) · peso{' '}
             {formatGrade(remainingWeight)} restante
           </p>

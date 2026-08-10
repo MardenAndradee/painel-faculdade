@@ -84,7 +84,11 @@ export const statisticsRepository = {
         name: true,
         color: true,
         grades: {
-          select: { value: true, maxValue: true, gradeComponent: { select: { weight: true } } },
+          select: {
+            value: true,
+            maxValue: true,
+            gradeComponent: { select: { id: true, weight: true } },
+          },
         },
         gradeConfiguration: { select: { components: { select: { weight: true } } } },
       },

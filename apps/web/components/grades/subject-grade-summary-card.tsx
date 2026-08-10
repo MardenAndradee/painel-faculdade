@@ -78,8 +78,8 @@ export function SubjectGradeSummaryCard({
       weight: grade.gradeComponent.weight,
       value: formatGrade(grade.value),
       filled: true,
-      // Nota parcial (isFinal: false): ainda conta como "em aberto" no
-      // cálculo, mas já tem um valor real para mostrar - ver Etapa 18.
+      // Nota parcial (isFinal: false): já conta na média; "em aberto" aqui só
+      // sinaliza que ainda podem somar mais pontos nesse componente.
       open: !grade.isFinal,
       grade,
     })),

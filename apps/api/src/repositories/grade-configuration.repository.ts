@@ -21,6 +21,14 @@ export type GradeConfigurationRow = Prisma.GradeConfigurationGetPayload<{
 }>;
 export type GradeComponentRow = GradeConfigurationRow['components'][number];
 
+/** Disciplina do semestre com a configuracao dela - `null` nas criadas antes da Etapa 17. */
+export type SubjectWithConfigurationRow = {
+  id: string;
+  name: string;
+  color: string;
+  gradeConfiguration: GradeConfigurationRow | null;
+};
+
 export const gradeConfigurationRepository = {
   findBySubject(userId: string, subjectId: string): Promise<GradeConfigurationRow | null> {
     return prisma.gradeConfiguration.findFirst({
@@ -49,6 +57,29 @@ export const gradeConfigurationRepository = {
 
   findById(userId: string, id: string): Promise<GradeConfigurationRow | null> {
     return prisma.gradeConfiguration.findFirst({ where: { id, userId }, select: configSelect });
+  },
+
+  /**
+   * Disciplinas de um semestre com a configuracao de cada uma (Etapa 18).
+   *
+   * Alimenta a previa e a aplicacao da propagacao do modelo. Arquivadas ficam
+   * de fora: propagar um modelo para o que a pessoa ja tirou da frente so
+   * geraria linhas a mais na tela de confirmacao.
+   */
+  findSubjectsWithConfiguration(
+    userId: string,
+    semesterId: string,
+  ): Promise<SubjectWithConfigurationRow[]> {
+    return prisma.subject.findMany({
+      where: { userId, semesterId, archivedAt: null },
+      select: {
+        id: true,
+        name: true,
+        color: true,
+        gradeConfiguration: { select: configSelect },
+      },
+      orderBy: { name: 'asc' },
+    });
   },
 
   /** Cria a configuracao (de uma disciplina, de um modelo de semestre OU do modelo pessoal) com os componentes iniciais. */

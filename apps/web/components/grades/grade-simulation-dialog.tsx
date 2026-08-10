@@ -50,8 +50,21 @@ export function GradeSimulationDialog({
 
     const initial: Record<string, string> = {};
 
+    // Somado por componente: um componente com nota parcial pode ter vários
+    // lançamentos, e a simulação parte do total já garantido nele.
+    const totals = new Map<string, number>();
+
     for (const grade of summary.grades) {
-      initial[grade.gradeComponent.id] = String(grade.value);
+      const maxValue = grade.maxValue > 0 ? grade.maxValue : 10;
+
+      totals.set(
+        grade.gradeComponent.id,
+        (totals.get(grade.gradeComponent.id) ?? 0) + (grade.value / maxValue) * 10,
+      );
+    }
+
+    for (const [componentId, total] of totals) {
+      initial[componentId] = String(Number(total.toFixed(2)));
     }
 
     setValues(initial);

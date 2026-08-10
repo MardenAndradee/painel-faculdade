@@ -6,7 +6,9 @@ import { prisma, type Prisma } from '../config/prisma.js';
 const gradeWeightSelect = {
   value: true,
   maxValue: true,
-  gradeComponent: { select: { weight: true } },
+  // O id vem junto porque o calculo agrupa por componente antes de ponderar
+  // (varios lancamentos no mesmo componente nao podem duplicar o peso).
+  gradeComponent: { select: { id: true, weight: true } },
 } satisfies Prisma.GradeSelect;
 
 /** Peso de todos os componentes configurados, lancados ou nao - para o denominador da media. */

@@ -72,7 +72,6 @@ function toDashboardExam(row: ExamDashboardRow, now: Date): DashboardExam {
     title: row.title,
     date: row.date.toISOString(),
     room: row.room,
-    weight: row.weight,
     subject: row.subject,
     daysUntilExam: daysBetween(now, row.date),
   };

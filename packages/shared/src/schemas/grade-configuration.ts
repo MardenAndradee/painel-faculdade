@@ -53,3 +53,65 @@ export interface GradeConfigurationItem {
   passingGrade: number;
   components: GradeComponentItem[];
 }
+
+// --- Propagacao do modelo do semestre (Etapa 18) -------------------------------
+
+/**
+ * Propagacao do modelo de um semestre para as disciplinas ja criadas nele.
+ *
+ * A Etapa 17 decidiu que `GradeConfiguration` e COPIADA, nunca compartilhada:
+ * editar a configuracao de uma disciplina jamais pode mexer em outra. Isso
+ * continua valendo - mas surpreende quem adiciona um componente ao modelo de
+ * "2026.2" e espera ve-lo nas disciplinas daquele periodo.
+ *
+ * A saida e um passo explicito: o backend calcula a diferenca, a tela mostra o
+ * que mudaria em cada disciplina, e so as marcadas sao atualizadas. Nenhuma
+ * disciplina muda sem confirmacao.
+ */
+
+/** O que muda numa disciplina se ela for marcada para receber o modelo. */
+export type GradeTemplateChangeKind = 'ADD_COMPONENT' | 'UPDATE_WEIGHT' | 'UPDATE_PASSING_GRADE';
+
+export interface GradeTemplateChange {
+  kind: GradeTemplateChangeKind;
+  /** Nome do componente; ausente em `UPDATE_PASSING_GRADE`, que e da disciplina inteira. */
+  componentName: string | null;
+  /** Valor atual na disciplina. `null` quando o componente ainda nao existe la. */
+  from: number | null;
+  /** Valor que o modelo passaria a impor. */
+  to: number;
+  /**
+   * O componente ja tem nota lancada.
+   *
+   * Importa porque mudar o peso ai nao e cosmetico: recalcula a media que a
+   * pessoa ja viu na tela.
+   */
+  affectsGrades: boolean;
+}
+
+export interface GradeTemplateSubjectDiff {
+  subjectId: string;
+  subjectName: string;
+  subjectColor: string;
+  changes: GradeTemplateChange[];
+}
+
+export interface GradeTemplatePropagationPreview {
+  semester: { id: string; name: string };
+  /** Apenas disciplinas com alguma diferenca - lista vazia significa "nada a propagar". */
+  subjects: GradeTemplateSubjectDiff[];
+}
+
+export const propagateGradeTemplateSchema = z.object({
+  subjectIds: z
+    .array(z.string().min(1))
+    .min(1, 'Selecione ao menos uma disciplina')
+    .max(200, 'Disciplinas demais'),
+});
+
+export type PropagateGradeTemplateInput = z.infer<typeof propagateGradeTemplateSchema>;
+
+export interface GradeTemplatePropagationResult {
+  /** Quantas disciplinas foram efetivamente atualizadas. */
+  updatedSubjects: number;
+}

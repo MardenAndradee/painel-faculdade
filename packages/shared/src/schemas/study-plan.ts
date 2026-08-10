@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { parseLocalDate } from '../common.js';
 import { STUDY_SESSION_STATUS, type StudySessionStatus } from '../enums.js';
 import type { SubjectRef } from './dashboard.js';
 
@@ -90,7 +91,7 @@ const dateTimeSchema = z
     error: 'Informe a data e a hora',
   })
   .transform((value, ctx) => {
-    const parsed = value instanceof Date ? value : new Date(value);
+    const parsed = value instanceof Date ? value : parseLocalDate(value);
 
     if (Number.isNaN(parsed.getTime())) {
       ctx.addIssue({ code: 'custom', message: 'Data inválida' });

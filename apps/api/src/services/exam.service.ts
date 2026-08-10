@@ -36,7 +36,8 @@ function toListItem(row: ExamListRow, now: Date): ExamListItem {
     notes: row.notes,
     room: row.room,
     date: row.date.toISOString(),
-    weight: row.weight,
+    // Derivado, nunca armazenado: ver a nota em `ExamListItem.weight`.
+    weight: row.gradeComponent?.weight ?? null,
     durationMinutes: row.durationMinutes,
     subject: row.subject,
     daysUntilExam: daysBetween(now, row.date),
@@ -121,7 +122,9 @@ export const examService = {
       query.sortBy === 'subject'
         ? [{ subject: { name: query.order } }, { date: 'asc' }]
         : query.sortBy === 'weight'
-          ? [{ weight: query.order }, { date: 'asc' }]
+          ? // O peso mora no componente; provas sem componente ficam no fim
+            // pela ordenacao natural de NULL no Postgres.
+            [{ gradeComponent: { weight: query.order } }, { date: 'asc' }]
           : query.sortBy === 'title'
             ? [{ title: query.order }]
             : [{ date: query.order }];
@@ -164,7 +167,6 @@ export const examService = {
       content: emptyToNull(input.content),
       notes: emptyToNull(input.notes),
       room: emptyToNull(input.room),
-      weight: input.weight,
       durationMinutes: input.durationMinutes ?? null,
       gradeComponentId: input.gradeComponentId ?? null,
     });
@@ -195,7 +197,6 @@ export const examService = {
       ...(input.content !== undefined ? { content: emptyToNull(input.content) } : {}),
       ...(input.notes !== undefined ? { notes: emptyToNull(input.notes) } : {}),
       ...(input.room !== undefined ? { room: emptyToNull(input.room) } : {}),
-      ...(input.weight !== undefined ? { weight: input.weight } : {}),
       ...(input.durationMinutes !== undefined
         ? { durationMinutes: input.durationMinutes ?? null }
         : {}),

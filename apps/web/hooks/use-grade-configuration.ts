@@ -16,6 +16,8 @@ export const gradeConfigurationKeys = {
   semesterTemplate: (semesterId: string) =>
     ['grade-configuration', 'semester-template', semesterId] as const,
   userDefault: ['grade-configuration', 'user-default'] as const,
+  propagationPreview: (semesterId: string) =>
+    ['grade-configuration', 'propagation-preview', semesterId] as const,
 };
 
 export function useSubjectGradeConfiguration(subjectId: string) {
@@ -75,6 +77,53 @@ export function useReplaceSemesterGradeConfigurationTemplate() {
       toast.success('Modelo padrão do semestre salvo');
     },
     onError: (error) => toast.error(errorMessage(error, 'Não foi possível salvar')),
+  });
+}
+
+// --- Propagacao do modelo do semestre (Etapa 18) -------------------------------
+
+/**
+ * O que mudaria nas disciplinas ja criadas se o modelo fosse aplicado.
+ *
+ * `enabled` fica sob controle de quem chama porque a previa so faz sentido
+ * depois de salvar o modelo - buscar antes mostraria a diferenca contra o
+ * modelo antigo.
+ */
+export function useGradeTemplatePropagationPreview(semesterId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: gradeConfigurationKeys.propagationPreview(semesterId),
+    queryFn: () => gradeConfigurationService.previewPropagation(semesterId),
+    enabled: Boolean(semesterId) && enabled,
+    // Sempre refaz ao abrir: o modelo acabou de mudar.
+    staleTime: 0,
+  });
+}
+
+export function usePropagateGradeTemplate() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ semesterId, subjectIds }: { semesterId: string; subjectIds: string[] }) =>
+      gradeConfigurationService.propagateTemplate(semesterId, subjectIds),
+    onSuccess: async (result, { semesterId }) => {
+      // Mexeu no peso de varias disciplinas: media, boletim e dashboard mudam.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['grade-configuration'] }),
+        queryClient.invalidateQueries({ queryKey: gradeKeys.all }),
+        queryClient.invalidateQueries({ queryKey: subjectKeys.all }),
+        queryClient.invalidateQueries({ queryKey: dashboardKeys.summary }),
+        queryClient.invalidateQueries({
+          queryKey: gradeConfigurationKeys.propagationPreview(semesterId),
+        }),
+      ]);
+
+      toast.success(
+        result.updatedSubjects === 1
+          ? 'Modelo aplicado em 1 disciplina'
+          : `Modelo aplicado em ${result.updatedSubjects} disciplinas`,
+      );
+    },
+    onError: (error) => toast.error(errorMessage(error, 'Não foi possível aplicar o modelo')),
   });
 }
 

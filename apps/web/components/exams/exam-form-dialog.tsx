@@ -65,13 +65,19 @@ export function ExamFormDialog({
     formState: { errors, isSubmitting },
   } = useForm<ExamFormValues, unknown, CreateExamInput>({
     resolver: zodResolver(createExamSchema),
-    defaultValues: { subjectId: '', date: '', weight: 1 },
+    defaultValues: { subjectId: '', date: '' },
   });
 
   // Os componentes de nota oferecidos dependem da disciplina escolhida.
   const selectedSubjectId = watch('subjectId');
   const { data: config } = useSubjectGradeConfiguration(selectedSubjectId || '');
   const hasComponents = (config?.components.length ?? 0) > 0;
+
+  // O peso nao e mais digitado aqui: vem do componente escolhido (Etapa 18).
+  const selectedComponentId = watch('gradeComponentId');
+  const selectedComponent = config?.components.find(
+    (component) => component.id === selectedComponentId,
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -81,7 +87,6 @@ export function ExamFormDialog({
         subjectId: exam.subject.id,
         date: exam.date.slice(0, 10),
         content: exam.content ?? '',
-        weight: exam.weight,
         gradeComponentId: exam.gradeComponent?.id ?? null,
         gradeValue: exam.grade?.value ?? null,
       });
@@ -90,7 +95,6 @@ export function ExamFormDialog({
         subjectId: defaultSubjectId ?? '',
         date: '',
         content: '',
-        weight: 1,
         gradeComponentId: null,
         gradeValue: null,
       });
@@ -166,25 +170,14 @@ export function ExamFormDialog({
             </FormField>
 
             <FormField
-              label="Peso"
-              error={errors.weight?.message}
-              hint="Usado no cálculo da média"
-              required
-            >
-              {(field) => (
-                <Input {...field} {...register('weight')} type="number" min={0} step="0.5" />
-              )}
-            </FormField>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FormField
               label="Componente de nota"
               error={errors.gradeComponentId?.message}
               hint={
                 selectedSubjectId && !hasComponents
                   ? 'Configure os componentes de notas da disciplina primeiro'
-                  : 'Opcional'
+                  : selectedComponent
+                    ? `Peso ${selectedComponent.weight}, definido no componente`
+                    : 'Opcional — define o peso da prova'
               }
             >
               {(field) => (
@@ -207,7 +200,7 @@ export function ExamFormDialog({
                         <SelectItem value={NO_COMPONENT}>Nenhum</SelectItem>
                         {config?.components.map((component) => (
                           <SelectItem key={component.id} value={component.id}>
-                            {component.name}
+                            {component.name} · peso {component.weight}
                           </SelectItem>
                         ))}
                       </SelectContent>

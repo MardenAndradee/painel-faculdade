@@ -40,22 +40,20 @@ describe('PATCH não pode aplicar defaults (o bug mais grave do projeto)', () =>
     expect(parsed.status).toBe('IN_PROGRESS');
   });
 
-  it('atualização de prova não reescreve o peso', () => {
-    // Este era o caso concreto: mudar a sala zerava o peso da prova para 1,
-    // alterando silenciosamente a media da disciplina.
-    const parsed = updateExamSchema.parse({ room: 'Sala 12' });
+  it('prova não carrega mais peso próprio', () => {
+    // O caso original: um PATCH da sala zerava o peso da prova para 1,
+    // alterando silenciosamente a media da disciplina. A Etapa 18 removeu a
+    // causa - o peso passou a morar no componente, e a prova nao tem campo
+    // de peso nenhum para reescrever.
+    expect(updateExamSchema.parse({ room: 'Sala 12' })).not.toHaveProperty('weight');
 
-    expect(parsed).not.toHaveProperty('weight');
-  });
-
-  it('criação de prova aplica peso 1', () => {
-    const parsed = createExamSchema.parse({
+    const created = createExamSchema.parse({
       title: 'P1',
       subjectId: 'abc',
       date: '2026-08-15T19:00',
     });
 
-    expect(parsed.weight).toBe(1);
+    expect(created).not.toHaveProperty('weight');
   });
 
   it('campo de nota vazio na prova não vira zero', () => {
@@ -181,5 +179,41 @@ describe('regras de segurança nos contratos', () => {
     });
 
     expect(result.success).toBe(false);
+  });
+});
+
+describe('data digitada é a data salva (bug do dia anterior)', () => {
+  /**
+   * O JavaScript le "2026-10-05" como meia-noite UTC e "2026-10-05T00:00"
+   * como meia-noite local. Com isso, uma prova cadastrada para 05/10 era
+   * gravada as 00:00Z - 21h do dia 04 no horario de Brasilia - e aparecia no
+   * calendario um dia antes. Os testes rodam com TZ=America/Sao_Paulo fixo.
+   */
+
+  it('prova cadastrada para 05/10 fica em 05/10', () => {
+    const parsed = createExamSchema.parse({
+      subjectId: 'abc',
+      date: '2026-10-05',
+    });
+
+    expect(parsed.date.getFullYear()).toBe(2026);
+    expect(parsed.date.getMonth()).toBe(9);
+    expect(parsed.date.getDate()).toBe(5);
+  });
+
+  it('data com hora continua sendo lida como horário local', () => {
+    const parsed = createExamSchema.parse({
+      subjectId: 'abc',
+      date: '2026-10-05T19:30',
+    });
+
+    expect(parsed.date.getDate()).toBe(5);
+    expect(parsed.date.getHours()).toBe(19);
+  });
+
+  it('vale também para o prazo de uma atividade', () => {
+    const parsed = updateAssignmentSchema.parse({ dueDate: '2026-10-05' });
+
+    expect(parsed.dueDate?.getDate()).toBe(5);
   });
 });

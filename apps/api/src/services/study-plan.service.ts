@@ -293,7 +293,8 @@ export const studyPlanService = {
           id: true,
           title: true,
           date: true,
-          weight: true,
+          // O peso da prova e o do componente que ela representa (Etapa 18).
+          gradeComponent: { select: { weight: true } },
           subject: { select: { id: true, name: true } },
         },
       }),
@@ -310,7 +311,7 @@ export const studyPlanService = {
         subjectName: exam.subject?.name ?? null,
         dueDate: exam.date,
         priority: null,
-        weight: exam.weight,
+        weight: exam.gradeComponent?.weight ?? null,
         desiredBlocks: desiredBlocksFor('EXAM', exam.date, now),
       });
     }

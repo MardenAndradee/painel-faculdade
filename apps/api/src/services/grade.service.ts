@@ -111,18 +111,27 @@ export const gradeService = {
 
     const passingGrade = config?.passingGrade ?? 6;
 
-    // Uma nota nao-final (`isFinal: false` - mais pontos ainda vao somar,
-    // Etapa 18) fica visivel em `grades`, mas nao fecha o componente: ele
-    // continua contando como pendente na media/nota necessaria, exatamente
-    // como um componente sem nota nenhuma.
-    const finalRows = rows.filter((row) => row.isFinal);
-    const gradedComponentIds = new Set(finalRows.map((row) => row.gradeComponent.id));
+    /**
+     * Nota lancada conta, final ou nao.
+     *
+     * `isFinal: false` diz que MAIS pontos ainda podem somar naquele
+     * componente - nao que os pontos ja lancados nao valham. Descartar o valor
+     * (o que este calculo fazia) tornava a projecao inutil justamente para
+     * quem usa o recurso: com N1 5 (peso 3) e N2 5 (peso 4, em aberto), o
+     * sistema pedia 6,4 "na N2 e N3" ignorando os 20 pontos ja garantidos da
+     * N2, quando o que falta e 8,3 na N3.
+     *
+     * Pendente passa a ser so o componente SEM nenhum lancamento. Novos
+     * pontos numa nota parcial entram como lancamento adicional no mesmo
+     * componente, e `toGradeLikes` os soma sem duplicar o peso.
+     */
+    const gradedComponentIds = new Set(rows.map((row) => row.gradeComponent.id));
     const pendingComponents = (config?.components ?? []).filter(
       (component) => !gradedComponentIds.has(component.id),
     );
 
     const grades = rows.map(toListItem);
-    const gradeLikes = toGradeLikes(finalRows);
+    const gradeLikes = toGradeLikes(rows);
 
     const usedWeight = gradeLikes.reduce((total, grade) => total + (grade.weight || 1), 0);
     const remainingWeight =

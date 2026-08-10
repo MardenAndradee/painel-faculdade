@@ -15,6 +15,7 @@ import {
   type SemesterRow,
 } from '../repositories/semester.repository.js';
 import { AppError } from '../utils/app-error.js';
+import { gradeConfigurationService } from './grade-configuration.service.js';
 import {
   calculateOverallAverage,
   calculateWeightedAverage,
@@ -142,7 +143,7 @@ export const semesterService = {
       await semesterRepository.clearCurrentFlag(userId);
     }
 
-    const row = await semesterRepository.create(userId, {
+    const data = {
       name: input.name,
       year: input.year,
       term: input.term,
@@ -150,7 +151,25 @@ export const semesterService = {
       isCurrent: input.isCurrent,
       startDate: input.startDate,
       endDate: input.endDate,
-    });
+    };
+
+    /**
+     * Semestre novo ja nasce com um modelo de notas (Etapa 18).
+     *
+     * Sem isso, cada periodo comecava vazio e a pessoa reconfigurava N1/N2/N3
+     * a mao - com o modelo pessoal parado ali do lado, que e exatamente o que
+     * ele existe para evitar. Passar `null` como semestre resolve para o
+     * modelo pessoal, sem cair em template de outro periodo.
+     */
+    const template = await gradeConfigurationService.resolveInitialConfiguration(userId, null);
+
+    // Modelo sem componentes nao vira template: `findByTemplateSemester`
+    // passaria a encontrar uma configuracao vazia e disciplinas novas
+    // nasceriam sem componente nenhum, em vez de herdarem o modelo pessoal.
+    const row =
+      template.components.length > 0
+        ? await semesterRepository.createWithGradeTemplate(userId, data, template)
+        : await semesterRepository.create(userId, data);
 
     return toListItem(row);
   },

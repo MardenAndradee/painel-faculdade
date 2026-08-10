@@ -17,16 +17,42 @@ export interface GradeLike {
 export interface GradeRowLike {
   value: number;
   maxValue: number;
-  gradeComponent: { weight: number };
+  gradeComponent: { id: string; weight: number };
 }
 
-/** Achata o peso do componente para o formato que o calculo consome. */
+/**
+ * Achata as notas para o formato do calculo, AGRUPANDO por componente.
+ *
+ * Um componente pode receber varios lancamentos - e o que a nota parcial
+ * ("ainda nao e a nota final") existe para permitir: o professor solta 2
+ * pontos de trabalho hoje e 3 de prova depois, ambos no N2. Os valores somam
+ * (normalizados na escala 0-10), mas o PESO do componente entra uma vez so.
+ *
+ * Sem o agrupamento, dois lancamentos no N2 de peso 4 contariam peso 8, e o
+ * N2 passaria a valer o dobro do que a configuracao diz.
+ */
 export function toGradeLikes(rows: GradeRowLike[]): GradeLike[] {
-  return rows.map((row) => ({
-    value: row.value,
-    maxValue: row.maxValue,
-    weight: row.gradeComponent.weight,
-  }));
+  const byComponent = new Map<string, GradeLike>();
+
+  for (const row of rows) {
+    const maxValue = row.maxValue > 0 ? row.maxValue : 10;
+    const normalized = (row.value / maxValue) * 10;
+    const existing = byComponent.get(row.gradeComponent.id);
+
+    if (existing) {
+      existing.value += normalized;
+      continue;
+    }
+
+    byComponent.set(row.gradeComponent.id, {
+      // Ja normalizado para 0-10, entao a escala aqui e sempre 10.
+      value: normalized,
+      maxValue: 10,
+      weight: row.gradeComponent.weight,
+    });
+  }
+
+  return [...byComponent.values()];
 }
 
 /** Soma o peso de todos os componentes configurados, lancados ou nao. */

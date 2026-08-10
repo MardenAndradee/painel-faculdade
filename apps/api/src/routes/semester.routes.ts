@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   createSemesterSchema,
   gradeConfigurationInputSchema,
+  propagateGradeTemplateSchema,
   updateSemesterSchema,
 } from '@painel/shared';
 import { semesterController } from '../controllers/semester.controller.js';
@@ -76,4 +77,21 @@ semesterRoutes.put(
   '/semesters/:id/grade-configuration-template',
   validate({ params: idParamSchema, body: gradeConfigurationInputSchema }),
   gradeConfigurationController.replaceTemplateForSemester,
+);
+
+// --- Propagacao do modelo (Etapa 18) ------------------------------------------
+// Editar o modelo continua nao mexendo em disciplina nenhuma. Estas duas rotas
+// sao o passo explicito: a previa mostra o que mudaria, e so as disciplinas
+// enviadas na confirmacao recebem a fusao (aditiva).
+
+semesterRoutes.get(
+  '/semesters/:id/grade-configuration-template/propagation-preview',
+  validate({ params: idParamSchema }),
+  gradeConfigurationController.previewPropagation,
+);
+
+semesterRoutes.post(
+  '/semesters/:id/grade-configuration-template/propagate',
+  validate({ params: idParamSchema, body: propagateGradeTemplateSchema }),
+  gradeConfigurationController.propagateToSubjects,
 );

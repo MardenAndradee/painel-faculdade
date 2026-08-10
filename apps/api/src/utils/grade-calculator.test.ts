@@ -4,6 +4,7 @@ import {
   calculateRequiredGrade,
   calculateWeightedAverage,
   roundGrade,
+  toGradeLikes,
 } from './grade-calculator.js';
 
 describe('calculateWeightedAverage', () => {
@@ -129,5 +130,72 @@ describe('roundGrade', () => {
 
   it('elimina o ruído de ponto flutuante', () => {
     expect(roundGrade(0.1 + 0.2)).toBe(0.3);
+  });
+});
+
+describe('toGradeLikes', () => {
+  /**
+   * O peso mora no componente, e um componente pode receber varios
+   * lancamentos - e o que a nota parcial ("ainda nao e a nota final")
+   * permite. Somar os valores sem agrupar contaria o peso duas vezes.
+   */
+
+  it('achata o peso do componente', () => {
+    const likes = toGradeLikes([
+      { value: 8, maxValue: 10, gradeComponent: { id: 'n1', weight: 3 } },
+    ]);
+
+    expect(likes).toEqual([{ value: 8, maxValue: 10, weight: 3 }]);
+  });
+
+  it('soma vários lançamentos do mesmo componente sem duplicar o peso', () => {
+    // N2 de peso 4 recebeu 2 pontos de trabalho e 3 de prova: vale 5, peso 4.
+    const likes = toGradeLikes([
+      { value: 2, maxValue: 10, gradeComponent: { id: 'n2', weight: 4 } },
+      { value: 3, maxValue: 10, gradeComponent: { id: 'n2', weight: 4 } },
+    ]);
+
+    expect(likes).toEqual([{ value: 5, maxValue: 10, weight: 4 }]);
+  });
+
+  it('normaliza escalas diferentes antes de somar', () => {
+    // 50/100 e 5/10 sao a mesma coisa: o componente fica com 10 de 10.
+    const likes = toGradeLikes([
+      { value: 50, maxValue: 100, gradeComponent: { id: 'n1', weight: 2 } },
+      { value: 5, maxValue: 10, gradeComponent: { id: 'n1', weight: 2 } },
+    ]);
+
+    expect(likes).toEqual([{ value: 10, maxValue: 10, weight: 2 }]);
+  });
+
+  it('mantém componentes distintos separados', () => {
+    const likes = toGradeLikes([
+      { value: 5, maxValue: 10, gradeComponent: { id: 'n1', weight: 3 } },
+      { value: 5, maxValue: 10, gradeComponent: { id: 'n2', weight: 4 } },
+    ]);
+
+    expect(likes).toHaveLength(2);
+    expect(likes.reduce((total, like) => total + like.weight, 0)).toBe(7);
+  });
+});
+
+describe('nota parcial conta na projeção (bug relatado)', () => {
+  /**
+   * Caso exato do relato: N1 (peso 3) com 5 e N2 (peso 4) com 5 marcada como
+   * "ainda nao e a nota final", N3 (peso 3) sem nota. O calculo antigo
+   * descartava a N2 inteira e pedia 6,4 "na N2 e N3", ignorando 20 pontos ja
+   * garantidos. Faltam 8,33 na N3.
+   */
+  const lancadas = toGradeLikes([
+    { value: 5, maxValue: 10, gradeComponent: { id: 'n1', weight: 3 } },
+    { value: 5, maxValue: 10, gradeComponent: { id: 'n2', weight: 4 } },
+  ]);
+
+  it('pede a nota certa apenas no que falta', () => {
+    expect(calculateRequiredGrade(lancadas, 6, 3)).toBe(8.33);
+  });
+
+  it('a média já reflete os pontos da nota parcial', () => {
+    expect(calculateWeightedAverage(lancadas, 10)).toBe(3.5);
   });
 });

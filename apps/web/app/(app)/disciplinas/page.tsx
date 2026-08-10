@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { AlertTriangle, GraduationCap, Plus, RefreshCw, SearchX, Settings } from 'lucide-react';
 import type { SubjectListItem } from '@painel/shared';
 import { useArchiveSubject, useRestoreSubject, useSubjects } from '@/hooks/use-subjects';
+import { useSemesters } from '@/hooks/use-semesters';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -12,7 +13,18 @@ import { EmptyState } from '@/components/empty-state';
 import { SubjectCard } from '@/components/subjects/subject-card';
 import { SubjectFormDialog } from '@/components/subjects/subject-form-dialog';
 import { DeleteSubjectDialog } from '@/components/subjects/delete-subject-dialog';
-import { GradeTemplateDialog } from '@/components/grades/grade-template-dialog';
+import {
+  GradeTemplateDialog,
+  type GradeTemplateTarget,
+} from '@/components/grades/grade-template-dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   SubjectFilters,
   ALL_STATUS,
@@ -32,7 +44,7 @@ export default function SubjectsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<SubjectListItem | null>(null);
   const [deleting, setDeleting] = useState<SubjectListItem | null>(null);
-  const [defaultTemplateOpen, setDefaultTemplateOpen] = useState(false);
+  const [templateTarget, setTemplateTarget] = useState<GradeTemplateTarget | null>(null);
 
   // A busca só vai à API depois que o usuário para de digitar.
   const debouncedSearch = useDebouncedValue(filters.search);
@@ -53,6 +65,7 @@ export default function SubjectsPage() {
   const { data, isLoading, isError, error, refetch, isFetching } = useSubjects(params);
   const archiveSubject = useArchiveSubject();
   const restoreSubject = useRestoreSubject();
+  const { data: semesters = [] } = useSemesters();
 
   const handleFiltersChange = (next: SubjectFiltersState): void => {
     setFilters(next);
@@ -88,10 +101,49 @@ export default function SubjectsPage() {
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
-          <Button variant="outline" onClick={() => setDefaultTemplateOpen(true)}>
-            <Settings className="size-4" aria-hidden />
-            <span className="hidden sm:inline">Notas padrão</span>
-          </Button>
+          {/*
+            Os modelos de notas moram aqui, e não dentro do formulário de uma
+            disciplina: lá o atalho para o modelo do semestre passava a
+            impressão de estar editando aquela disciplina específica.
+          */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline">
+                <Settings className="size-4" aria-hidden />
+                <span className="hidden sm:inline">Modelos de notas</span>
+              </Button>
+            </DropdownMenuTrigger>
+
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuLabel>Pré-preenche disciplinas novas</DropdownMenuLabel>
+
+              <DropdownMenuItem onClick={() => setTemplateTarget({ type: 'default' })}>
+                Modelo padrão
+              </DropdownMenuItem>
+
+              {semesters.length > 0 && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel>Modelo por semestre</DropdownMenuLabel>
+
+                  {semesters.map((semester) => (
+                    <DropdownMenuItem
+                      key={semester.id}
+                      onClick={() =>
+                        setTemplateTarget({
+                          type: 'semester',
+                          semesterId: semester.id,
+                          semesterName: semester.name,
+                        })
+                      }
+                    >
+                      {semester.name}
+                    </DropdownMenuItem>
+                  ))}
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           <Button variant="accent" onClick={openCreate}>
             <Plus className="size-4" aria-hidden />
@@ -225,11 +277,13 @@ export default function SubjectsPage() {
 
       <DeleteSubjectDialog subject={deleting} onOpenChange={(open) => !open && setDeleting(null)} />
 
-      <GradeTemplateDialog
-        open={defaultTemplateOpen}
-        onOpenChange={setDefaultTemplateOpen}
-        target={{ type: 'default' }}
-      />
+      {templateTarget && (
+        <GradeTemplateDialog
+          open
+          onOpenChange={(open) => !open && setTemplateTarget(null)}
+          target={templateTarget}
+        />
+      )}
     </div>
   );
 }

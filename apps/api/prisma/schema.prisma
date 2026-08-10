@@ -387,9 +387,6 @@ model Exam {
   date            DateTime
   durationMinutes Int?
 
-  /// Peso da prova no calculo da media da disciplina.
-  weight Float @default(1)
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -402,6 +399,10 @@ model Exam {
   /// A que componente de avaliacao esta prova se refere (N1, N2...), quando
   /// a disciplina tem uma configuracao de notas. Opcional: nem toda prova
   /// precisa lancar nota diretamente.
+  ///
+  /// Tambem define o PESO da prova (Etapa 18): o peso mora no componente e e
+  /// derivado na leitura, para que editar o peso do N1 valha para todas as
+  /// provas dele em vez de deixar copias desatualizadas por ai.
   gradeComponentId String?
   gradeComponent   GradeComponent? @relation(fields: [gradeComponentId], references: [id], onDelete: SetNull)
 
