@@ -104,7 +104,8 @@ export const examService = {
     await assertSubjectOwnership(userId, input.subjectId);
 
     const row = await examRepository.create(userId, {
-      title: input.title,
+      // Sem campo de titulo no formulario: o card em destaque usa a disciplina.
+      title: input.title?.trim() || 'Avaliação',
       subjectId: input.subjectId,
       date: input.date,
       content: emptyToNull(input.content),

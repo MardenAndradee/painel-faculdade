@@ -18,6 +18,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/empty-state';
 import { ExamItem } from './exam-item';
 import { ExamFormDialog } from './exam-form-dialog';
+import { cn } from '@/lib/utils';
 import {
   AlertDialog,
   AlertDialogContent,
@@ -55,21 +56,24 @@ export function ExamList({
 
   if (isLoading) {
     return (
-      <Card>
-        <ul>
-          {Array.from({ length: 3 }, (_, index) => (
-            <li key={index} className="flex gap-3 border-b px-4 py-3 last:border-b-0">
-              <Skeleton className="h-10 w-1 rounded-full" />
+      <div className="grid gap-4 sm:grid-cols-2">
+        {Array.from({ length: 4 }, (_, index) => (
+          <div key={index} className="rounded-2xl border bg-card p-5">
+            <div className="flex items-start justify-between gap-4">
               <div className="flex-1 space-y-2">
-                <Skeleton className="h-4 w-1/3" />
-                <Skeleton className="h-3 w-2/3" />
+                <Skeleton className="h-4 w-2/3" />
+                <Skeleton className="h-3 w-full" />
                 <Skeleton className="h-3 w-1/2" />
               </div>
-              <Skeleton className="h-4 w-16" />
-            </li>
-          ))}
-        </ul>
-      </Card>
+              <Skeleton className="size-[72px] shrink-0 rounded-2xl" />
+            </div>
+            <div className="mt-4 flex gap-5 border-t pt-3.5">
+              <Skeleton className="h-8 w-14" />
+              <Skeleton className="h-8 w-14" />
+            </div>
+          </div>
+        ))}
+      </div>
     );
   }
 
@@ -121,6 +125,7 @@ export function ExamList({
               description="Cadastre suas provas para acompanhar a contagem regressiva e o conteúdo."
               action={
                 <Button
+                  variant="accent"
                   size="sm"
                   onClick={() => {
                     setEditing(null);
@@ -135,21 +140,21 @@ export function ExamList({
           )}
         </Card>
       ) : (
-        <Card className={isFetching ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
-          <ul>
-            {exams.map((exam) => (
-              <ExamItem
-                key={exam.id}
-                exam={exam}
-                onEdit={(item) => {
-                  setEditing(item);
-                  setFormOpen(true);
-                }}
-                onDelete={setDeleting}
-              />
-            ))}
-          </ul>
-        </Card>
+        <ul
+          className={cn('grid gap-4 transition-opacity sm:grid-cols-2', isFetching && 'opacity-60')}
+        >
+          {exams.map((exam) => (
+            <ExamItem
+              key={exam.id}
+              exam={exam}
+              onEdit={(item) => {
+                setEditing(item);
+                setFormOpen(true);
+              }}
+              onDelete={setDeleting}
+            />
+          ))}
+        </ul>
       )}
 
       {meta && meta.totalPages > 1 && (

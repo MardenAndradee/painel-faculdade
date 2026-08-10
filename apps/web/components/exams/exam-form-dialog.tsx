@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { FormField } from '@/components/ui/form-field';
-import { DateTimePicker } from '@/components/ui/date-time-picker';
+import { DatePicker } from '@/components/ui/date-picker';
 import {
   Dialog,
   DialogContent,
@@ -40,15 +40,6 @@ interface ExamFormDialogProps {
   defaultSubjectId?: string | null;
 }
 
-/** ISO -> "YYYY-MM-DDTHH:mm" em horario local, formato do `datetime-local`. */
-function toLocalInputValue(iso: string | null): string {
-  if (!iso) return '';
-
-  const date = new Date(iso);
-
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
-}
-
 export function ExamFormDialog({
   open,
   onOpenChange,
@@ -70,7 +61,7 @@ export function ExamFormDialog({
     formState: { errors, isSubmitting },
   } = useForm<ExamFormValues, unknown, CreateExamInput>({
     resolver: zodResolver(createExamSchema),
-    defaultValues: { title: '', subjectId: '', date: '', weight: 1 },
+    defaultValues: { subjectId: '', date: '', weight: 1 },
   });
 
   useEffect(() => {
@@ -78,23 +69,16 @@ export function ExamFormDialog({
 
     if (exam) {
       reset({
-        title: exam.title,
         subjectId: exam.subject.id,
-        date: toLocalInputValue(exam.date),
+        date: exam.date.slice(0, 10),
         content: exam.content ?? '',
-        notes: exam.notes ?? '',
-        room: exam.room ?? '',
         weight: exam.weight,
-        durationMinutes: exam.durationMinutes ?? undefined,
       });
     } else {
       reset({
-        title: '',
         subjectId: defaultSubjectId ?? '',
         date: '',
         content: '',
-        notes: '',
-        room: '',
         weight: 1,
       });
     }
@@ -127,17 +111,6 @@ export function ExamFormDialog({
         </DialogHeader>
 
         <form onSubmit={(event) => void onSubmit(event)} className="space-y-4" noValidate>
-          <FormField label="Título" error={errors.title?.message} required>
-            {(field) => (
-              <Input
-                {...field}
-                {...register('title')}
-                placeholder="P1 - Primeira avaliação"
-                autoFocus
-              />
-            )}
-          </FormField>
-
           <FormField label="Disciplina" error={errors.subjectId?.message} required>
             {(field) => (
               <Controller
@@ -163,13 +136,13 @@ export function ExamFormDialog({
           </FormField>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <FormField label="Data e hora" error={errors.date?.message} required>
+            <FormField label="Data" error={errors.date?.message} required>
               {(field) => (
                 <Controller
                   control={control}
                   name="date"
                   render={({ field: controlled }) => (
-                    <DateTimePicker
+                    <DatePicker
                       {...field}
                       value={controlled.value ?? ''}
                       onChange={controlled.onChange}
@@ -179,12 +152,6 @@ export function ExamFormDialog({
               )}
             </FormField>
 
-            <FormField label="Sala" error={errors.room?.message}>
-              {(field) => <Input {...field} {...register('room')} placeholder="Sala 15" />}
-            </FormField>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
             <FormField
               label="Peso"
               error={errors.weight?.message}
@@ -193,22 +160,6 @@ export function ExamFormDialog({
             >
               {(field) => (
                 <Input {...field} {...register('weight')} type="number" min={0} step="0.5" />
-              )}
-            </FormField>
-
-            <FormField
-              label="Duração (min)"
-              error={errors.durationMinutes?.message}
-              hint="Opcional"
-            >
-              {(field) => (
-                <Input
-                  {...field}
-                  {...register('durationMinutes')}
-                  type="number"
-                  min={0}
-                  placeholder="120"
-                />
               )}
             </FormField>
           </div>
@@ -220,17 +171,6 @@ export function ExamFormDialog({
                 {...register('content')}
                 placeholder="Assuntos que caem na prova"
                 rows={3}
-              />
-            )}
-          </FormField>
-
-          <FormField label="Observações" error={errors.notes?.message}>
-            {(field) => (
-              <Textarea
-                {...field}
-                {...register('notes')}
-                placeholder="Material permitido, formato da prova..."
-                rows={2}
               />
             )}
           </FormField>

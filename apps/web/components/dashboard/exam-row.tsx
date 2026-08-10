@@ -1,6 +1,6 @@
 import type { DashboardExam } from '@painel/shared';
 import { MapPin } from 'lucide-react';
-import { formatDateTime, formatExamLabel } from '@/lib/format';
+import { formatDate, formatExamLabel } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 /** Linha de prova. Provas em ate 3 dias recebem destaque de urgencia. */
@@ -21,7 +21,7 @@ export function ExamRow({ exam }: { exam: DashboardExam }) {
         <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{exam.title}</p>
 
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-          <span>{formatDateTime(exam.date)}</span>
+          <span>{formatDate(exam.date)}</span>
 
           {exam.room && (
             <>

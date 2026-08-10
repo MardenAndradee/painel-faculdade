@@ -55,11 +55,16 @@ const examDateSchema = z
 
 /** Campos da prova SEM defaults - ver a explicacao em `subject.ts`. */
 const examBaseSchema = z.object({
+  /**
+   * Opcional: o formulario nao coleta mais titulo (o card em destaque usa o
+   * nome da disciplina). Quando ausente, o service preenche um padrao.
+   */
   title: z
-    .string({ error: 'Informe o título' })
+    .string()
     .trim()
-    .min(2, 'O título precisa de ao menos 2 caracteres')
-    .max(200, 'O título pode ter no máximo 200 caracteres'),
+    .max(200, 'O título pode ter no máximo 200 caracteres')
+    .optional()
+    .or(z.literal('')),
 
   /** Obrigatoria: toda prova pertence a uma disciplina. */
   subjectId: z.string({ error: 'Selecione a disciplina' }).min(1, 'Selecione a disciplina'),

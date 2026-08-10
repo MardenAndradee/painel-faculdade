@@ -86,7 +86,7 @@ export default function ExamsPage() {
           </p>
         </div>
 
-        <Button onClick={() => setFormOpen(true)} className="shrink-0">
+        <Button variant="accent" onClick={() => setFormOpen(true)} className="shrink-0">
           <Plus className="size-4" aria-hidden />
           <span className="hidden sm:inline">Nova prova</span>
           <span className="sm:hidden">Nova</span>
