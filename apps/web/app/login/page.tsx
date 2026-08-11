@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { CalendarDays, ChartColumn, ListChecks, TriangleAlert } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
-import { FullPageSpinner, Spinner } from '@/components/ui/spinner';
+import { FullPageSpinner } from '@/components/ui/spinner';
 import { GoogleIcon } from '@/components/google-icon';
 import { Logo } from '@/components/brand/logo';
 
@@ -108,13 +108,7 @@ function LoginContent() {
 export default function LoginPage() {
   // useSearchParams exige Suspense em paginas pre-renderizadas.
   return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-dvh items-center justify-center">
-          <Spinner className="size-8" />
-        </div>
-      }
-    >
+    <Suspense fallback={<FullPageSpinner />}>
       <LoginContent />
     </Suspense>
   );
