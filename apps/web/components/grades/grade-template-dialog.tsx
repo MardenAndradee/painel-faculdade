@@ -65,7 +65,13 @@ export function GradeTemplateDialog({ open, onOpenChange, target }: GradeTemplat
   const replaceSemester = useReplaceSemesterGradeConfigurationTemplate();
   const replaceDefault = useReplaceUserDefaultGradeConfiguration();
 
-  const [propagationOpen, setPropagationOpen] = useState(false);
+  // Depois de salvar o modelo de um semestre, a oferta de propagar precisa
+  // continuar visível mesmo com o formulário "fechado" - por isso é um passo
+  // interno (`step`), não um `onOpenChange(false)` de verdade. Chamar o
+  // `onOpenChange` do pai aqui desmontaria este componente inteiro (o pai só
+  // renderiza `GradeTemplateDialog` enquanto o alvo não é nulo), levando
+  // junto o diálogo de propagação que mora dentro dele.
+  const [step, setStep] = useState<'form' | 'propagation'>('form');
 
   const {
     control,
@@ -79,6 +85,12 @@ export function GradeTemplateDialog({ open, onOpenChange, target }: GradeTemplat
   });
 
   const { fields, append, remove } = useFieldArray({ control, name: 'components' });
+
+  // Toda vez que o diálogo abre de novo, começa pelo formulário - nunca
+  // reabre já no passo de propagação de uma sessão anterior.
+  useEffect(() => {
+    if (open) setStep('form');
+  }, [open]);
 
   useEffect(() => {
     if (!open || isLoading) return;
@@ -99,13 +111,12 @@ export function GradeTemplateDialog({ open, onOpenChange, target }: GradeTemplat
     try {
       if (isSemester) {
         await replaceSemester.mutateAsync({ semesterId: target.semesterId, data: values });
-        onOpenChange(false);
 
         // Salvar o modelo não mexe em disciplina nenhuma (Etapa 17). A oferta
         // de propagar vem logo depois, enquanto o que mudou ainda está fresco
-        // na cabeça de quem mexeu - e o diálogo se encerra sozinho quando não
-        // há diferença nenhuma a propagar.
-        setPropagationOpen(true);
+        // na cabeça de quem mexeu - por isso troca de passo em vez de fechar
+        // (`onOpenChange(false)` desmontaria o diálogo de propagação junto).
+        setStep('propagation');
         return;
       }
 
@@ -118,7 +129,7 @@ export function GradeTemplateDialog({ open, onOpenChange, target }: GradeTemplat
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog open={open && step === 'form'} onOpenChange={(next) => !next && onOpenChange(false)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{isSemester ? 'Modelo de notas do semestre' : 'Notas padrão'}</DialogTitle>
@@ -242,8 +253,11 @@ export function GradeTemplateDialog({ open, onOpenChange, target }: GradeTemplat
 
       {isSemester && (
         <GradeTemplatePropagationDialog
-          open={propagationOpen}
-          onOpenChange={setPropagationOpen}
+          open={open && step === 'propagation'}
+          onOpenChange={(next) => {
+            // Fechar aqui é o fim de verdade do fluxo: agora sim avisa o pai.
+            if (!next) onOpenChange(false);
+          }}
           semesterId={target.semesterId}
           semesterName={target.semesterName}
         />

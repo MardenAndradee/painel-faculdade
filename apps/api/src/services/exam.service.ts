@@ -111,6 +111,37 @@ export const examService = {
   async list(userId: string, query: ExamQuery): Promise<PaginatedResult<ExamListItem>> {
     const now = new Date();
 
+    const filters = { view: query.view, search: query.search, subjectId: query.subjectId };
+
+    // Peso mora numa relacao opcional (gradeComponent): o Postgres nao tem
+    // como colocar NULL sempre no fim independente da direcao quando quem
+    // ordena e um campo do lado "um" desse tipo de relacionamento (o
+    // `nulls: 'last'` do Prisma so cobre coluna escalar nula, nao um join
+    // ausente). Em vez de arriscar "Peso ↓" empurrando provas sem peso pra
+    // frente das de peso mais alto, esse caso ordena em memoria.
+    if (query.sortBy === 'weight') {
+      const all = await examRepository.findAllMatching(userId, filters, now);
+
+      const sorted = [...all].sort((a, b) => {
+        const weightA = a.gradeComponent?.weight ?? null;
+        const weightB = b.gradeComponent?.weight ?? null;
+
+        if (weightA === null && weightB === null) return 0;
+        if (weightA === null) return 1;
+        if (weightB === null) return -1;
+
+        return query.order === 'asc' ? weightA - weightB : weightB - weightA;
+      });
+
+      const skip = (query.page - 1) * query.perPage;
+      const page = sorted.slice(skip, skip + query.perPage);
+
+      return {
+        data: page.map((row) => toListItem(row, now)),
+        meta: buildPaginationMeta(query.page, query.perPage, sorted.length),
+      };
+    }
+
     /**
      * Ordenacao por data.
      *
@@ -121,17 +152,13 @@ export const examService = {
     const orderBy: Prisma.ExamOrderByWithRelationInput[] =
       query.sortBy === 'subject'
         ? [{ subject: { name: query.order } }, { date: 'asc' }]
-        : query.sortBy === 'weight'
-          ? // O peso mora no componente; provas sem componente ficam no fim
-            // pela ordenacao natural de NULL no Postgres.
-            [{ gradeComponent: { weight: query.order } }, { date: 'asc' }]
-          : query.sortBy === 'title'
-            ? [{ title: query.order }]
-            : [{ date: query.order }];
+        : query.sortBy === 'title'
+          ? [{ title: query.order }]
+          : [{ date: query.order }];
 
     const { rows, total } = await examRepository.findPaginated(
       userId,
-      { view: query.view, search: query.search, subjectId: query.subjectId },
+      filters,
       orderBy,
       (query.page - 1) * query.perPage,
       query.perPage,

@@ -121,6 +121,23 @@ export const examRepository = {
     return { rows, total };
   },
 
+  /**
+   * Todas as provas que casam com o filtro, sem paginar no banco.
+   *
+   * Usado so pela ordenacao por peso (ver `exam.service.ts`): o peso mora
+   * numa relacao opcional, e o Postgres nao tem como colocar NULL sempre no
+   * fim independente da direcao quando quem ordena e um campo do lado "um"
+   * de um relacionamento opcional - so o campo escalar de quem tem a FK
+   * (nao e o caso aqui). A pagina certa e recortada em memoria pelo service.
+   */
+  findAllMatching(userId: string, filters: ExamFilters, now: Date): Promise<ExamListRow[]> {
+    return prisma.exam.findMany({
+      where: buildWhere(userId, filters, now),
+      select: listSelect,
+      orderBy: [{ date: 'asc' }],
+    });
+  },
+
   findById(userId: string, id: string): Promise<ExamListRow | null> {
     return prisma.exam.findFirst({ where: { id, userId }, select: listSelect });
   },

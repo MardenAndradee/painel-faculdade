@@ -81,30 +81,31 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
           <Breadcrumbs key={pathname} />
 
+          {/* Botao com cara de campo no desktop, so o icone no celular - onde
+              nao ha teclado para o atalho. Fica do lado esquerdo, colado nas
+              breadcrumbs, e nao junto do grupo de acoes da direita. */}
+          <Button
+            variant="outline"
+            onClick={() => setSearchOpen(true)}
+            aria-label="Buscar"
+            className="hidden h-8 w-56 shrink-0 justify-start gap-2 px-2.5 font-normal text-muted-foreground sm:flex"
+          >
+            <Search className="size-4 shrink-0" aria-hidden />
+            <span className="flex-1 text-left text-[13px]">Buscar...</span>
+            <kbd className="rounded border px-1 text-[10px] leading-4">⌘K</kbd>
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setSearchOpen(true)}
+            aria-label="Buscar"
+            className="sm:hidden"
+          >
+            <Search className="size-5" aria-hidden />
+          </Button>
+
           <div className="ml-auto flex items-center gap-1">
-            {/* Botao com cara de campo no desktop, so o icone no celular -
-                onde nao ha teclado para o atalho. */}
-            <Button
-              variant="outline"
-              onClick={() => setSearchOpen(true)}
-              aria-label="Buscar"
-              className="hidden h-8 w-56 justify-start gap-2 px-2.5 font-normal text-muted-foreground sm:flex"
-            >
-              <Search className="size-4 shrink-0" aria-hidden />
-              <span className="flex-1 text-left text-[13px]">Buscar...</span>
-              <kbd className="rounded border px-1 text-[10px] leading-4">⌘K</kbd>
-            </Button>
-
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setSearchOpen(true)}
-              aria-label="Buscar"
-              className="sm:hidden"
-            >
-              <Search className="size-5" aria-hidden />
-            </Button>
-
             {/* So aparece pra quem ja conectou o Classroom: sem conta ligada,
                 a sincronizacao nao teria o que fazer. */}
             {user?.hasClassroomAccess && (
