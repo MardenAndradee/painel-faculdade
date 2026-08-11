@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <!--
+    Favicon: o simbolo sobre o azul da marca, a variante do manual para
+    tamanhos pequenos. O painel inferior e o ponto saem de proposito - a 16px
+    eles viram sujeira, e o que precisa sobreviver e a silhueta do "P".
+
+    O Next serve este arquivo como <link rel="icon"> automaticamente.
+  -->
+  <rect width="100" height="100" rx="20" fill="#2563EB" />
+  <rect x="23" y="23" width="14" height="54" rx="7" fill="#FFFFFF" />
+  <path d="M 41 23 H 72 C 76.5 23 80 26.5 80 31 V 41 C 80 45.5 76.5 49 72 49 H 41 V 23 Z" fill="#FFFFFF" />
+</svg>

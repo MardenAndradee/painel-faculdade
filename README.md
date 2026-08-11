@@ -11,6 +11,7 @@ Plataforma web de organização acadêmica para estudantes universitários. Cent
 - [Stack](#stack)
 - [Arquitetura](#arquitetura)
 - [Estrutura de pastas](#estrutura-de-pastas)
+- [Identidade visual](#identidade-visual)
 - [Pré-requisitos](#pré-requisitos)
 - [Instalação](#instalação)
 - [Google OAuth](#google-oauth)
@@ -117,7 +118,7 @@ painel-faculdade/
 │   │       ├── app.ts               # montagem do Express
 │   │       └── server.ts            # bootstrap e shutdown
 │   └── web/
-│       ├── app/                     # App Router
+│       ├── app/                     # App Router (+ icon.svg, apple-icon.png)
 │       ├── components/              # componentes reutilizáveis (+ ui/ do shadcn)
 │       ├── hooks/                   # hooks de dados (TanStack Query)
 │       ├── services/                # cliente HTTP da API
@@ -128,6 +129,27 @@ painel-faculdade/
 ├── docker-compose.yml
 └── package.json                     # workspaces + scripts
 ```
+
+## Identidade visual
+
+A marca é um **SVG inline** (`apps/web/components/brand/logo.tsx`), não um arquivo de imagem. Ela aparece de 28px na sidebar a 56px no login e precisa acompanhar o tema claro/escuro — como vetor no DOM ela escala sem perda e troca de cor pelos tokens, sem duas versões do mesmo arquivo nem troca de `src` na hidratação.
+
+| Export | Uso |
+| --- | --- |
+| `LogoMark` | Só o símbolo, para onde não cabe o nome por extenso |
+| `Logo` | Lockup horizontal: símbolo + nome |
+
+O nome é **texto de verdade**, não `<text>` dentro do SVG: assim herda a Inter carregada pelo `next/font` (dentro do SVG a família teria de ser repetida à mão, e o nome que o `next/font` gera é um hash), continua selecionável e legível por leitor de tela, e reescala com a tipografia da página. Quando o nome aparece ao lado, o símbolo vira `aria-hidden` — do contrário o leitor de tela anunciaria a marca duas vezes.
+
+### As cores da marca são tokens próprios
+
+`--brand-mark-*` e `--brand-wordmark` vivem em `globals.css` **separados dos tokens de UI**, com uma versão para cada tema. Amarrá-los a `--primary` faria a marca mudar de cor junto com qualquer ajuste de tema, e uma logo precisa ser a mesma coisa onde quer que apareça.
+
+### Ícones
+
+`app/icon.svg` e `app/apple-icon.png` seguem a convenção de arquivos do App Router — o Next emite os `<link>` sozinho, sem configuração em `metadata`.
+
+O favicon usa a variante do manual para tamanhos pequenos: símbolo branco sobre o azul da marca, **sem** o painel inferior e sem o ponto. A 16px esses dois detalhes viram sujeira; o que precisa sobreviver é a silhueta do "P". O ícone do iOS usa a marca completa sobre fundo escuro, sem cantos arredondados — o próprio sistema aplica a máscara.
 
 ## Pré-requisitos
 

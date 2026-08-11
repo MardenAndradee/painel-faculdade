@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { GraduationCap } from 'lucide-react';
 import { NAV_SECTIONS } from '@/lib/navigation';
+import { Logo } from '@/components/brand/logo';
 import { useAuth } from '@/hooks/use-auth';
 import { cn, getInitials } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -20,11 +20,15 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-14 items-center gap-2.5 px-5">
-        <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-[0_0_0_1px_rgba(79,124,255,.35),0_6px_18px_-8px_rgba(79,124,255,.9)]">
-          <GraduationCap className="size-4" aria-hidden />
-        </span>
-        <span className="text-sm font-semibold tracking-tight">Painel Faculdade</span>
+      <div className="flex h-14 items-center px-5">
+        {/* Leva ao dashboard, como se espera da marca no topo da navegação. */}
+        <Link
+          href="/dashboard"
+          onClick={onNavigate}
+          className="rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        >
+          <Logo />
+        </Link>
       </div>
 
       {user && (

@@ -23,9 +23,12 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
+  // Cor da barra do navegador no celular: os mesmos `--background` de
+  // `globals.css`. O valor escuro estava em `#09090b`, de antes da paleta
+  // "Nocturne" - a barra destoava do topo da pagina por dois tons.
   themeColor: [
     { media: '(prefers-color-scheme: light)', color: '#ffffff' },
-    { media: '(prefers-color-scheme: dark)', color: '#09090b' },
+    { media: '(prefers-color-scheme: dark)', color: '#0b0d12' },
   ],
 };
 

@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
 import { FullPageSpinner, Spinner } from '@/components/ui/spinner';
 import { GoogleIcon } from '@/components/google-icon';
+import { Logo } from '@/components/brand/logo';
 
 /**
  * Tela de login.
@@ -55,9 +56,16 @@ function LoginContent() {
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center px-4 py-12">
       <div className="w-full max-w-sm">
-        <div className="mb-8 space-y-2 text-center">
-          <h1 className="text-2xl font-semibold tracking-tight">Painel Faculdade</h1>
-          <p className="text-sm text-muted-foreground">
+        <div className="mb-8 flex flex-col items-center text-center">
+          {/*
+            Aqui a marca é o próprio título: o `h1` da página é o lockup, e não
+            um texto repetindo o nome logo abaixo dele.
+          */}
+          <h1>
+            <Logo markClassName="size-14" className="flex-col gap-3 text-xl sm:text-2xl" />
+          </h1>
+
+          <p className="mt-3 text-sm text-muted-foreground">
             Entre com sua conta institucional para começar.
           </p>
         </div>

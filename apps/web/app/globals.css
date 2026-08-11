@@ -65,6 +65,21 @@
   --status-pending: oklch(0.769 0.188 70.08);
   --status-completed: oklch(0.696 0.17 162.48);
   --status-overdue: oklch(0.577 0.245 27.325);
+
+  /*
+   * Marca (logo).
+   *
+   * Vem do manual de identidade visual, nao dos tokens de UI: a logo precisa
+   * ser a MESMA cor em qualquer contexto onde apareca. Amarra-la a `--primary`
+   * faria a marca mudar junto com um ajuste de tema.
+   */
+  --brand-mark-surface: #f8fafc;
+  --brand-mark-border: #cbd5e1;
+  --brand-mark-bar: #1d4ed8;
+  --brand-mark-block: #0f172a;
+  --brand-mark-panel: #e2e8f0;
+  --brand-mark-dot: #2563eb;
+  --brand-wordmark: #1d4ed8;
 }
 
 .dark {
@@ -117,6 +132,15 @@
   --status-pending: oklch(0.769 0.188 70.08);
   --status-completed: oklch(0.696 0.17 162.48);
   --status-overdue: #ef4444;
+
+  /* Marca, versao para fundo escuro - ver a explicacao no tema claro. */
+  --brand-mark-surface: #090d16;
+  --brand-mark-border: #1e293b;
+  --brand-mark-bar: #2563eb;
+  --brand-mark-block: #ffffff;
+  --brand-mark-panel: #1e293b;
+  --brand-mark-dot: #38bdf8;
+  --brand-wordmark: #38bdf8;
 }
 
 /* Expoe os tokens como utilitarios do Tailwind (bg-card, text-muted-foreground...). */
@@ -157,6 +181,14 @@
   --color-status-pending: var(--status-pending);
   --color-status-completed: var(--status-completed);
   --color-status-overdue: var(--status-overdue);
+
+  --color-brand-mark-surface: var(--brand-mark-surface);
+  --color-brand-mark-border: var(--brand-mark-border);
+  --color-brand-mark-bar: var(--brand-mark-bar);
+  --color-brand-mark-block: var(--brand-mark-block);
+  --color-brand-mark-panel: var(--brand-mark-panel);
+  --color-brand-mark-dot: var(--brand-mark-dot);
+  --color-brand-wordmark: var(--brand-wordmark);
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
