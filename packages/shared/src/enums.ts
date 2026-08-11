@@ -44,6 +44,8 @@ export type StudySessionStatus = (typeof STUDY_SESSION_STATUS)[number];
 export const NOTIFICATION_TYPE = [
   'ASSIGNMENT_DUE',
   'ASSIGNMENT_OVERDUE',
+  /** Atividade trazida pela sincronizacao do Classroom (Etapa 19). */
+  'ASSIGNMENT_CREATED',
   'EXAM_UPCOMING',
   'GRADE_POSTED',
   'STUDY_SESSION',
@@ -52,6 +54,14 @@ export const NOTIFICATION_TYPE = [
   'SYSTEM',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPE)[number];
+
+/**
+ * Urgencia da notificacao (Etapa 19), separada do tipo: a mesma atividade vira
+ * ATTENTION quando vence amanha e URGENT quando vence hoje, sem trocar de
+ * tipo.
+ */
+export const NOTIFICATION_PRIORITY = ['URGENT', 'ATTENTION', 'INFO', 'DONE'] as const;
+export type NotificationPriority = (typeof NOTIFICATION_PRIORITY)[number];
 
 export const THEME_PREFERENCE = ['LIGHT', 'DARK', 'SYSTEM'] as const;
 export type ThemePreference = (typeof THEME_PREFERENCE)[number];

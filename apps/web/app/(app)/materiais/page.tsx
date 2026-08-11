@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   AlertTriangle,
   FileStack,
@@ -47,6 +47,8 @@ import { AttachmentCard } from '@/components/materials/attachment-card';
 import { LinkFormDialog } from '@/components/materials/link-form-dialog';
 import { AttachmentEditDialog } from '@/components/materials/attachment-edit-dialog';
 import { AttachmentPreview } from '@/components/materials/attachment-preview';
+import { useInitialSearchParam } from '@/hooks/use-initial-search-param';
+import { SEARCH_PARAM } from '@/lib/entity-routes';
 import { formatBytes } from '@/lib/format';
 
 const ALL = 'all';
@@ -55,6 +57,14 @@ const PAGE_SIZE = 24;
 export default function MaterialsPage() {
   const [search, setSearch] = useState('');
   const [type, setType] = useState<AttachmentType | typeof ALL>(ALL);
+
+  // Chegada pela busca global (Etapa 19): `/materiais?busca=Slides aula 4`.
+  const fromSearch = useInitialSearchParam(SEARCH_PARAM);
+
+  useEffect(() => {
+    if (fromSearch) setSearch(fromSearch);
+  }, [fromSearch]);
+
   const [subjectId, setSubjectId] = useState<string>(ALL);
   const [sortBy, setSortBy] = useState<AttachmentSortField>('createdAt');
   const [page, setPage] = useState(1);

@@ -14,6 +14,8 @@ import { flashcardRoutes } from './flashcard.routes.js';
 import { studyPlanRoutes } from './study-plan.routes.js';
 import { statisticsRoutes } from './statistics.routes.js';
 import { noteRoutes } from './note.routes.js';
+import { searchRoutes } from './search.routes.js';
+import { notificationRoutes } from './notification.routes.js';
 
 /**
  * Registro central de rotas. Cada modulo entregue nas proximas etapas
@@ -36,3 +38,5 @@ routes.use(flashcardRoutes);
 routes.use(studyPlanRoutes);
 routes.use(statisticsRoutes);
 routes.use(noteRoutes);
+routes.use(searchRoutes);
+routes.use(notificationRoutes);

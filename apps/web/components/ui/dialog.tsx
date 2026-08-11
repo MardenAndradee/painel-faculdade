@@ -13,8 +13,16 @@ const DialogClose = DialogPrimitive.Close;
 function DialogContent({
   className,
   children,
+  showCloseButton = true,
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Content>) {
+}: React.ComponentProps<typeof DialogPrimitive.Content> & {
+  /**
+   * O X no canto. Desligavel para diálogos cujo próprio conteúdo ocupa o topo
+   * — a paleta de busca (Etapa 19) põe o campo de texto ali, e o botão
+   * flutuaria por cima dele. `Esc` continua fechando em qualquer caso.
+   */
+  showCloseButton?: boolean;
+}) {
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0" />
@@ -31,10 +39,12 @@ function DialogContent({
       >
         {children}
 
-        <DialogPrimitive.Close className="absolute top-4 right-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none">
-          <X className="size-4" aria-hidden />
-          <span className="sr-only">Fechar</span>
-        </DialogPrimitive.Close>
+        {showCloseButton && (
+          <DialogPrimitive.Close className="absolute top-4 right-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none">
+            <X className="size-4" aria-hidden />
+            <span className="sr-only">Fechar</span>
+          </DialogPrimitive.Close>
+        )}
       </DialogPrimitive.Content>
     </DialogPrimitive.Portal>
   );

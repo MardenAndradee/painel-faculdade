@@ -110,12 +110,23 @@ enum StudySessionStatus {
 enum NotificationType {
   ASSIGNMENT_DUE
   ASSIGNMENT_OVERDUE
+  ASSIGNMENT_CREATED
   EXAM_UPCOMING
   GRADE_POSTED
   STUDY_SESSION
   SYNC_COMPLETED
   SYNC_FAILED
   SYSTEM
+}
+
+/// Urgencia da notificacao, separada do tipo: a mesma atividade vira
+/// ATTENTION quando vence amanha e URGENT quando vence hoje, sem trocar de
+/// tipo. Mapeia as variantes de Badge que ja existem na interface.
+enum NotificationPriority {
+  URGENT
+  ATTENTION
+  INFO
+  DONE
 }
 
 // =============================================================================
@@ -728,10 +739,11 @@ model StudySession {
 // =============================================================================
 
 model Notification {
-  id      String           @id @default(cuid())
-  type    NotificationType
-  title   String
-  message String           @db.Text
+  id       String               @id @default(cuid())
+  type     NotificationType
+  priority NotificationPriority @default(INFO)
+  title    String
+  message  String               @db.Text
 
   /// Referencia generica a entidade de origem, evitando uma FK por tipo.
   entityType String?
@@ -747,6 +759,9 @@ model Notification {
 
   @@index([userId, readAt])
   @@index([userId, createdAt])
+  /// A varredura sob demanda procura por entidade para atualizar em vez de
+  /// duplicar a mesma notificacao a cada abertura do sino.
+  @@index([userId, entityType, entityId])
   @@map("notifications")
 }
 

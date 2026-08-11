@@ -14,6 +14,7 @@ import type {
 import { semesterRepository } from '../repositories/semester.repository.js';
 import { subjectRepository } from '../repositories/subject.repository.js';
 import { gradeConfigurationService } from './grade-configuration.service.js';
+import { notificationService } from './notification.service.js';
 import { AppError } from '../utils/app-error.js';
 
 /**
@@ -175,6 +176,40 @@ export const classroomSyncService = {
       where: { id: userId },
       data: { classroomSyncedAt: new Date() },
     });
+
+    /**
+     * Notifica o que veio de fora (Etapa 19).
+     *
+     * As atividades criadas sao relidas por `createdAt` em vez de coletadas ao
+     * longo do caminho: isso manteria uma lista sendo passada por
+     * `syncCourse` -> `syncCourseWork` so para acabar aqui, e o filtro por
+     * origem e horario descreve exatamente a mesma coisa.
+     *
+     * Falhar aqui nao pode derrubar uma sincronizacao que ja deu certo - o
+     * aviso e util, mas as atividades ja estao salvas.
+     */
+    if (report.assignments.created > 0) {
+      try {
+        const created = await prisma.assignment.findMany({
+          where: { userId, source: 'GOOGLE_CLASSROOM', createdAt: { gte: startedAt } },
+          select: { id: true, title: true, subject: { select: { name: true } } },
+        });
+
+        await notificationService.notifyCreatedAssignments(
+          userId,
+          created.map((row) => ({
+            id: row.id,
+            title: row.title,
+            subjectName: row.subject?.name ?? null,
+          })),
+        );
+      } catch (error) {
+        logger.warn('Classroom: falha ao criar notificacoes das atividades novas', {
+          userId,
+          message: error instanceof Error ? error.message : 'erro desconhecido',
+        });
+      }
+    }
 
     const finishedAt = new Date();
     report.finishedAt = finishedAt.toISOString();

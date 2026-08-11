@@ -44,7 +44,7 @@ Plataforma web de organização acadêmica para estudantes universitários. Cent
 
 | Camada        | Tecnologias                                                              |
 | ------------- | ------------------------------------------------------------------------ |
-| Frontend      | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4, shadcn/ui  |
+| Frontend      | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4, shadcn/ui, cmdk |
 | Estado/dados  | TanStack Query, React Hook Form, Zod                                     |
 | Backend       | Node.js, Express 5, TypeScript, Prisma 7, PostgreSQL 18                  |
 | Autenticação  | Google OAuth2, JWT, Refresh Token                                        |
@@ -319,29 +319,51 @@ As notas são normalizadas para a escala 0–10 antes da ponderação (uma prova
 - **Dark mode**: `next-themes` com `attribute="class"`, alimentando o `@custom-variant dark` do `globals.css`. Um script inline roda antes da pintura, evitando flash branco.
 - **Skeletons** reproduzem o formato do conteúdo real, para o layout não saltar quando os dados chegam.
 
-### Plano (Etapa 19 — planejado): busca global e central de notificações
+### Busca global e central de notificações (Etapa 19)
 
-Duas peças de um mockup de referência que **nunca existiram no app real**: o cabeçalho hoje (`components/layout/app-shell.tsx`) só tem breadcrumbs, o botão de sincronizar o Classroom, o toggle de tema e o menu do usuário — nem barra de busca nem sino. A Etapa 19 é criar os dois do zero, sem tocar em sidebar, cards, cores, tipografia ou espaçamento existentes — só soma dois itens ao cabeçalho.
+Duas peças que o cabeçalho não tinha: uma paleta de comando e um sino. Nada de sidebar, cards, cores, tipografia ou espaçamento foi tocado — a etapa soma dois itens ao cabeçalho e nenhuma cor nova a `globals.css`.
 
 **Busca global (⌘K / Ctrl+K)**
 
-- Backend: `GET /search?q=` agrega em paralelo (mesmo padrão de `Promise.all` do `dashboard.service.ts`) os endpoints que **já aceitam busca por texto** — `subjects`, `assignments`, `exams` e `attachments` já têm `search` nos schemas (`packages/shared/src/schemas/*.ts`). Só `calendarEvents` precisa ganhar o parâmetro (hoje filtra por intervalo de datas, não por texto). Cada categoria limitada a ~5 resultados.
-- Como a busca por texto já existe em 4 das 5 fontes, a implementação nasce com **dado real desde o início** — sem fase de mock. O hook `useGlobalSearch(query)` fica isolado num arquivo próprio, então trocar a fonte no futuro não exige tocar no componente visual.
-- Frontend: novo componente de paleta de comando, usando a dependência `cmdk` (padrão de mercado para este padrão de interação, mesma família do Radix que o projeto já usa em `Select`/`Dialog`/`DropdownMenu` — evita reimplementar navegação por teclado e foco do zero). Busca com `useDebouncedValue` (já existe, usado em `disciplinas/page.tsx`), estado vazio com `EmptyState` (já existe), termo destacado com `<mark>`.
-- Atalho global `⌘K`/`Ctrl+K` — primeiro *listener* de teclado global do projeto, registrado no `AppShell`. `↑`/`↓` navegam os resultados, `Enter` abre, `Esc` fecha.
-- Cada resultado leva à tela correspondente — `/disciplinas/:id` tem rota própria; atividades, provas, eventos e materiais não têm página de detalhe, então o resultado leva à lista (com parâmetro para realçar o item, quando fizer sentido).
+`GET /search?q=` agrega as cinco fontes em paralelo (mesmo `Promise.all` do `dashboard.service`), até 5 resultados por categoria. O acesso a dados é um repositório próprio, e não os cinco de listagem: a paleta precisa de uma projeção única e mínima (título, contexto, cor), não de cinco formatos de item de lista com contagens, paginação e relações que ela nunca exibe — trazer tudo isso para descartar 90% seria trabalho de banco jogado fora a cada tecla.
+
+O resultado **não carrega a URL de destino**. Montar `/disciplinas/:id` é conhecimento da estrutura de rotas desta aplicação (`apps/web/lib/entity-routes.ts`), não do contrato — a mesma busca serviria a um app com outra navegação sem mudar uma linha do backend.
+
+Só disciplina tem tela de detalhe. Para atividades, provas e materiais a URL leva o **termo** (`/atividades?busca=Lista 3`), e a tela abre já filtrada nele: o item escolhido fica na primeira página em vez de perdido na página 4, e o campo de busca preenchido explica por que a lista está curta. Essas telas também forçam o recorte "todas" — uma atividade concluída não apareceria em "pendentes", e a pessoa cairia numa lista vazia logo depois de ver o item no resultado. O calendário fica de fora: ele filtra por intervalo de datas, não por texto.
+
+O termo é destacado com `<mark>` por **fatiamento de string**, nunca `innerHTML` — o termo vem do que a pessoa digitou, e injetá-lo como HTML seria XSS a um passo. A filtragem interna do `cmdk` fica desligada (`shouldFilter={false}`): quem filtra é o servidor, e deixar a biblioteca refiltrar esconderia resultados legítimos que ela não considera parecidos o bastante.
+
+O atalho `⌘K`/`Ctrl+K` é o primeiro *listener* de teclado global do projeto, registrado no `AppShell` pelo mesmo motivo do `useAutoSync`: o shell monta uma vez e sobrevive à navegação.
 
 **Central de notificações**
 
-- O modelo `Notification` **já existe no schema** (`id, type, title, message, entityType, entityId, readAt, createdAt` — ver `schema.prisma`), criado numa etapa anterior e nunca usado: sem repositório, serviço, rota ou tela. Falta uma coluna pedida explicitamente — `priority` (novo enum `URGENT`/`ATTENTION`/`INFO`/`DONE`, mapeando 🔴/🟡/🔵/🟢) — migração aditiva.
-- Backend novo seguindo a camada já usada no projeto inteiro (repository → service → controller → route).
-- Geração **sob demanda, não por cron** (o projeto não tem worker/fila): `GET /notifications` roda uma varredura curta antes de responder, criando ou atualizando notificações de atividades vencendo hoje/amanhã/atrasadas e provas no dia ou nos próximos dias — sem duplicar a mesma notificação enquanto ela seguir não lida. Mesmo princípio de "o servidor decide" já usado em `useAutoSync` (sincronização automática do Classroom ao abrir o app).
-- "Nova atividade adicionada" nasce quando a sincronização do Classroom cria uma atividade (`classroom-sync.service.ts`, `report.assignments.created`) — não quando o próprio usuário cadastra algo manualmente, já que ele sabe que acabou de fazer isso.
-- "Nova prova adicionada" **não tem fonte automática hoje**: o Classroom não sincroniza provas, só atividades. Proponho tirar esse gatilho do escopo da Etapa 19 até o Classroom (ou outra origem) realmente criar provas sozinho.
-- Frontend: `NotificationBell` no cabeçalho, `DropdownMenu` (já usado em várias telas) para a lista, indicador de não lidas sobre o ícone. Prioridade colorida reaproveita as variantes que já existem no `Badge` (`overdue`=🔴, `pending`=🟡, `completed`=🟢, `default`=🔵) — nenhuma cor nova em `globals.css`.
-- Clique marca como lida e navega pela `entityType`: `SUBJECT → /disciplinas/:id`, `ASSIGNMENT → /atividades`, `EXAM → /provas`, `CALENDAR_EVENT → /calendario`.
+O modelo `Notification` já existia no schema desde uma etapa anterior, sem repositório, serviço, rota nem tela. A migração `20260810230000_notification_priority` é o que faltava, e é inteiramente **aditiva**: novo enum `NotificationPriority` (🔴 `URGENT`, 🟡 `ATTENTION`, 🔵 `INFO`, 🟢 `DONE`), a coluna com default, o valor `ASSIGNMENT_CREATED` no enum de tipo e um índice por entidade.
 
-### Endpoints (Etapa 19, planejados)
+Prioridade é separada do tipo de propósito: a mesma atividade vira `ATTENTION` quando vence amanhã e `URGENT` quando vence hoje, sem trocar de tipo.
+
+Geração **sob demanda, não por cron** — o projeto não tem worker nem fila, e um cron seria infraestrutura nova para uma varredura de milissegundos. `GET /notifications` e `GET /notifications/unread-count` rodam a varredura antes de responder; as regras que decidem o que vira notificação são uma função pura com o "agora" injetado (`apps/api/src/utils/notification-rules.ts`), como `spaced-repetition` e `schedule-generator`.
+
+| Fonte | Quando | Prioridade |
+| --- | --- | --- |
+| Atividade | atrasada (até 30 dias) | 🔴 urgente |
+| Atividade | vence hoje | 🔴 urgente |
+| Atividade | vence amanhã | 🟡 atenção |
+| Atividade | vence em 2–3 dias | 🔵 informativo |
+| Prova | hoje ou amanhã | 🔴 urgente |
+| Prova | em 2–3 dias | 🟡 atenção |
+| Prova | em 4–7 dias | 🔵 informativo |
+
+A varredura **reconcilia**, não acumula: o que deve existir e não existe é criado; o que mudou de estado atualiza a mesma linha (a atividade que ontem "vencia amanhã" hoje "vence hoje" continua sendo uma notificação, não duas); o que perdeu o motivo — atividade concluída, prova que passou — é apagado.
+
+> **A notificação lida também conta na comparação.** A primeira versão só olhava as não lidas, e a varredura recriava, segundos depois, exatamente a notificação que a pessoa acabara de dispensar — o indicador voltava sozinho ao mesmo número. Hoje uma notificação já lida e **idêntica** ao que a varredura produziria bloqueia a recriação; só um estado que de fato evoluiu ("vence amanhã" → "vence hoje") gera um aviso novo. O bug foi encontrado pela verificação contra a API rodando, não pelos testes de unidade.
+
+A reconciliação mexe apenas nas **não lidas** e nos tipos que a varredura administra (`SCANNED_TYPES`): notificação lida é histórico do que a pessoa viu, e a de "nova atividade do Classroom" tem `entityType: ASSIGNMENT` igual às de prazo, mas não é gerada ali.
+
+"Nova atividade adicionada" nasce da sincronização do Classroom — não de um cadastro manual, já que quem cadastra sabe que acabou de fazer isso. Até 5 atividades, uma notificação por atividade, para que o clique leve ao item; acima disso vira um resumo, porque a primeira sincronização importa o semestre inteiro e quarenta linhas no sino são ruído, não informação. Falhar ao notificar não derruba uma sincronização que já deu certo: as atividades já estão salvas.
+
+"Nova prova adicionada" ficou **fora de escopo**: o Classroom não sincroniza provas, então não há fonte automática. Lembretes de prova por proximidade existem (tabela acima) — são outra coisa.
+
+### Endpoints (Etapa 19)
 
 | Método | Rota | Descrição |
 | --- | --- | --- |
@@ -1161,7 +1183,7 @@ impor o `NOT NULL`.
 | `NoteFolder`    | Pasta de anotações de uma disciplina, com aninhamento livre              |
 | `Note`          | Anotação de texto rico presa a uma disciplina ou pasta                   |
 | `StudySession`  | Bloco de estudo planejado ou gerado pelo cronograma                      |
-| `Notification`  | Avisos de prazo, prova, nota e sincronização                             |
+| `Notification`  | Avisos de prazo, prova e sincronização, com prioridade (Etapa 19)        |
 | `Deck`          | Baralho de flashcards, opcionalmente ligado a uma disciplina             |
 | `Flashcard`     | Cartão com frente, verso e o estado do SM-2                              |
 | `FlashcardReview` | Log append-only de cada revisão; base da sequência e da retenção       |
@@ -1205,7 +1227,7 @@ npm test          # execução única
 npm run test:watch
 ```
 
-**102 testes**, sobre as regras puras — repetição espaçada, gerador de cronograma, cálculo de notas e os contratos Zod. São elas que concentram a lógica de negócio e, na prática, foi nelas que os bugs apareceram.
+**122 testes**, sobre as regras puras — repetição espaçada, gerador de cronograma, cálculo de notas e os contratos Zod. São elas que concentram a lógica de negócio e, na prática, foi nelas que os bugs apareceram.
 
 ### O que os testes protegem
 
@@ -1220,6 +1242,8 @@ Cada bloco existe por causa de um bug real que aconteceu durante o desenvolvimen
 | `grade-template-merge.test.ts` — fusão aditiva | propagar o modelo de um semestre apagando um componente que só a disciplina tinha — e, com ele, a nota lançada nesse componente |
 | `grade-calculator.test.ts` — agrupamento por componente | dois lançamentos no mesmo componente contavam o peso duas vezes; e uma nota parcial (`isFinal: false`) era descartada inteira da projeção |
 | `contracts.test.ts` — data local | `"2026-10-05"` lido como meia-noite UTC: prova cadastrada para 05/10 aparecia como 04/10 no calendário |
+| `notification-rules.test.ts` — dia de calendário | comparar prazos por 24 horas corridas fazia a atividade que vence hoje às 9h aparecer como atrasada às 14h |
+| `notification-rules.test.ts` — escalonamento | estados diferentes precisam gerar conteúdo diferente (senão o texto não atualiza) e o mesmo estado precisa gerar conteúdo idêntico (senão a notificação dispensada volta ao sino) |
 
 > **Ao rodar verificações manuais em sequência, atenção ao rate limit.** A API
 > permite 300 requisições por 15 minutos por IP (`RATE_LIMIT_MAX`). Um roteiro

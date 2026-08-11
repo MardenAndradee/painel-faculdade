@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Plus, Search, X } from 'lucide-react';
 import {
   EXAM_SORT_FIELDS,
@@ -24,6 +24,8 @@ import {
 } from '@/components/ui/select';
 import { ExamList } from '@/components/exams/exam-list';
 import { ExamFormDialog } from '@/components/exams/exam-form-dialog';
+import { useInitialSearchParam } from '@/hooks/use-initial-search-param';
+import { SEARCH_PARAM } from '@/lib/entity-routes';
 import { cn } from '@/lib/utils';
 
 const ALL = '__all__';
@@ -31,6 +33,18 @@ const ALL = '__all__';
 export default function ExamsPage() {
   const [view, setView] = useState<ExamView>('proximas');
   const [search, setSearch] = useState('');
+
+  // Chegada pela busca global (Etapa 19). "todas" pelo mesmo motivo das
+  // atividades: uma prova já realizada não está em "próximas".
+  const fromSearch = useInitialSearchParam(SEARCH_PARAM);
+
+  useEffect(() => {
+    if (!fromSearch) return;
+
+    setSearch(fromSearch);
+    setView('todas');
+  }, [fromSearch]);
+
   const [subjectId, setSubjectId] = useState(ALL);
   const [sortBy, setSortBy] = useState('date');
   const [order, setOrder] = useState('asc');

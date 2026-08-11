@@ -16,3 +16,5 @@ export * from './schemas/note.js';
 export * from './schemas/flashcard.js';
 export * from './schemas/study-plan.js';
 export * from './schemas/statistics.js';
+export * from './schemas/search.js';
+export * from './schemas/notification.js';

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Plus, Search, X } from 'lucide-react';
 import {
   ASSIGNMENT_SORT_FIELDS,
@@ -25,6 +25,8 @@ import {
 } from '@/components/ui/select';
 import { AssignmentList } from '@/components/assignments/assignment-list';
 import { AssignmentFormDialog } from '@/components/assignments/assignment-form-dialog';
+import { useInitialSearchParam } from '@/hooks/use-initial-search-param';
+import { SEARCH_PARAM } from '@/lib/entity-routes';
 import { cn } from '@/lib/utils';
 
 const ALL = '__all__';
@@ -33,6 +35,23 @@ const ALL = '__all__';
 export default function AssignmentsPage() {
   const [view, setView] = useState<AssignmentView>('pendentes');
   const [search, setSearch] = useState('');
+
+  /**
+   * Chegada pela busca global (Etapa 19): `/atividades?busca=Lista 3`.
+   *
+   * Além de preencher a busca, força o recorte "todas" — uma atividade já
+   * concluída ou cancelada não apareceria em "pendentes", e a pessoa cairia
+   * numa lista vazia logo depois de ver o item no resultado da busca.
+   */
+  const fromSearch = useInitialSearchParam(SEARCH_PARAM);
+
+  useEffect(() => {
+    if (!fromSearch) return;
+
+    setSearch(fromSearch);
+    setView('todas');
+  }, [fromSearch]);
+
   const [subjectId, setSubjectId] = useState(ALL);
   const [priority, setPriority] = useState(ALL);
   const [sortBy, setSortBy] = useState('dueDate');

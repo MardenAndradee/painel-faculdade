@@ -1,12 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { Menu, RefreshCw } from 'lucide-react';
+import { Menu, RefreshCw, Search } from 'lucide-react';
 import { SidebarNav } from './sidebar-nav';
 import { Breadcrumbs } from './breadcrumbs';
 import { ThemeToggle } from './theme-toggle';
 import { UserMenu } from './user-menu';
+import { CommandPalette } from '@/components/search/command-palette';
+import { NotificationBell } from '@/components/notifications/notification-bell';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { useAutoSync } from '@/hooks/use-auto-sync';
@@ -22,6 +24,7 @@ import { useSyncClassroom } from '@/hooks/use-integrations';
  */
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const pathname = usePathname();
   const { user } = useAuth();
   const sync = useSyncClassroom();
@@ -30,6 +33,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // especifica, porque o shell monta uma vez e persiste enquanto o usuario
   // navega - entao circular entre telas nao dispara nada de novo.
   useAutoSync();
+
+  /**
+   * Atalho global da busca (Etapa 19) - o primeiro do projeto.
+   *
+   * Registrado aqui pelo mesmo motivo do `useAutoSync`: o shell monta uma vez
+   * e sobrevive a navegacao, entao o listener nao e re-registrado a cada tela.
+   * `preventDefault` porque ⌘K/Ctrl+K tem uso nativo em alguns navegadores.
+   */
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key.toLowerCase() !== 'k' || !(event.metaKey || event.ctrlKey)) return;
+
+      event.preventDefault();
+      setSearchOpen((current) => !current);
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   return (
     <div className="flex min-h-dvh">
@@ -59,6 +82,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Breadcrumbs key={pathname} />
 
           <div className="ml-auto flex items-center gap-1">
+            {/* Botao com cara de campo no desktop, so o icone no celular -
+                onde nao ha teclado para o atalho. */}
+            <Button
+              variant="outline"
+              onClick={() => setSearchOpen(true)}
+              aria-label="Buscar"
+              className="hidden h-8 w-56 justify-start gap-2 px-2.5 font-normal text-muted-foreground sm:flex"
+            >
+              <Search className="size-4 shrink-0" aria-hidden />
+              <span className="flex-1 text-left text-[13px]">Buscar...</span>
+              <kbd className="rounded border px-1 text-[10px] leading-4">⌘K</kbd>
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setSearchOpen(true)}
+              aria-label="Buscar"
+              className="sm:hidden"
+            >
+              <Search className="size-5" aria-hidden />
+            </Button>
+
             {/* So aparece pra quem ja conectou o Classroom: sem conta ligada,
                 a sincronizacao nao teria o que fazer. */}
             {user?.hasClassroomAccess && (
@@ -79,6 +125,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </Button>
             )}
 
+            <NotificationBell />
             <ThemeToggle />
             <UserMenu />
           </div>
@@ -86,6 +133,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <main className="flex-1">{children}</main>
       </div>
+
+      <CommandPalette open={searchOpen} onOpenChange={setSearchOpen} />
     </div>
   );
 }
