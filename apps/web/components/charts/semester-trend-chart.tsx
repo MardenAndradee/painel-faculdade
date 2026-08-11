@@ -1,9 +1,10 @@
 'use client';
 
 import {
+  Area,
   CartesianGrid,
+  ComposedChart,
   Line,
-  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -24,6 +25,8 @@ interface SemesterTrendChartProps {
   data: StatisticsResponse['averageBySemester'];
 }
 
+const GRADIENT_ID = 'semester-average-fill';
+
 /**
  * Evolucao por semestre.
  *
@@ -31,6 +34,11 @@ interface SemesterTrendChartProps {
  * medem a mesma coisa em escalas iguais, entao podem dividir o eixo. Se
  * medissem grandezas diferentes, seriam dois graficos: um segundo eixo Y
  * inventaria uma correlacao que os dados nao tem.
+ *
+ * A media do semestre (serie principal, a que o titulo anuncia) ganha um
+ * preenchimento em degrade - um lavado bem fraco da propria cor, nunca um
+ * bloco saturado. O CR continua so uma linha por cima: preencher os dois
+ * criaria duas areas sobrepostas competindo pela mesma leitura.
  */
 export function SemesterTrendChart({ data }: SemesterTrendChartProps) {
   // Só semestres consolidados: um período em andamento ainda não tem média
@@ -57,7 +65,14 @@ export function SemesterTrendChart({ data }: SemesterTrendChartProps) {
       }
     >
       <ResponsiveContainer width="100%" height={220}>
-        <LineChart data={consolidated} margin={{ top: 8, right: 12, bottom: 0, left: -20 }}>
+        <ComposedChart data={consolidated} margin={{ top: 8, right: 12, bottom: 0, left: -20 }}>
+          <defs>
+            <linearGradient id={GRADIENT_ID} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={CHART_COLORS.series1} stopOpacity={0.25} />
+              <stop offset="100%" stopColor={CHART_COLORS.series1} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+
           <CartesianGrid {...GRID_PROPS} />
 
           <XAxis dataKey="label" {...AXIS_PROPS} />
@@ -69,14 +84,29 @@ export function SemesterTrendChart({ data }: SemesterTrendChartProps) {
               active && payload?.length ? (
                 <ChartTooltip
                   title={String(label)}
-                  rows={payload.map((entry) => ({
-                    label: entry.name === 'average' ? 'Média' : 'CR',
-                    value: formatGrade(typeof entry.value === 'number' ? entry.value : null),
-                    color: String(entry.color),
-                  }))}
+                  rows={payload
+                    .filter((entry) => entry.name !== 'averageFill')
+                    .map((entry) => ({
+                      label: entry.name === 'average' ? 'Média' : 'CR',
+                      value: formatGrade(typeof entry.value === 'number' ? entry.value : null),
+                      color: String(entry.color),
+                    }))}
                 />
               ) : null
             }
+          />
+
+          {/* Área só decorativa (o preenchimento sob a média) - a Line abaixo
+              é quem de fato desenha o traço e os pontos interativos. */}
+          <Area
+            type="monotone"
+            dataKey="average"
+            name="averageFill"
+            stroke="none"
+            fill={`url(#${GRADIENT_ID})`}
+            isAnimationActive={false}
+            legendType="none"
+            tooltipType="none"
           />
 
           {/* Linhas de 2px e marcadores de 8px: finas o bastante para não
@@ -102,7 +132,7 @@ export function SemesterTrendChart({ data }: SemesterTrendChartProps) {
             activeDot={{ r: 5 }}
             connectNulls
           />
-        </LineChart>
+        </ComposedChart>
       </ResponsiveContainer>
 
       <ChartLegend

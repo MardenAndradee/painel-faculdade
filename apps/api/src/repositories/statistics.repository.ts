@@ -127,4 +127,12 @@ export const statisticsRepository = {
       select: { id: true, name: true, color: true },
     });
   },
+
+  /** Janelas semanais de disponibilidade declaradas, para a meta de horas. */
+  findWeeklyAvailability(userId: string) {
+    return prisma.studyAvailability.findMany({
+      where: { userId },
+      select: { startMinute: true, endMinute: true },
+    });
+  },
 };

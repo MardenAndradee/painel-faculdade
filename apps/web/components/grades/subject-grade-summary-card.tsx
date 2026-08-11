@@ -8,7 +8,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { STATUS_VARIANT } from './subject-grades-card';
-import { formatGrade } from '@/lib/format';
+import { formatGrade, subjectInitials } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 interface SubjectGradeSummaryCardProps {
@@ -17,19 +17,6 @@ interface SubjectGradeSummaryCardProps {
   onEditGrade: (grade: GradeListItem) => void;
   onConfigure: (subjectId: string) => void;
   onSimulate: (subjectId: string) => void;
-}
-
-/** Sigla curta a partir do nome, quando não há código cadastrado. */
-function subjectInitials(name: string): string {
-  const words = name.trim().split(/\s+/).filter(Boolean);
-
-  if (words.length === 1) return (words[0] ?? '').slice(0, 3).toUpperCase();
-
-  return words
-    .slice(0, 2)
-    .map((word) => word[0])
-    .join('')
-    .toUpperCase();
 }
 
 /** Uma linha de resumo do rodapé, na mesma lógica da projeção do boletim completo. */

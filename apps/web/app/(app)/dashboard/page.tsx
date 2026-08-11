@@ -18,7 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/empty-state';
 import { Greeting } from '@/components/dashboard/greeting';
-import { StatCard } from '@/components/dashboard/stat-card';
+import { StatCard } from '@/components/ui/stat-card';
 import { AssignmentRow } from '@/components/dashboard/assignment-row';
 import { ExamRow } from '@/components/dashboard/exam-row';
 import { MiniCalendar } from '@/components/dashboard/mini-calendar';

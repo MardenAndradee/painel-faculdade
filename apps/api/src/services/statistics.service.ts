@@ -1,6 +1,8 @@
 import type {
   AssignmentBreakdown,
   CategoryValue,
+  GoalProgress,
+  StatisticsGoals,
   StatisticsQuery,
   StatisticsResponse,
   TimePoint,
@@ -97,6 +99,13 @@ function calculateStreak(days: Set<string>, now: Date): number {
   return streak;
 }
 
+/** Percentual sempre entre 0 e 100, mesmo quando a meta e superada. */
+function goalProgress(actual: number, target: number): GoalProgress {
+  const percent = target <= 0 ? 0 : Math.min(100, Math.round((actual / target) * 100));
+
+  return { actual, target, percent };
+}
+
 export const statisticsService = {
   async getStatistics(userId: string, query: StatisticsQuery): Promise<StatisticsResponse> {
     const now = new Date();
@@ -112,6 +121,7 @@ export const statisticsService = {
       semesters,
       masteredCards,
       subjectRefs,
+      weeklyAvailability,
     ] = await Promise.all([
       statisticsRepository.findCompletedStudySessions(userId, from, now),
       statisticsRepository.findReviewDates(userId, from, now),
@@ -121,6 +131,7 @@ export const statisticsService = {
       statisticsRepository.findSemestersWithResults(userId),
       statisticsRepository.countMasteredCards(userId, MASTERED_INTERVAL_DAYS),
       statisticsRepository.findSubjectRefs(userId),
+      statisticsRepository.findWeeklyAvailability(userId),
     ]);
 
     // --- Series temporais ------------------------------------------------------
@@ -256,6 +267,28 @@ export const statisticsService = {
     // O CR geral vem do semestre encerrado mais recente que tenha um.
     const latestCr = [...averageBySemester].reverse().find((item) => item.cr !== null)?.cr ?? null;
 
+    // --- Metas do periodo --------------------------------------------------------------
+    const assignmentsCompleted = onTime + late;
+    const assignmentsTotal =
+      assignmentsCompleted + openAssignments.pending + openAssignments.overdue;
+
+    const weeklyAvailabilityMinutes = weeklyAvailability.reduce(
+      (total, window) => total + Math.max(0, window.endMinute - window.startMinute),
+      0,
+    );
+
+    const goals: StatisticsGoals = {
+      assignments: goalProgress(assignmentsCompleted, assignmentsTotal),
+      // Sem disponibilidade declarada no Cronograma, a meta fica nula em vez
+      // de zero - zero minutos estudados bateria "100%" de uma meta que na
+      // verdade nunca existiu.
+      studyMinutes:
+        weeklyAvailabilityMinutes === 0
+          ? null
+          : goalProgress(studiedMinutes, Math.round((weeklyAvailabilityMinutes * days) / 7)),
+      frequency: goalProgress(activeDays.size, days),
+    };
+
     return {
       period: query.period,
       from: from.toISOString(),
@@ -284,6 +317,7 @@ export const statisticsService = {
       completedByWeek,
       assignmentBreakdown,
       studyMinutesBySubject,
+      goals,
     };
   },
 };

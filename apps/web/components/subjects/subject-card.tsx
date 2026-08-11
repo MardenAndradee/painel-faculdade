@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { formatGrade } from '@/lib/format';
+import { formatGrade, subjectInitials } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 interface SubjectCardProps {
@@ -30,21 +30,6 @@ function averageTone(average: number | null, passingGrade: number): string {
   if (average >= passingGrade - 2) return 'text-status-pending';
 
   return 'text-status-overdue';
-}
-
-/** Sigla curta do chip: usa o código real da disciplina quando existe. */
-function subjectInitials(subject: SubjectListItem): string {
-  if (subject.code) return subject.code.slice(0, 3).toUpperCase();
-
-  const words = subject.name.trim().split(/\s+/).filter(Boolean);
-
-  if (words.length === 1) return (words[0] ?? '').slice(0, 3).toUpperCase();
-
-  return words
-    .slice(0, 2)
-    .map((word) => word[0])
-    .join('')
-    .toUpperCase();
 }
 
 /**
@@ -85,7 +70,7 @@ export function SubjectCard({ subject, onEdit, onArchive, onRestore, onDelete }:
           style={{ backgroundColor: `${subject.color}1f`, color: subject.color }}
           aria-hidden
         >
-          {subjectInitials(subject)}
+          {subjectInitials(subject.name, subject.code)}
         </span>
 
         <div className="min-w-0 flex-1">

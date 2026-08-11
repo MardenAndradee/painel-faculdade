@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { StatCardSkeleton } from './stat-card';
+import { StatCardSkeleton } from '@/components/ui/stat-card';
 
 /**
  * Esqueleto do dashboard.

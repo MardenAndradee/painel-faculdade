@@ -68,6 +68,29 @@ export interface AssignmentBreakdown {
   overdue: number;
 }
 
+/** Uma meta: quanto foi feito, quanto era esperado, e o percentual dos dois. */
+export interface GoalProgress {
+  actual: number;
+  target: number;
+  /** Arredondado, 0 a 100 (nunca passa de 100 mesmo excedendo a meta). */
+  percent: number;
+}
+
+/**
+ * Progresso do periodo em relacao a metas - todas derivadas de dado real do
+ * usuario, nunca de um numero inventado:
+ * - `assignments`: entregues vs total (concluidas + pendentes + vencidas).
+ * - `studyMinutes`: minutos estudados vs a disponibilidade semanal que o
+ *   proprio usuario declarou no Cronograma, multiplicada pelas semanas do
+ *   periodo. Sem nenhuma disponibilidade declarada, a meta e `null`.
+ * - `frequency`: dias com alguma atividade de estudo vs dias do periodo.
+ */
+export interface StatisticsGoals {
+  assignments: GoalProgress;
+  studyMinutes: GoalProgress | null;
+  frequency: GoalProgress;
+}
+
 export interface StatisticsResponse {
   period: StatsPeriod;
   /** Inicio do recorte, para a tela poder rotular o eixo. */
@@ -95,4 +118,6 @@ export interface StatisticsResponse {
 
   /** Minutos estudados por disciplina. */
   studyMinutesBySubject: CategoryValue[];
+
+  goals: StatisticsGoals;
 }

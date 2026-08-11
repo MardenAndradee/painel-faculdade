@@ -94,3 +94,24 @@ export function formatBytes(bytes: number | null): string {
 
   return `${formatted} ${units[exponent]}`;
 }
+
+/**
+ * Sigla curta para o chip de uma disciplina.
+ *
+ * Usa o codigo real quando existe (mais reconhecivel - "MA203"); sem codigo,
+ * deriva das iniciais do nome. Compartilhada entre os cards de disciplina,
+ * de nota e do historico para nao divergir a mesma regra em 3 lugares.
+ */
+export function subjectInitials(name: string, code?: string | null): string {
+  if (code) return code.slice(0, 3).toUpperCase();
+
+  const words = name.trim().split(/\s+/).filter(Boolean);
+
+  if (words.length === 1) return (words[0] ?? '').slice(0, 3).toUpperCase();
+
+  return words
+    .slice(0, 2)
+    .map((word) => word[0])
+    .join('')
+    .toUpperCase();
+}

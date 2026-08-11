@@ -5,7 +5,9 @@ import Link from 'next/link';
 import {
   AlertTriangle,
   Award,
+  CheckCircle2,
   EllipsisVertical,
+  GraduationCap,
   History,
   Lock,
   LockOpen,
@@ -14,7 +16,7 @@ import {
   RefreshCw,
   Trash2,
 } from 'lucide-react';
-import type { HistorySemester, SemesterListItem } from '@painel/shared';
+import type { HistorySemester, HistorySubject, SemesterListItem } from '@painel/shared';
 import { SUBJECT_STATUS_LABELS } from '@painel/shared';
 import {
   useDeleteSemester,
@@ -25,6 +27,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { StatCard, StatCardSkeleton } from '@/components/ui/stat-card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/empty-state';
 import {
@@ -44,7 +47,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { SemesterFormDialog } from '@/components/history/semester-form-dialog';
 import { CloseSemesterDialog } from '@/components/history/close-semester-dialog';
-import { formatDate, formatGrade } from '@/lib/format';
+import { formatDate, formatGrade, subjectInitials } from '@/lib/format';
 
 /** Cor do badge conforme a situação da disciplina. */
 const SUBJECT_VARIANT = {
@@ -53,6 +56,62 @@ const SUBJECT_VARIANT = {
   WITHDRAWN: 'secondary',
   IN_PROGRESS: 'secondary',
 } as const;
+
+/**
+ * Uma disciplina dentro do histórico.
+ *
+ * `compact` tira professor/créditos, a marca "final" e o status - usado na
+ * lista de "sem período", que é um lembrete leve, não o resumo do semestre.
+ */
+function HistorySubjectRow({
+  subject,
+  compact = false,
+}: {
+  subject: HistorySubject;
+  compact?: boolean;
+}) {
+  return (
+    <li className="flex items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-accent/40">
+      <span
+        className="flex size-8 shrink-0 items-center justify-center rounded-[10px] text-[11px] font-semibold"
+        style={{ backgroundColor: `${subject.color}1f`, color: subject.color }}
+        aria-hidden
+      >
+        {subjectInitials(subject.name, subject.code)}
+      </span>
+
+      <div className="min-w-0 flex-1">
+        <Link
+          href={`/disciplinas/${subject.id}`}
+          className="block truncate text-sm transition-colors hover:text-primary"
+        >
+          {subject.name}
+        </Link>
+
+        {!compact && (
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+            {subject.teacherName ?? 'Sem professor'}
+            {subject.credits !== null && ` · ${subject.credits} créditos`}
+          </p>
+        )}
+      </div>
+
+      <div className="shrink-0 text-right">
+        <p className="text-sm font-semibold tabular-nums">{formatGrade(subject.average)}</p>
+        {/* Distingue média congelada de média ainda em cálculo. */}
+        {!compact && subject.isConsolidated && (
+          <p className="text-[10px] text-muted-foreground">final</p>
+        )}
+      </div>
+
+      {!compact && (
+        <Badge variant={SUBJECT_VARIANT[subject.status]} className="shrink-0">
+          {SUBJECT_STATUS_LABELS[subject.status]}
+        </Badge>
+      )}
+    </li>
+  );
+}
 
 function SemesterCard({
   semester,
@@ -72,7 +131,7 @@ function SemesterCard({
   const isFinished = semester.status === 'FINISHED';
 
   return (
-    <Card>
+    <Card className="transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-accent/40">
       <CardHeader>
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -173,40 +232,7 @@ function SemesterCard({
         ) : (
           <ul className="-mx-2 divide-y">
             {semester.subjects.map((subject) => (
-              <li key={subject.id} className="flex items-center gap-3 px-2 py-2">
-                <span
-                  className="h-7 w-1 shrink-0 rounded-full"
-                  style={{ backgroundColor: subject.color }}
-                  aria-hidden
-                />
-
-                <div className="min-w-0 flex-1">
-                  <Link
-                    href={`/disciplinas/${subject.id}`}
-                    className="truncate text-sm transition-colors hover:text-primary"
-                  >
-                    {subject.name}
-                  </Link>
-                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                    {subject.teacherName ?? 'Sem professor'}
-                    {subject.credits !== null && ` · ${subject.credits} créditos`}
-                  </p>
-                </div>
-
-                <div className="shrink-0 text-right">
-                  <p className="text-sm font-semibold tabular-nums">
-                    {formatGrade(subject.average)}
-                  </p>
-                  {/* Distingue média congelada de média ainda em cálculo. */}
-                  {subject.isConsolidated && (
-                    <p className="text-[10px] text-muted-foreground">final</p>
-                  )}
-                </div>
-
-                <Badge variant={SUBJECT_VARIANT[subject.status]} className="shrink-0">
-                  {SUBJECT_STATUS_LABELS[subject.status]}
-                </Badge>
-              </li>
+              <HistorySubjectRow key={subject.id} subject={subject} />
             ))}
           </ul>
         )}
@@ -239,6 +265,7 @@ export default function HistoryPage() {
         </div>
 
         <Button
+          variant="accent"
           onClick={() => {
             setEditing(null);
             setFormOpen(true);
@@ -253,7 +280,11 @@ export default function HistoryPage() {
 
       {isLoading ? (
         <div className="space-y-4">
-          <Skeleton className="h-24 rounded-xl" />
+          <div className="grid gap-4 sm:grid-cols-3">
+            {Array.from({ length: 3 }, (_, index) => (
+              <StatCardSkeleton key={index} />
+            ))}
+          </div>
           <Skeleton className="h-56 rounded-xl" />
           <Skeleton className="h-56 rounded-xl" />
         </div>
@@ -295,42 +326,33 @@ export default function HistoryPage() {
         <>
           {/* Resumo acumulado */}
           <div className="grid gap-4 sm:grid-cols-3">
-            <Card className="p-4">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-medium text-muted-foreground">Coeficiente</p>
-                <Award className="size-4 text-muted-foreground" aria-hidden />
-              </div>
-              <p className="mt-2 text-2xl font-semibold tabular-nums">
-                {formatGrade(data.overallCr)}
-              </p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                {/* O CR é ponderado por créditos — diferente da média do dashboard. */}
-                Ponderado por créditos
-              </p>
-            </Card>
+            <StatCard
+              label="Coeficiente"
+              value={formatGrade(data.overallCr)}
+              icon={Award}
+              hint="Ponderado por créditos"
+              tone="info"
+            />
 
-            <Card className="p-4">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-medium text-muted-foreground">Créditos concluídos</p>
-                <History className="size-4 text-muted-foreground" aria-hidden />
-              </div>
-              <p className="mt-2 text-2xl font-semibold tabular-nums">{data.earnedCredits}</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                de {data.totalCredits} cursados
-              </p>
-            </Card>
+            <StatCard
+              label="Créditos concluídos"
+              value={data.earnedCredits}
+              icon={GraduationCap}
+              hint={`de ${data.totalCredits} cursados`}
+              tone="violet"
+            />
 
-            <Card className="p-4">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-medium text-muted-foreground">Disciplinas</p>
-                <Award className="size-4 text-muted-foreground" aria-hidden />
-              </div>
-              <p className="mt-2 text-2xl font-semibold tabular-nums">{data.approvedSubjects}</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                aprovadas
-                {data.failedSubjects > 0 && ` · ${data.failedSubjects} reprovadas`}
-              </p>
-            </Card>
+            <StatCard
+              label="Disciplinas"
+              value={data.approvedSubjects}
+              icon={CheckCircle2}
+              hint={
+                data.failedSubjects > 0
+                  ? `aprovadas · ${data.failedSubjects} reprovadas`
+                  : 'aprovadas'
+              }
+              tone="success"
+            />
           </div>
 
           <div className="space-y-4">
@@ -352,7 +374,7 @@ export default function HistoryPage() {
 
           {/* Disciplinas sem período: visíveis, mas separadas. */}
           {data.unassignedSubjects.length > 0 && (
-            <Card>
+            <Card className="transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-accent/40">
               <CardHeader>
                 <div>
                   <p className="text-sm font-semibold">Sem período atribuído</p>
@@ -365,22 +387,7 @@ export default function HistoryPage() {
               <CardContent className="pt-2">
                 <ul className="-mx-2 divide-y">
                   {data.unassignedSubjects.map((subject) => (
-                    <li key={subject.id} className="flex items-center gap-3 px-2 py-2">
-                      <span
-                        className="h-7 w-1 shrink-0 rounded-full"
-                        style={{ backgroundColor: subject.color }}
-                        aria-hidden
-                      />
-                      <Link
-                        href={`/disciplinas/${subject.id}`}
-                        className="min-w-0 flex-1 truncate text-sm transition-colors hover:text-primary"
-                      >
-                        {subject.name}
-                      </Link>
-                      <p className="shrink-0 text-sm font-semibold tabular-nums">
-                        {formatGrade(subject.average)}
-                      </p>
-                    </li>
+                    <HistorySubjectRow key={subject.id} subject={subject} compact />
                   ))}
                 </ul>
               </CardContent>

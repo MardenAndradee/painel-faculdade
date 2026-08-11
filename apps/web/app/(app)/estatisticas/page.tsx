@@ -1,15 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import {
-  AlertTriangle,
-  Award,
-  CalendarCheck,
-  ChartColumn,
-  Clock,
-  Layers,
-  RefreshCw,
-} from 'lucide-react';
+import { AlertTriangle, Award, CalendarCheck, Clock, Layers, RefreshCw } from 'lucide-react';
 import {
   STATS_PERIODS,
   STATS_PERIOD_LABELS,
@@ -29,8 +21,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { StudyTimeChart } from '@/components/charts/study-time-chart';
+import { StudyTimeDonutChart } from '@/components/charts/study-time-donut-chart';
 import { SubjectAverageChart } from '@/components/charts/subject-average-chart';
 import { SemesterTrendChart } from '@/components/charts/semester-trend-chart';
+import { SemesterGoalsCard } from '@/components/charts/semester-goals-card';
 import { AssignmentBreakdownChart } from '@/components/charts/assignment-breakdown-chart';
 import { ReviewsChart } from '@/components/charts/reviews-chart';
 import { shortMinutes } from '@/components/charts/chart-primitives';
@@ -184,75 +178,15 @@ export default function StatisticsPage() {
 
           <div className="grid gap-4 lg:grid-cols-2">
             <StudyTimeChart data={data.studyMinutesByDay} />
-            <SubjectAverageChart data={data.averageBySubject} />
+            <StudyTimeDonutChart data={data.studyMinutesBySubject} />
             <SemesterTrendChart data={data.averageBySemester} />
+            <SemesterGoalsCard goals={data.goals} />
+            <SubjectAverageChart data={data.averageBySubject} />
             <AssignmentBreakdownChart data={data.assignmentBreakdown} />
             <ReviewsChart data={data.reviewsByDay} />
-
-            <StudyTimeBySubject data={data.studyMinutesBySubject} />
           </div>
         </div>
       )}
     </div>
-  );
-}
-
-/**
- * Tempo por disciplina.
- *
- * Lista com barras proporcionais em vez de um gráfico Recharts: são poucas
- * linhas, e a lista já entrega comparação de magnitude com o número exato
- * ao lado — um gráfico aqui seria enfeite.
- */
-function StudyTimeBySubject({
-  data,
-}: {
-  data: { id: string; label: string; value: number; color?: string }[];
-}) {
-  const max = Math.max(...data.map((item) => item.value), 1);
-  const total = data.reduce((sum, item) => sum + item.value, 0);
-
-  return (
-    <Card className="min-w-0 p-4 sm:p-5">
-      <div className="min-w-0">
-        <h2 className="text-sm font-medium">Tempo por disciplina</h2>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          {total === 0 ? 'Sem tempo registrado' : `${shortMinutes(total)} distribuídos`}
-        </p>
-      </div>
-
-      {data.length === 0 ? (
-        <EmptyState
-          icon={ChartColumn}
-          title="Nada para mostrar"
-          description="Vincule blocos do cronograma a disciplinas para ver a distribuição."
-        />
-      ) : (
-        <ul className="mt-4 space-y-3">
-          {data.map((item) => (
-            <li key={item.id} className="min-w-0">
-              <div className="flex min-w-0 items-center justify-between gap-2">
-                <span className="min-w-0 truncate text-xs text-muted-foreground">{item.label}</span>
-                <span className="shrink-0 text-xs font-medium tabular-nums">
-                  {shortMinutes(item.value)}
-                </span>
-              </div>
-
-              <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full"
-                  style={{
-                    width: `${(item.value / max) * 100}%`,
-                    backgroundColor: item.color ?? 'var(--muted-foreground)',
-                  }}
-                  role="img"
-                  aria-label={`${item.label}: ${shortMinutes(item.value)}`}
-                />
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Card>
   );
 }

@@ -41,13 +41,13 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: '/disciplinas', label: 'Disciplinas', icon: GraduationCap },
       { href: '/atividades', label: 'Atividades', icon: ListChecks },
       { href: '/provas', label: 'Provas', icon: ClipboardList },
+      { href: '/notas', label: 'Notas', icon: BookOpen },
       { href: '/calendario', label: 'Calendário', icon: CalendarDays },
     ],
   },
   {
     title: 'Acompanhamento',
     items: [
-      { href: '/notas', label: 'Notas', icon: BookOpen },
       { href: '/historico', label: 'Histórico', icon: History },
       { href: '/estatisticas', label: 'Estatísticas', icon: ChartColumn },
     ],

@@ -9,6 +9,8 @@ import { EmptyState } from '@/components/empty-state';
 interface ChartCardProps {
   title: string;
   description?: string;
+  /** Selo opcional ao lado do título (ex.: variação percentual). */
+  badge?: React.ReactNode;
   /** Cabeçalhos da tabela equivalente. */
   tableHeaders: [string, ...string[]];
   /** Linhas da tabela equivalente, já formatadas. */
@@ -30,6 +32,7 @@ interface ChartCardProps {
 export function ChartCard({
   title,
   description,
+  badge,
   tableHeaders,
   tableRows,
   isEmpty = false,
@@ -43,7 +46,10 @@ export function ChartCard({
     <Card className="min-w-0 p-4 sm:p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-sm font-medium">{title}</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-sm font-medium">{title}</h2>
+            {badge}
+          </div>
           {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
         </div>
 
