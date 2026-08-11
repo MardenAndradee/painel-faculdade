@@ -30,6 +30,7 @@ Plataforma web de organização acadêmica para estudantes universitários. Cent
 - [Flashcards](#flashcards)
 - [Cronograma](#cronograma)
 - [Estatísticas](#estatísticas)
+- [Turmas (planejado)](#turmas-planejado)
 - [Banco de dados](#banco-de-dados)
 - [Scripts](#scripts)
 - [Testes](#testes)
@@ -1142,6 +1143,374 @@ O recorte é sempre de um único usuário num intervalo limitado (365 dias no m�
 | --- | --- | --- |
 | GET | `/statistics` | Todos os recortes (`period`: 30, 90, 180 ou 365) |
 
+## Turmas (planejado)
+
+> **Status: plano aprovado, implementação não iniciada.** Nada abaixo existe no
+> código ainda. Nenhuma migração foi criada.
+
+Uma turma é um **grupo de pessoas de um período**, não de uma disciplina:
+"7º Período — 2026.2" reúne Redes, Banco de Dados, IA, Compiladores e TCC.
+Quem cria é o representante da turma, e a partir daí publica atividades,
+provas, eventos, avisos e materiais para todo mundo de uma vez.
+
+### O conflito arquitetural que decide o desenho
+
+O sistema hoje é, sem exceção, **um banco de dados por usuário** — 366
+ocorrências de `userId` nos 20 repositórios. Toda entidade de domínio tem
+`userId` obrigatório com `onDelete: Cascade`, e toda consulta filtra por ele.
+Não existe nenhum dado compartilhado em lugar nenhum.
+
+Três consequências que invalidam a modelagem ingênua:
+
+- **Semestre é por usuário** (`@@unique([userId, year, term])`). "2026.2" do
+  Marden e do João são linhas diferentes. Não há semestre global para a turma
+  referenciar.
+- **Disciplina é por usuário.** "Redes" do Marden tem `GradeConfiguration`,
+  componentes e cor próprios; a do João, outros.
+- **Nota depende da disciplina do usuário.** `Grade.gradeComponentId` aponta
+  para o componente *daquele* usuário.
+
+> Portanto **"prova compartilhada" não pode ser uma linha de `Exam` visível
+> para cinco pessoas**: `Exam.subjectId` aponta para a disciplina de *uma*
+> pessoa, e a nota não teria onde ser pendurada.
+
+### Decisão: publicação + cópia (*fan-out*)
+
+A turma guarda o registro canônico; publicar **cria uma cópia pessoal** para
+cada membro, apontando para a disciplina *dele*, com referência de volta.
+
+| | cópia (escolhida) | linha compartilhada |
+| --- | --- | --- |
+| Consultas existentes a reescrever | **0** | ~366 |
+| Nota individual privada | por construção | exige tabela de overlay |
+| Dashboard, Calendário, Estatísticas, Busca, Notificações | **sem alteração** | todos reescritos |
+| Edição do dono propaga | precisa de propagação | instantânea |
+| Risco de vazamento entre contas | baixo (cada um lê o seu) | alto (todo filtro vira "meu OU da turma") |
+
+O argumento decisivo é que **o projeto já faz isso duas vezes**, e são os dois
+módulos que melhor funcionaram: a sincronização do Classroom copia cada
+`courseWork` para um `Assignment` do usuário (com `@@unique([userId,
+googleCourseWorkId])` garantindo idempotência), e a Etapa 18 copia o modelo de
+notas do semestre para cada disciplina. A Turma é o mesmo problema — uma
+origem publica, muitas cópias pessoais consomem — e o custo conhecido do
+padrão (divergência quando o membro edita a cópia) já tem resposta pronta na
+Etapa 18.
+
+**Restrição de infraestrutura:** o deploy é Vercel + Neon, sem worker nem fila.
+O *fan-out* é **síncrono e limitado** — 40 membros são 40 inserts numa
+transação. Teto explícito de **100 membros por turma**, para que isso nunca
+vire problema por descuido.
+
+### Nomenclatura
+
+**`Class`**, não `Classroom`: `Classroom` já significa *Google Classroom* em
+todo o código (`classroom-sync.service`, `hasClassroomAccess`,
+`classroomLink`). Reusar o termo criaria ambiguidade permanente. Na interface,
+"Turma".
+
+### Modelagem
+
+```
+User ──< ClassMember >── Class ──< ClassSubject
+                           │            │
+                           │            └──< ClassSubjectLink >── Subject (do membro)
+                           ├──< ClassInvite
+                           ├──< ClassAnnouncement
+                           ├──< ClassNote
+                           ├──< ClassMaterial
+                           └──< ClassPost ──< ClassPostCopy >── Assignment/Exam/CalendarEvent
+```
+
+**Turma ↔ Semestre.** A turma carrega `year` + `term` como escalares; cada
+membro guarda **o semestre dele** em `ClassMember.semesterId`. Ao entrar, o
+sistema procura o `Semester` do usuário com aquele ano/período e **cria** se
+não existir — reaproveitando `semesterService.create`, que desde a Etapa 18 já
+nasce com o modelo de notas pessoal.
+
+**Turma ↔ Disciplinas.** Aqui a duplicação é inevitável e correta: a
+disciplina carrega dado privado (configuração de notas, notas lançadas,
+anotações). Dois níveis:
+
+```
+ClassSubject      classId, name, code?, color, teacherName?, credits?, order
+ClassSubjectLink  classSubjectId, userId, subjectId
+                  @@unique([classSubjectId, userId])
+```
+
+Ao entrar, para cada `ClassSubject` o sistema procura uma `Subject` do usuário
+no semestre dele por nome equivalente (mesma normalização da Etapa 18: `trim`
++ minúsculas); achou, vincula; não achou, **cria**.
+
+> **Este é o maior valor isolado da funcionalidade:** entrar numa turma monta o
+> seu semestre. O calouro entra com um código e ganha seis disciplinas
+> configuradas, com N1/N2/N3, em vez de cadastrar tudo à mão. Vale mais que o
+> quadro de avisos.
+
+`subjectId` **não** é único em `ClassSubjectLink`: a mesma disciplina do
+usuário pode ser alvo de vínculos de turmas diferentes.
+
+**Individual × compartilhado.**
+
+```
+ClassPost      classId, classSubjectId?, kind (ASSIGNMENT|EXAM|EVENT), ...
+ClassPostCopy  classPostId, userId, assignmentId?/examId?/calendarEventId?
+               detachedAt?   -- o membro editou; a propagação não o alcança mais
+               @@unique([classPostId, userId])
+```
+
+Na cópia pessoal, um único campo discrimina a origem: `classPostId` anulável
+em `Assignment`, `Exam` e `CalendarEvent`. Não-nulo = selo "Da turma" — mesmo
+padrão do `source: GOOGLE_CLASSROOM` que já existe.
+
+Editar a cópia marca `detachedAt` e a propagação futura pula: o membro mantém
+o dado dele sem que o sistema precise travar campo nenhum.
+
+**As notas continuam privadas por construção**, não por regra lembrada: a
+`Grade` pendura na `Subject` do membro, e a API da turma nunca expõe nota.
+
+**O que é compartilhado de verdade** (sem cópia): avisos, anotações,
+materiais, membros e convites. São superfícies novas, sem estado por usuário,
+e não conflitam com nada.
+
+**Materiais não sofrem *fan-out*** — duplicar 40 vezes um PDF de 8 MB no R2 é
+desperdício direto de dinheiro. `ClassMaterial` é linha única, reaproveitando o
+`StorageProvider`, a validação por *magic bytes* e o `multer` existentes. A
+**única alteração em código existente** de toda a funcionalidade: a
+autorização de `GET /attachments/:id/download` passa de "é dono" para "é dono
+**ou** membro da turma dona".
+
+### Papéis e permissões
+
+**OWNER + MEMBER apenas.** `MODERATOR` dobra a matriz de permissões e a
+interface para um caso que ainda não existe; adicionar depois é aditivo
+(uma linha no enum), remover depois é migração com dado. Fica como FUTURO.
+
+| Ação | OWNER | MEMBER |
+| --- | :---: | :---: |
+| Editar a turma, adicionar/remover disciplinas | ✅ | — |
+| Convidar, remover membros, revogar convite | ✅ | — |
+| Publicar atividade, prova, evento | ✅ | — |
+| Publicar aviso e anotação | ✅ | — |
+| **Publicar material** | ✅ | ✅ |
+| Excluir material | qualquer | só o próprio |
+| Excluir a turma | ✅ | — |
+| Sair da turma | (transfere antes) | ✅ |
+
+Um middleware `classGuard` resolve a associação **antes** de qualquer handler:
+`assertMembership(userId, classId) -> { role } | 404`. **404 e não 403** para
+não-membro — 403 confirma que a turma existe e permite enumeração de ids.
+
+Vetores de vazamento a fechar, cada um virando um teste:
+
+| Vetor | Regra |
+| --- | --- |
+| Download de material por não-membro | autorização por associação, não por posse |
+| Listagem de membros | expõe só `name`, `avatarUrl`, `role` — nunca e-mail |
+| Publicação | valida que `classSubjectId` pertence à turma do `classId` |
+| Propagação | escreve só em membros ativos, só no que a turma criou |
+| Sair da turma | não pode apagar dado de ninguém |
+| Convite | token opaco, **hash SHA-256** no banco (padrão do `RefreshToken`) |
+| Força bruta no código | *rate limit* dedicado em `POST /classes/join` |
+
+### Convites
+
+Turma é **privada, só por convite** — sem busca pública, sem descoberta por
+instituição. Moderação e *spam* são um projeto à parte.
+
+| Mecanismo | Veredito |
+| --- | --- |
+| **Código curto** (`7PER2026`) | ESSENCIAL — é o que se digita num grupo de WhatsApp |
+| **Link** | ESSENCIAL — mesmo token, um toque |
+| **QR Code** | IMPORTANTE — renderização do link, 100% frontend, e o cenário é presencial |
+| Convite direcionado por e-mail | **FUTURO, bloqueado** — ver "E-mail" abaixo |
+
+`ClassInvite` com `tokenHash`, `expiresAt`, `maxUses`, `usedCount`,
+`revokedAt`, `createdBy`. O código curto é um convite de vida longa e
+rotacionável; o link é o mesmo objeto exposto por URL.
+
+### Notificações saem quase de graça
+
+A varredura da Etapa 19 gera notificação a partir de `Assignment` e `Exam`
+**do próprio usuário**. Como o *fan-out* cria exatamente essas linhas para cada
+membro, **"prova da turma daqui a 2 dias" já notifica sem uma linha de código
+nova**. Sobram só os avisos, que precisam de um `NotificationType` novo —
+migração aditiva. É mais um argumento a favor da cópia.
+
+### Classificação das funcionalidades
+
+| Item | Classificação | Justificativa |
+| --- | --- | --- |
+| Turma, membros, convite | **ESSENCIAL** | sem isso não há funcionalidade |
+| Disciplinas + montagem do semestre ao entrar | **ESSENCIAL** | maior valor isolado |
+| Provas, atividades e eventos compartilhados | **ESSENCIAL** | o pedido central |
+| Quadro de avisos | **ESSENCIAL** | é o que faz voltar à turma; barato |
+| Sair / arquivar turma | **ESSENCIAL** | sem saída, turma morta polui |
+| Materiais compartilhados | **IMPORTANTE** | alto valor, módulo já existe |
+| Transferência de OWNER | **IMPORTANTE** | representante muda todo semestre |
+| Notificações da turma | **IMPORTANTE** | quase de graça (acima) |
+| QR Code | **IMPORTANTE** | frontend puro |
+| Anotações da turma | **IMPORTANTE** | Tiptap já existente, **um autor** — nada colaborativo |
+| Fixar aviso | **IMPORTANTE** | um booleano |
+| Comentários em avisos | **FUTURO** | vira moderação, denúncia, notificação — projeto próprio |
+| Feed | **FUTURO** | ou tabela de eventos, ou união cara de 5 tabelas; a Visão geral entrega 80% |
+| Enquetes | **FUTURO** | valor real (marcar data de prova), mas é um módulo inteiro |
+| Estatísticas da turma | **FUTURO, com ressalva** | ⚠️ média de turma **revela nota individual** em turma pequena; exige mínimo de amostra |
+| MODERATOR | **FUTURO** | dobra a matriz de permissões sem demanda |
+| Reações | **DESNECESSÁRIO** | ruído social num app de organização |
+| Checklist / tarefas compartilhadas | **DESNECESSÁRIO** | é a atividade compartilhada com outro nome |
+
+### Layout
+
+Cinco abas, e não oito. "Turmas" entra na seção Geral da sidebar.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  ▌ 7º Período — 2026.2          Sistemas de Informação  │
+│    6 disciplinas · 24 membros              [Convidar ▾] │
+├─────────────────────────────────────────────────────────┤
+│  Visão geral │ Mural │ Disciplinas │ Materiais │ Membros │
+└─────────────────────────────────────────────────────────┘
+
+┌── Próximos 7 dias ──────────┐  ┌── Avisos fixados ──────┐
+│ 🔴 Prova N1 — Redes   sex   │  │ 📌 Prova de Redes      │
+│ 🟡 Lista 3 — BD       dom   │  │    mudou para sexta    │
+└─────────────────────────────┘  └────────────────────────┘
+┌── Disciplinas ──────────────────────────────────────────┐
+│ [Redes] [Banco de Dados] [IA] [Compiladores] [TCC]      │
+└─────────────────────────────────────────────────────────┘
+```
+
+**"Atividades", "Provas" e "Calendário" não viram abas.** Elas já existem como
+telas do app, e o *fan-out* faz o item da turma aparecer lá naturalmente com o
+selo "Da turma". Duplicar essas listas dentro da turma criaria duas telas de
+provas que precisam concordar — exatamente o bug de médias divergentes que a
+Etapa 17 existiu para consertar. A Visão geral mostra o recorte próximo; o
+resto é o módulo normal, filtrável por turma.
+
+**"Mural" reúne avisos e anotações** — são a mesma coisa em dois formatos
+(efêmero e duradouro), e duas abas para dois tipos de texto é navegação
+desperdiçada.
+
+**Convidar** abre um popover com código, link e QR juntos: três formas do mesmo
+convite, não três funcionalidades.
+
+Como uma pessoa pode estar em **várias turmas no mesmo semestre** ("7º Período"
++ "Grupo de TCC"), as listagens de Atividades e Provas ganham um filtro por
+turma.
+
+### Plano por etapas
+
+#### Etapa 20 — Fundação: turma, membros, convite, disciplinas
+
+**Objetivo.** Criar turma, entrar por código/link, e ter semestre e disciplinas
+montados automaticamente. Nenhuma publicação ainda — esta etapa sozinha já tem
+valor de uso.
+
+**Banco** (aditivo; nada existente muda): `Class`, `ClassMember`,
+`ClassInvite`, `ClassSubject`, `ClassSubjectLink`; enums `ClassRole` e
+`ClassMemberStatus`.
+
+**Backend.** `class.repository`, `class.service`, `class-membership.service` —
+com a montagem de semestre/disciplinas como **função pura testável**, no padrão
+de `grade-template-merge`. Middleware `classGuard`; *rate limit* dedicado no
+join.
+
+**Frontend.** `/turmas`; `/turmas/[id]` com Visão geral, Disciplinas e Membros;
+diálogo de criação; popover de convite (código + link + QR); `/turmas/entrar/[token]`.
+
+**Aceite.**
+- Entrar numa turma com 6 disciplinas cria/vincula 6 `Subject` do membro, com o modelo de notas dele.
+- Quem já tem "Redes de Computadores" é **vinculado**, não ganha duplicata.
+- Não-membro recebe **404** em qualquer rota da turma.
+- Convite revogado, expirado e esgotado recusam com mensagens distintas.
+- Sair da turma **não apaga** disciplina nem nota.
+
+**Testes.** Unidade da montagem (casamento por nome, acentos, caixa, duplicata,
+disciplina arquivada), validados por mutação. Roteiro E2E com **dois usuários
+reais**, verificando que B não enxerga nada de A.
+
+#### Etapa 21 — Publicação compartilhada (o *fan-out*)
+
+**Objetivo.** O dono publica atividade, prova e evento; aparecem nos módulos
+pessoais de cada membro com selo "Da turma".
+
+**Banco.** `ClassPost`, `ClassPostCopy`; `classPostId` anulável em
+`Assignment`, `Exam`, `CalendarEvent`. Aditivo.
+
+**Backend.** `class-post.service`: publicação, propagação de edição (pulando
+`detachedAt`), despublicação, *fan-out* retroativo para quem entra depois.
+
+**Frontend.** Formulários de publicação; selo "Da turma"; filtro por turma nas
+listagens; Visão geral com os próximos 7 dias.
+
+**Aceite.**
+- Publicar prova em turma de N membros cria N cópias, cada uma na disciplina **do membro**.
+- Cada membro lança **sua** nota; nenhum vê a do outro.
+- Editar a data no post atualiza as cópias não divergentes; a divergente permanece.
+- Quem entra depois recebe as publicações vigentes.
+- Excluir o post remove as cópias.
+- A prova aparece em Dashboard, Calendário e Provas **sem alteração nesses módulos**.
+
+**Testes.** Unidade da propagação (pura), validada por mutação. E2E com 3
+usuários cobrindo divergência, entrada tardia e exclusão.
+
+#### Etapa 22 — Mural: avisos e anotações
+
+**Banco.** `ClassAnnouncement` (fixado, importante), `ClassNote` (Tiptap, mesmo
+formato do `Note`), novo `NotificationType.CLASS_ANNOUNCEMENT`.
+
+**Aceite.** Membro não edita nem apaga aviso alheio — verificado chamando a
+rota diretamente, não pela interface. Fixado aparece primeiro. Aviso notifica
+todos menos o autor.
+
+#### Etapa 23 — Materiais compartilhados
+
+**Banco.** `ClassMaterial`. Sem *fan-out* — blob único.
+
+**Backend.** Reaproveita `StorageProvider` e validação por *magic bytes*.
+**Membro pode publicar material** e excluir o próprio; o dono exclui qualquer
+um. Única alteração em código existente: autorização do download.
+
+**Aceite.** Não-membro recebe 404 no download mesmo com a URL exata. Membro não
+consegue excluir material de outro. Cota de armazenamento contabiliza a turma,
+não o membro.
+
+#### Etapa 24 — Refinamentos
+
+Transferência de OWNER; arquivar turma; reconciliação de vínculos quando o
+membro renomeia ou apaga uma disciplina; painel de saúde da turma para o dono.
+
+#### Etapa 25 — E-mail (bloqueada: exige plano próprio)
+
+Notificações por e-mail são desejadas, mas **o projeto não tem envio de e-mail**
+— nenhum provedor, nenhum domínio verificado, nenhuma preferência de
+descadastro. Isso não é um detalhe da Turma: é infraestrutura nova que afeta o
+sistema inteiro e precisa do seu próprio plano antes de qualquer código, cobrindo
+no mínimo:
+
+- provedor e custo (Resend, SES, Postmark) e domínio com SPF/DKIM/DMARC;
+- fila ou envio síncrono — lembrando que **não há worker no deploy atual**;
+- preferências por usuário e descadastro (exigência legal);
+- reputação de remetente: *bounce*, reclamação de spam, supressão;
+- quais eventos merecem e-mail — avisar tudo treina a pessoa a ignorar.
+
+Até lá, a notificação in-app da Etapa 19 cobre os avisos da turma.
+
+#### Etapa 26 — Futuro (não detalhar agora)
+
+Feed, comentários, enquetes, MODERATOR, estatísticas da turma com mínimo de
+amostra.
+
+### Decisões já tomadas
+
+| Pergunta | Decisão |
+| --- | --- |
+| Descoberta de turma | **Só por convite.** Sem busca pública |
+| Ao sair da turma | **Mantém tudo** — as cópias viram itens pessoais, `classPostId` zerado. A nota lançada é do aluno |
+| Quem pode publicar | **Dono publica tudo; membro publica materiais** |
+| Várias turmas no mesmo semestre | **Sim** — o modelo suporta; as listagens ganham filtro por turma |
+| E-mail | **Desejado, pendente** — exige plano próprio (Etapa 25) |
+
 ## Banco de dados
 
 ### ⚠️ `grade_configuration_components` não é segura em banco com notas
@@ -1477,7 +1846,13 @@ O Husky roda `lint-staged` no pre-commit: ESLint e Prettier nos arquivos em stag
 | 15 | Estatísticas | ✅ |
 | 16 | Testes, refatoração, documentação, deploy | ✅ |
 | 17 | Notas configuráveis (componentes de avaliação, Simulação) | ✅ |
-| 18 | Modelo de semestre sólido (padrão N1/N2/N3, propagação para disciplinas) | 🚧 planejado |
-| 19 | Busca global (⌘K) e central de notificações | 🚧 planejado |
+| 18 | Modelo de semestre sólido (padrão N1/N2/N3, propagação para disciplinas) | ✅ |
+| 19 | Busca global (⌘K) e central de notificações | ✅ |
+| 20 | Turmas: fundação (turma, membros, convite, disciplinas) | 🚧 planejado |
+| 21 | Turmas: publicação compartilhada (atividades, provas, eventos) | 🚧 planejado |
+| 22 | Turmas: mural (avisos e anotações) | 🚧 planejado |
+| 23 | Turmas: materiais compartilhados | 🚧 planejado |
+| 24 | Turmas: refinamentos (transferência de dono, arquivamento) | 🚧 planejado |
+| 25 | Envio de e-mail | ⛔ bloqueada — exige plano próprio |
 
 Contribuições: veja [CONTRIBUTING.md](CONTRIBUTING.md).
