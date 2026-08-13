@@ -67,8 +67,6 @@ const DEFAULTS: Record<ClassPostKind, ClassPostFormValues> = {
     description: '',
     classSubjectId: '',
     date: '',
-    durationMinutes: undefined,
-    room: '',
   },
   EVENT: {
     kind: 'EVENT',
@@ -140,8 +138,6 @@ export function ClassPostFormDialog({
   const examErrors = errors as {
     classSubjectId?: { message?: string };
     date?: { message?: string };
-    durationMinutes?: { message?: string };
-    room?: { message?: string };
   };
   const eventErrors = errors as {
     startsAt?: { message?: string };
@@ -229,34 +225,20 @@ export function ClassPostFormDialog({
           </FormField>
 
           {kind === 'EXAM' && (
-            <div className="grid gap-4 sm:grid-cols-2">
-              <FormField label="Data" error={examErrors.date?.message} required>
-                {(field) => (
-                  <Controller
-                    control={control}
-                    name="date"
-                    render={({ field: controlled }) => (
-                      <DatePicker
-                        {...field}
-                        value={controlled.value ?? ''}
-                        onChange={controlled.onChange}
-                      />
-                    )}
-                  />
-                )}
-              </FormField>
-
-              <FormField label="Duração (min)" error={examErrors.durationMinutes?.message}>
-                {(field) => (
-                  <Input {...field} type="number" min={0} {...register('durationMinutes')} />
-                )}
-              </FormField>
-            </div>
-          )}
-
-          {kind === 'EXAM' && (
-            <FormField label="Sala" error={examErrors.room?.message}>
-              {(field) => <Input {...field} {...register('room')} placeholder="Sala 4" />}
+            <FormField label="Data" error={examErrors.date?.message} required>
+              {(field) => (
+                <Controller
+                  control={control}
+                  name="date"
+                  render={({ field: controlled }) => (
+                    <DatePicker
+                      {...field}
+                      value={controlled.value ?? ''}
+                      onChange={controlled.onChange}
+                    />
+                  )}
+                />
+              )}
             </FormField>
           )}
 

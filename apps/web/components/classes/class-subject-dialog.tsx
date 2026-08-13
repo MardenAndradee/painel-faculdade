@@ -11,7 +11,7 @@ import {
   type ClassSubjectItem,
   type SubjectListItem,
 } from '@painel/shared';
-import { useAddClassSubject, useUpdateClassSubject } from '@/hooks/use-classes';
+import { useAddClassSubject, useClass, useUpdateClassSubject } from '@/hooks/use-classes';
 import { useSubjects } from '@/hooks/use-subjects';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -68,6 +68,10 @@ export function ClassSubjectDialog({
   const [addingExisting, setAddingExisting] = useState(false);
 
   const { data: mySubjects, isLoading: mySubjectsLoading } = useSubjects({ page: 1, perPage: 100 });
+  // Disciplinas pessoais já vinculadas a QUALQUER molde desta turma - somem
+  // do seletor pra não virar um segundo vínculo pra mesma disciplina.
+  const { data: classItem } = useClass(classId);
+  const alreadyLinkedIds = new Set(classItem?.myLinkedSubjectIds ?? []);
 
   const {
     register,
@@ -123,7 +127,9 @@ export function ClassSubjectDialog({
     });
   };
 
-  const availableSubjects = mySubjects?.data ?? [];
+  const availableSubjects = (mySubjects?.data ?? []).filter(
+    (item) => !alreadyLinkedIds.has(item.id),
+  );
   const allExistingSelected =
     availableSubjects.length > 0 &&
     availableSubjects.every((item) => selectedExisting.has(item.id));
@@ -208,7 +214,9 @@ export function ClassSubjectDialog({
                 </div>
               ) : availableSubjects.length === 0 ? (
                 <p className="py-4 text-center text-sm text-muted-foreground">
-                  Você ainda não tem nenhuma disciplina cadastrada.
+                  {(mySubjects?.data.length ?? 0) === 0
+                    ? 'Você ainda não tem nenhuma disciplina cadastrada.'
+                    : 'Todas as suas disciplinas já estão vinculadas a esta turma.'}
                 </p>
               ) : (
                 availableSubjects.map((item) => (

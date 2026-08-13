@@ -146,6 +146,10 @@ export interface ClassDetail {
   createdAt: string;
   updatedAt: string;
   subjects: ClassSubjectItem[];
+  /** Ids das disciplinas PESSOAIS do usuário atual já vinculadas a alguma
+   * disciplina-molde desta turma - usado pra não oferecer de novo no
+   * seletor "já tenho essa disciplina" (evita vínculo duplicado). */
+  myLinkedSubjectIds: string[];
 }
 
 /** Convite recem-criado: única vez em que o token puro trafega. */

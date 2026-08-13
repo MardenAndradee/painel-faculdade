@@ -80,7 +80,7 @@ function toSubjectItem(row: ClassSubjectRow): ClassSubjectItem {
   };
 }
 
-function toDetail(role: ClassRole, row: ClassDetailRow): ClassDetail {
+function toDetail(role: ClassRole, row: ClassDetailRow, myLinkedSubjectIds: string[]): ClassDetail {
   return {
     id: row.id,
     name: row.name,
@@ -94,6 +94,7 @@ function toDetail(role: ClassRole, row: ClassDetailRow): ClassDetail {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     subjects: row.subjects.map(toSubjectItem),
+    myLinkedSubjectIds,
   };
 }
 
@@ -144,11 +145,14 @@ async function assertNotArchived(classId: string): Promise<void> {
 /**
  * Vincula direto por id em vez de casar por nome: o dono escolheu uma das
  * PRÓPRIAS disciplinas já existentes na hora de montar o molde, então não há
- * erro de digitação possível - só confere que a disciplina é mesmo dele
- * antes de criar o vínculo.
+ * erro de digitação possível - só confere que a disciplina é mesmo dele e que
+ * ela ainda não está vinculada a NENHUMA outra disciplina-molde desta mesma
+ * turma antes de criar o vínculo - sem essa segunda checagem, escolher a
+ * mesma disciplina pessoal duas vezes criaria dois moldes apontando pra ela.
  */
 async function linkExistingSubject(
   ownerId: string,
+  classId: string,
   classSubjectId: string,
   ownerMemberId: string,
   existingSubjectId: string,
@@ -156,6 +160,12 @@ async function linkExistingSubject(
   const subject = await subjectRepository.findById(ownerId, existingSubjectId);
 
   if (!subject) throw AppError.badRequest('Disciplina inválida');
+
+  const alreadyLinked = await classRepository.listMyLinkedSubjectIds(classId, ownerId);
+
+  if (alreadyLinked.includes(existingSubjectId)) {
+    throw AppError.conflict('Esta disciplina já está vinculada a esta turma');
+  }
 
   await classRepository.createLink(classSubjectId, ownerId, existingSubjectId, ownerMemberId);
 }
@@ -176,7 +186,9 @@ export const classService = {
 
     if (!row) throw AppError.notFound('Turma');
 
-    return toDetail(role, row);
+    const myLinkedSubjectIds = await classRepository.listMyLinkedSubjectIds(classId, userId);
+
+    return toDetail(role, row, myLinkedSubjectIds);
   },
 
   /**
@@ -209,13 +221,15 @@ export const classService = {
       const existingSubjectId = input.subjects[index]?.existingSubjectId;
 
       if (existingSubjectId) {
-        await linkExistingSubject(ownerId, subject.id, ownerMember!.id, existingSubjectId);
+        await linkExistingSubject(ownerId, row.id, subject.id, ownerMember!.id, existingSubjectId);
       } else {
         await ensureMemberSubjectLink(ownerId, semester.id, ownerMember!.id, subject);
       }
     }
 
-    return toDetail('OWNER', row);
+    const myLinkedSubjectIds = await classRepository.listMyLinkedSubjectIds(row.id, ownerId);
+
+    return toDetail('OWNER', row, myLinkedSubjectIds);
   },
 
   async update(userId: string, classId: string, input: UpdateClassInput): Promise<ClassDetail> {
@@ -230,7 +244,9 @@ export const classService = {
       ...(input.color !== undefined ? { color: input.color } : {}),
     });
 
-    return toDetail(role, row);
+    const myLinkedSubjectIds = await classRepository.listMyLinkedSubjectIds(classId, userId);
+
+    return toDetail(role, row, myLinkedSubjectIds);
   },
 
   async listMembers(userId: string, classId: string): Promise<ClassMemberItem[]> {
@@ -370,7 +386,7 @@ export const classService = {
     if (input.existingSubjectId) {
       const ownerMember = await classRepository.findMemberRow(classId, userId);
 
-      await linkExistingSubject(userId, row.id, ownerMember!.id, input.existingSubjectId);
+      await linkExistingSubject(userId, classId, row.id, ownerMember!.id, input.existingSubjectId);
     }
 
     const members = await classRepository.listActiveMembersWithSemester(classId);

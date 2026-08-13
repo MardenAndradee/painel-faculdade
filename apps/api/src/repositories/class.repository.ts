@@ -451,6 +451,21 @@ export const classRepository = {
     });
   },
 
+  /**
+   * Disciplinas PESSOAIS do usuário já vinculadas a QUALQUER disciplina-molde
+   * desta turma - não importa qual. Usado pra não oferecer, no seletor "já
+   * tenho essa disciplina", algo que viraria um segundo vínculo pra mesma
+   * disciplina dentro da mesma turma (duplicidade, não erro de nome).
+   */
+  async listMyLinkedSubjectIds(classId: string, userId: string): Promise<string[]> {
+    const rows = await prisma.classSubjectLink.findMany({
+      where: { userId, classSubject: { classId } },
+      select: { subjectId: true },
+    });
+
+    return rows.map((row) => row.subjectId);
+  },
+
   // --- Arquivamento (Etapa 24) -----------------------------------------------------
 
   async findArchivedAt(classId: string): Promise<Date | null> {

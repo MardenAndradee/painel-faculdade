@@ -1688,7 +1688,14 @@ sem depender do nome bater. Vale só para o dono (é ele quem monta o molde);
 os demais membros continuam pelo casamento por nome de sempre ao entrar, sem
 mudança nenhuma nesse fluxo.
 
-**Outros três ajustes do mesmo lote (feedback de uso real):**
+A lista de "próprias disciplinas" **exclui as que já estão vinculadas a
+QUALQUER molde desta turma** (`ClassDetail.myLinkedSubjectIds`) — sem isso,
+nada impedia escolher a mesma disciplina pessoal duas vezes e criar dois
+moldes apontando pra ela. O backend também recusa (`409`) uma tentativa de
+vincular por id uma disciplina já usada nesta turma, mesmo passando por fora
+da interface.
+
+**Outros quatro ajustes do mesmo lote (feedback de uso real):**
 - **"Semestre", não "Período"** no formulário de criação da turma — o campo é
   1 ou 2 (metade do ano civil) e dirige a mesma lógica de datas do `Semester`
   pessoal (Etapa 18); "período" no vocabulário do curso é cumulativo
@@ -1703,6 +1710,9 @@ mudança nenhuma nesse fluxo.
   existindo no modelo (e ainda entra no cálculo de CR de quem já tinha
   preenchido), só não é mais pedido nesse formulário; quem quiser, edita
   depois na disciplina pessoal.
+- **Duração e sala saíram do formulário de publicar prova na turma** — os
+  campos continuam opcionais no schema (`durationMinutes`/`room`), só não
+  são mais pedidos nessa tela; ficam `null` na prova publicada.
 
 `subjectId` **não** é único em `ClassSubjectLink`: a mesma disciplina do
 usuário pode ser alvo de vínculos de turmas diferentes.
