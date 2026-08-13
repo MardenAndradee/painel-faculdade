@@ -3,7 +3,6 @@ import { extname } from 'node:path';
 import type { Readable } from 'node:stream';
 import {
   buildPaginationMeta,
-  EXTENSION_TO_TYPE,
   type AttachmentListItem,
   type AttachmentQuery,
   type AttachmentSource,
@@ -25,85 +24,16 @@ import { assignmentRepository } from '../repositories/assignment.repository.js';
 import { examRepository } from '../repositories/exam.repository.js';
 import { storage } from '../storage/index.js';
 import { contentMatchesExtension } from '../storage/file-signature.js';
+import {
+  buildStorageKey,
+  isPreviewable,
+  MIME_BY_EXTENSION,
+  sanitizeDisplayName,
+  typeFromExtension,
+} from '../utils/attachment-content.js';
 import { AppError } from '../utils/app-error.js';
 
 /** Regra de negocio de materiais. */
-
-/**
- * Tipos que o navegador exibe com seguranca dentro da aplicacao.
- *
- * SVG fica de fora de proposito: e XML e pode carregar script, entao exibi-lo
- * inline no nosso dominio seria XSS armazenado. SVG continua aceito no upload,
- * mas sempre desce como download.
- */
-const PREVIEWABLE_MIME_TYPES = new Set([
-  'application/pdf',
-  'image/png',
-  'image/jpeg',
-  'image/gif',
-  'image/webp',
-]);
-
-/** MIME confiavel derivado da extensao, ja que o do cliente nao vale nada. */
-const MIME_BY_EXTENSION: Record<string, string> = {
-  '.pdf': 'application/pdf',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif',
-  '.webp': 'image/webp',
-  '.svg': 'image/svg+xml',
-  '.zip': 'application/zip',
-  '.ppt': 'application/vnd.ms-powerpoint',
-  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  '.doc': 'application/msword',
-  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  '.xls': 'application/vnd.ms-excel',
-  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  '.odt': 'application/vnd.oasis.opendocument.text',
-  '.ods': 'application/vnd.oasis.opendocument.spreadsheet',
-  '.odp': 'application/vnd.oasis.opendocument.presentation',
-  '.txt': 'text/plain',
-  '.md': 'text/markdown',
-  '.csv': 'text/csv',
-  '.rtf': 'application/rtf',
-};
-
-/**
- * Limpa o nome exibido.
- *
- * Este valor NUNCA vira caminho em disco - a chave de storage e gerada por nos.
- * A sanitizacao aqui serve para o cabecalho `Content-Disposition` e para a
- * interface: barras e caracteres de controle quebrariam o header e poderiam
- * ser usados para forjar um segundo cabecalho.
- */
-function sanitizeDisplayName(name: string): string {
-  /* A regex fica numa constante para que o Prettier nao quebre a linha e
-     desloque o eslint-disable-next-line para longe dela. */
-  // eslint-disable-next-line no-control-regex -- barrar controle e o objetivo
-  const forbidden = /[\u0000-\u001f\u007f"\\/]+/g;
-
-  const cleaned = name.replace(forbidden, ' ').replace(/\s+/g, ' ').trim();
-
-  return cleaned.slice(0, 200) || 'arquivo';
-}
-
-/** Chave no storage: prefixo por usuario, particao por mes, nome aleatorio. */
-function buildStorageKey(userId: string, extension: string): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-
-  return `${userId}/${year}/${month}/${randomUUID()}${extension}`;
-}
-
-function typeFromExtension(extension: string): AttachmentType {
-  return EXTENSION_TO_TYPE[extension.toLowerCase()] ?? 'OTHER';
-}
-
-function isPreviewable(mimeType: string | null): boolean {
-  return mimeType !== null && PREVIEWABLE_MIME_TYPES.has(mimeType);
-}
 
 function toListItem(row: AttachmentListRow): AttachmentListItem {
   return {

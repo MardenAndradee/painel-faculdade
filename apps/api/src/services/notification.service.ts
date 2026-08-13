@@ -288,4 +288,31 @@ export const notificationService = {
       });
     }
   },
+
+  /**
+   * Avisa o mural de uma turma (Etapa 22): todo membro ativo, menos quem
+   * publicou. `entityId` é o `classId`, não o do aviso - não há tela de
+   * aviso isolado, o clique leva ao Mural da turma (mesmo padrão de EXAM
+   * levando à listagem, em vez de uma prova especifica).
+   */
+  async notifyClassAnnouncement(
+    authorId: string,
+    className: string,
+    classId: string,
+    title: string,
+    memberUserIds: string[],
+  ): Promise<void> {
+    const recipients = memberUserIds.filter((id) => id !== authorId);
+
+    if (recipients.length === 0) return;
+
+    await notificationRepository.createMany(recipients, {
+      type: 'CLASS_ANNOUNCEMENT',
+      priority: 'INFO',
+      title,
+      message: `Novo aviso em ${className}`,
+      entityType: 'CLASS_ANNOUNCEMENT',
+      entityId: classId,
+    });
+  },
 };

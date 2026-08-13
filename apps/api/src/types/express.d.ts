@@ -6,6 +6,8 @@
  * helper `getAuthUser`, que estreita o tipo e falha alto caso o middleware
  * tenha sido esquecido na rota.
  */
+import type { ClassRole } from '@painel/shared';
+
 declare global {
   namespace Express {
     interface Request {
@@ -13,6 +15,8 @@ declare global {
         id: string;
         email: string;
       };
+      /** Populado pelo `classGuard` (Etapa 20) para rotas de turma. */
+      classRole?: ClassRole;
     }
   }
 }

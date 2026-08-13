@@ -15,6 +15,9 @@ const detailSelect = {
   createdAt: true,
   updatedAt: true,
   subject: { select: { id: true, name: true, color: true } },
+  // Selo "Da turma" (Etapa 21) - nulo para eventos manuais/Google Calendar.
+  classPostId: true,
+  classPost: { select: { class: { select: { id: true, name: true } } } },
 } satisfies Prisma.CalendarEventSelect;
 
 export type CalendarEventRow = Prisma.CalendarEventGetPayload<{ select: typeof detailSelect }>;

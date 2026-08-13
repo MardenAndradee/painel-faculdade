@@ -8,6 +8,7 @@ import {
 } from '../enums.js';
 import { booleanQueryParam, paginationQuerySchema, parseLocalDate } from '../common.js';
 import type { SubjectRef } from './dashboard.js';
+import type { ClassPostBadge } from './class-post.js';
 
 /**
  * Contrato de atividades.
@@ -131,6 +132,8 @@ export const assignmentQuerySchema = paginationQuerySchema.extend({
   search: z.string().trim().max(200).optional(),
   view: z.enum(ASSIGNMENT_VIEWS).default('todas'),
   subjectId: z.string().min(1).optional(),
+  /** Recorta pela turma que publicou (Etapa 21) - só o que tem selo "Da turma". */
+  classId: z.string().min(1).optional(),
   priority: z.enum(PRIORITY).optional(),
   status: z.enum(ASSIGNMENT_STATUS).optional(),
   /** Inclui atividades sem prazo definido nos recortes por data. */
@@ -155,6 +158,8 @@ export interface AssignmentListItem {
   maxPoints: number | null;
   classroomLink: string | null;
   subject: SubjectRef | null;
+  /** Não-nulo quando veio de uma publicação de turma (Etapa 21) - selo "Da turma". */
+  fromClass: ClassPostBadge | null;
   /** Dias ate o prazo: negativo se atrasada, 0 se vence hoje, null sem prazo. */
   daysUntilDue: number | null;
   /** Verdadeiro apenas para atividades em aberto com prazo vencido. */

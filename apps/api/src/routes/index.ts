@@ -16,6 +16,7 @@ import { statisticsRoutes } from './statistics.routes.js';
 import { noteRoutes } from './note.routes.js';
 import { searchRoutes } from './search.routes.js';
 import { notificationRoutes } from './notification.routes.js';
+import { classRoutes } from './class.routes.js';
 
 /**
  * Registro central de rotas. Cada modulo entregue nas proximas etapas
@@ -40,3 +41,4 @@ routes.use(statisticsRoutes);
 routes.use(noteRoutes);
 routes.use(searchRoutes);
 routes.use(notificationRoutes);
+routes.use(classRoutes);

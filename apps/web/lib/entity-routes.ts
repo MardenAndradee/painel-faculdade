@@ -58,6 +58,9 @@ export function notificationHref(
   if (entityType === 'SUBJECT' && entityId) return `/disciplinas/${entityId}`;
   if (entityType === 'EXAM') return '/provas';
   if (entityType === 'CALENDAR_EVENT') return '/calendario';
+  // `entityId` é o classId, não o do aviso - não há tela de aviso isolado,
+  // o clique leva ao Mural da turma (aba padrão ao abrir `/turmas/:id`).
+  if (entityType === 'CLASS_ANNOUNCEMENT' && entityId) return `/turmas/${entityId}`;
 
   return '/atividades';
 }

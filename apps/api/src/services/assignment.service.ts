@@ -14,9 +14,19 @@ import {
   type AssignmentListRow,
 } from '../repositories/assignment.repository.js';
 import { subjectRepository } from '../repositories/subject.repository.js';
+import { classPostRepository } from '../repositories/class-post.repository.js';
 import { AppError } from '../utils/app-error.js';
 import { attachmentService } from './attachment.service.js';
 import { emptyToNull } from '../utils/text.js';
+
+/** Campos que pertencem à publicação de origem (Etapa 21) - editá-los desvincula a cópia. */
+const CLASS_POST_MANAGED_FIELDS = [
+  'title',
+  'description',
+  'dueDate',
+  'priority',
+  'maxPoints',
+] as const;
 
 /** Regra de negocio de atividades. */
 
@@ -52,6 +62,9 @@ function toListItem(row: AssignmentListRow, now: Date): AssignmentListItem {
     maxPoints: row.maxPoints,
     classroomLink: row.classroomLink,
     subject: row.subject,
+    fromClass: row.classPostId
+      ? { classId: row.classPost!.class.id, className: row.classPost!.class.name }
+      : null,
     daysUntilDue: row.dueDate ? daysBetween(now, row.dueDate) : null,
     // Concluida com prazo vencido nao e atrasada: ja foi entregue.
     isOverdue: isOpen && row.dueDate !== null && row.dueDate < now,
@@ -78,6 +91,7 @@ export const assignmentService = {
       view: query.view,
       search: query.search,
       subjectId: query.subjectId,
+      classId: query.classId,
       priority: query.priority,
       status: query.status,
       includeUndated: query.includeUndated,
@@ -189,6 +203,16 @@ export const assignmentService = {
     const row = await assignmentRepository.update(userId, id, data);
 
     if (!row) throw AppError.notFound('Atividade');
+
+    // Editar um campo que a publicação da turma controla desvincula a cópia
+    // (Etapa 21): a propagação futura de uma edição do dono passa a pular
+    // esta atividade, que agora é definitivamente do membro.
+    if (
+      current.classPostId &&
+      CLASS_POST_MANAGED_FIELDS.some((field) => input[field] !== undefined)
+    ) {
+      await classPostRepository.markDetached(current.classPostId, userId);
+    }
 
     return toListItem(row, new Date());
   },

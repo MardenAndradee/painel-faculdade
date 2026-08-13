@@ -8,6 +8,7 @@ import {
   NotebookPen,
   Pencil,
   Trash2,
+  Users,
 } from 'lucide-react';
 import type { AssignmentListItem } from '@painel/shared';
 import { PRIORITY_LABELS } from '@painel/shared';
@@ -87,6 +88,17 @@ export function AssignmentItem({ assignment, onToggle, onEdit, onDelete }: Assig
           {assignment.source === 'GOOGLE_CLASSROOM' && (
             <Badge variant="outline" className="gap-1 text-[10px] text-muted-foreground">
               Classroom
+            </Badge>
+          )}
+
+          {assignment.fromClass && (
+            <Badge
+              variant="outline"
+              className="gap-1 text-[10px] text-muted-foreground"
+              title={assignment.fromClass.className}
+            >
+              <Users className="size-2.5" aria-hidden />
+              Da turma
             </Badge>
           )}
         </div>

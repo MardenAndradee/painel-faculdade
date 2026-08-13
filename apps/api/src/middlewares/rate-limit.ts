@@ -54,3 +54,19 @@ export const refreshRateLimiter = rateLimit({
   legacyHeaders: false,
   message: payload,
 });
+
+/**
+ * Limite dedicado para entrar em turma (Etapa 20).
+ *
+ * Um token de convite e curto e de alta entropia, mas nao ilimitadamente
+ * grande - sem um limite proprio aqui, tentar tokens ao acaso vira viavel em
+ * volume. Bem mais generoso que login: clicar num link de convite e uma
+ * acao legitima e pontual, nao repetida ao longo do dia.
+ */
+export const classJoinRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: payload,
+});

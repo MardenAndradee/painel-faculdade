@@ -24,6 +24,15 @@ import { emptyToNull } from '../utils/text.js';
  * hora, sem sincronizacao.
  */
 
+function toBadge(
+  classPostId: string | null,
+  classPost: { class: { id: string; name: string } } | null,
+): { classId: string; className: string } | null {
+  return classPostId && classPost
+    ? { classId: classPost.class.id, className: classPost.class.name }
+    : null;
+}
+
 function toEventDetail(row: CalendarEventRow): CalendarEventDetail {
   return {
     id: row.id,
@@ -36,6 +45,7 @@ function toEventDetail(row: CalendarEventRow): CalendarEventDetail {
     color: row.color,
     source: row.source,
     subject: row.subject,
+    fromClass: toBadge(row.classPostId, row.classPost),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -80,6 +90,7 @@ export const calendarService = {
         subject: event.subject,
         source: event.source,
         isCompleted: false,
+        fromClass: toBadge(event.classPostId, event.classPost),
       })),
 
       ...exams.map((exam) => ({
@@ -98,6 +109,7 @@ export const calendarService = {
         subject: exam.subject,
         source: null,
         isCompleted: false,
+        fromClass: toBadge(exam.classPostId, exam.classPost),
       })),
 
       ...assignments
@@ -118,6 +130,7 @@ export const calendarService = {
           subject: assignment.subject,
           source: null,
           isCompleted: assignment.status === 'COMPLETED',
+          fromClass: toBadge(assignment.classPostId, assignment.classPost),
         })),
     ];
 

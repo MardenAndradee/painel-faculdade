@@ -18,3 +18,7 @@ export * from './schemas/study-plan.js';
 export * from './schemas/statistics.js';
 export * from './schemas/search.js';
 export * from './schemas/notification.js';
+export * from './schemas/class.js';
+export * from './schemas/class-post.js';
+export * from './schemas/class-mural.js';
+export * from './schemas/class-material.js';

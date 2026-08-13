@@ -11,10 +11,14 @@ import { type Prisma } from '../config/prisma.js';
 import { examRepository, type ExamListRow } from '../repositories/exam.repository.js';
 import { subjectRepository } from '../repositories/subject.repository.js';
 import { gradeRepository } from '../repositories/grade.repository.js';
+import { classPostRepository } from '../repositories/class-post.repository.js';
 import { gradeService } from './grade.service.js';
 import { AppError } from '../utils/app-error.js';
 import { attachmentService } from './attachment.service.js';
 import { emptyToNull } from '../utils/text.js';
+
+/** Campos que pertencem à publicação de origem (Etapa 21) - editá-los desvincula a cópia. */
+const CLASS_POST_MANAGED_FIELDS = ['title', 'content', 'date', 'durationMinutes', 'room'] as const;
 
 /** Regra de negocio de provas. */
 
@@ -40,6 +44,9 @@ function toListItem(row: ExamListRow, now: Date): ExamListItem {
     weight: row.gradeComponent?.weight ?? null,
     durationMinutes: row.durationMinutes,
     subject: row.subject,
+    fromClass: row.classPostId
+      ? { classId: row.classPost!.class.id, className: row.classPost!.class.name }
+      : null,
     daysUntilExam: daysBetween(now, row.date),
     isPast: row.date < now,
     gradeComponent: row.gradeComponent,
@@ -111,7 +118,12 @@ export const examService = {
   async list(userId: string, query: ExamQuery): Promise<PaginatedResult<ExamListItem>> {
     const now = new Date();
 
-    const filters = { view: query.view, search: query.search, subjectId: query.subjectId };
+    const filters = {
+      view: query.view,
+      search: query.search,
+      subjectId: query.subjectId,
+      classId: query.classId,
+    };
 
     // Peso mora numa relacao opcional (gradeComponent): o Postgres nao tem
     // como colocar NULL sempre no fim independente da direcao quando quem
@@ -233,6 +245,15 @@ export const examService = {
     const row = await examRepository.update(userId, id, data);
 
     if (!row) throw AppError.notFound('Prova');
+
+    // Editar um campo que a publicação da turma controla desvincula a cópia
+    // (Etapa 21) - a nota em si NUNCA desvincula, é sempre pessoal.
+    if (
+      current.classPostId &&
+      CLASS_POST_MANAGED_FIELDS.some((field) => input[field] !== undefined)
+    ) {
+      await classPostRepository.markDetached(current.classPostId, userId);
+    }
 
     const gradeComponentId =
       input.gradeComponentId !== undefined

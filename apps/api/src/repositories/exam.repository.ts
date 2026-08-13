@@ -10,6 +10,8 @@ const dashboardSelect = {
   date: true,
   room: true,
   subject: { select: { id: true, name: true, color: true } },
+  classPostId: true,
+  classPost: { select: { class: { select: { id: true, name: true } } } },
 } satisfies Prisma.ExamSelect;
 
 export type ExamDashboardRow = Prisma.ExamGetPayload<{ select: typeof dashboardSelect }>;
@@ -34,6 +36,9 @@ const listSelect = {
   // `weight` vem daqui: o peso da prova e o do componente (Etapa 18).
   gradeComponent: { select: { id: true, name: true, weight: true } },
   grade: { select: { id: true, value: true, maxValue: true } },
+  // Selo "Da turma" (Etapa 21) - nulo para provas manuais.
+  classPostId: true,
+  classPost: { select: { class: { select: { id: true, name: true } } } },
   _count: { select: { attachments: true } },
 } satisfies Prisma.ExamSelect;
 
@@ -43,6 +48,8 @@ export interface ExamFilters {
   view: ExamView;
   search?: string | undefined;
   subjectId?: string | undefined;
+  /** Recorta pelo selo "Da turma" (Etapa 21). */
+  classId?: string | undefined;
 }
 
 function viewConditions(view: ExamView, now: Date): Prisma.ExamWhereInput {
@@ -63,6 +70,7 @@ function buildWhere(userId: string, filters: ExamFilters, now: Date): Prisma.Exa
   const conditions: Prisma.ExamWhereInput[] = [{ userId }, viewConditions(filters.view, now)];
 
   if (filters.subjectId) conditions.push({ subjectId: filters.subjectId });
+  if (filters.classId) conditions.push({ classPost: { classId: filters.classId } });
 
   if (filters.search) {
     conditions.push({

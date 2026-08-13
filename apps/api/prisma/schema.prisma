@@ -117,6 +117,8 @@ enum NotificationType {
   SYNC_COMPLETED
   SYNC_FAILED
   SYSTEM
+  /// Aviso publicado no mural de uma turma (Etapa 22).
+  CLASS_ANNOUNCEMENT
 }
 
 /// Urgencia da notificacao, separada do tipo: a mesma atividade vira
@@ -127,6 +129,28 @@ enum NotificationPriority {
   ATTENTION
   INFO
   DONE
+}
+
+/// Papel do membro numa turma (Etapa 20). Sem MODERATOR por enquanto - so
+/// entra se algum dono real pedir delegacao, que nao e o caso hoje.
+enum ClassRole {
+  OWNER
+  MEMBER
+}
+
+/// LEFT preserva o historico do vinculo (quando entrou, quando saiu) em vez de
+/// apagar a linha - sair e voltar não deveria parecer uma entrada nova.
+enum ClassMemberStatus {
+  ACTIVE
+  LEFT
+}
+
+/// O que um `ClassPost` publica (Etapa 21). Cada turma vira exatamente uma
+/// entidade pessoal por membro: Assignment, Exam ou CalendarEvent.
+enum ClassPostKind {
+  ASSIGNMENT
+  EXAM
+  EVENT
 }
 
 // =============================================================================
@@ -186,6 +210,23 @@ model User {
   noteFolders               NoteFolder[]
   notes                     Note[]
 
+  /// Turmas das quais e dono (Etapa 20).
+  ownedClasses      Class[]            @relation("ClassOwner")
+  classMemberships  ClassMember[]
+  createdInvites    ClassInvite[]
+  classSubjectLinks ClassSubjectLink[]
+  createdClassPosts ClassPost[]
+  classPostCopies   ClassPostCopy[]
+
+  /// Mural da turma (Etapa 22): avisos e anotações que este usuário publicou
+  /// como dono. Sem *fan-out* - ver "O que é compartilhado de verdade" no README.
+  createdClassAnnouncements ClassAnnouncement[]
+  createdClassNotes         ClassNote[]
+
+  /// Materiais da turma que este usuário enviou (Etapa 23) - qualquer membro
+  /// publica, não só o dono.
+  uploadedClassMaterials ClassMaterial[]
+
   @@index([email])
   @@map("users")
 }
@@ -242,6 +283,10 @@ model Semester {
   /// Modelo padrao de notas do semestre: so serve para pre-preencher os
   /// componentes de disciplinas novas (copia, nunca compartilha o registro).
   gradeConfigurationTemplate GradeConfiguration?
+
+  /// Semestres pessoais nascidos de uma entrada em turma (Etapa 20) - um por
+  /// membro, nunca compartilhado.
+  classMembers ClassMember[]
 
   @@unique([userId, year, term])
   @@index([userId, isCurrent])
@@ -324,6 +369,10 @@ model Subject {
   /// do outro lado da relacao).
   gradeConfiguration GradeConfiguration?
 
+  /// Vinculos com disciplinas de turmas (Etapa 20) - uma disciplina pode ser
+  /// alvo de mais de um vinculo (turmas diferentes com a mesma matéria).
+  classSubjectLinks ClassSubjectLink[]
+
   @@unique([userId, googleCourseId])
   @@index([userId, semesterId])
   @@index([userId, status])
@@ -375,12 +424,20 @@ model Assignment {
   calendarEvents CalendarEvent[]
   studySessions  StudySession[]
 
+  /// Não-nulo = veio de uma publicação de turma (Etapa 21) - selo "Da turma",
+  /// mesmo padrão de `source: GOOGLE_CLASSROOM`. SetNull: excluir o post
+  /// original não apaga a cópia, só tira o selo (ver `ClassPostCopy`).
+  classPostId   String?
+  classPost     ClassPost?     @relation(fields: [classPostId], references: [id], onDelete: SetNull)
+  classPostCopy ClassPostCopy?
+
   /// Garante idempotencia da sincronizacao: reimportar o mesmo courseWork
   /// atualiza o registro existente em vez de criar duplicata.
   @@unique([userId, googleCourseWorkId])
   @@index([userId, status, dueDate])
   @@index([userId, dueDate])
   @@index([subjectId])
+  @@index([classPostId])
   @@map("assignments")
 }
 
@@ -422,9 +479,15 @@ model Exam {
   calendarEvents CalendarEvent[]
   studySessions  StudySession[]
 
+  /// Selo "Da turma" (Etapa 21) - ver o comentário equivalente em `Assignment`.
+  classPostId   String?
+  classPost     ClassPost?     @relation(fields: [classPostId], references: [id], onDelete: SetNull)
+  classPostCopy ClassPostCopy?
+
   @@index([userId, date])
   @@index([subjectId])
   @@index([gradeComponentId])
+  @@index([classPostId])
   @@map("exams")
 }
 
@@ -588,8 +651,14 @@ model CalendarEvent {
   examId String?
   exam   Exam?   @relation(fields: [examId], references: [id], onDelete: Cascade)
 
+  /// Selo "Da turma" (Etapa 21) - ver o comentário equivalente em `Assignment`.
+  classPostId   String?
+  classPost     ClassPost?     @relation(fields: [classPostId], references: [id], onDelete: SetNull)
+  classPostCopy ClassPostCopy?
+
   @@unique([userId, googleEventId])
   @@index([userId, startsAt])
+  @@index([classPostId])
   @@map("calendar_events")
 }
 
@@ -763,6 +832,323 @@ model Notification {
   /// duplicar a mesma notificacao a cada abertura do sino.
   @@index([userId, entityType, entityId])
   @@map("notifications")
+}
+
+// =============================================================================
+// Turmas (Etapa 20)
+// =============================================================================
+//
+// Publicacao + copia (fan-out), nunca linha compartilhada: ver a decisao no
+// README ("## Turmas (planejado)"). A turma guarda o registro canonico -
+// nome, disciplinas, avisos; cada membro guarda copias pessoais (semestre,
+// disciplina, nota) para as quais a turma so aponta.
+
+model Class {
+  id   String @id @default(cuid())
+  name String
+  /// Ano/periodo canonicos da turma. Cada membro traduz isso para O SEU
+  /// Semester ao entrar (`ClassMember.semesterId`).
+  year Int
+  term Int
+
+  description String? @db.Text
+  color       String  @default("#4f7cff")
+
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  ownerId String
+  owner   User   @relation("ClassOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  members       ClassMember[]
+  invites       ClassInvite[]
+  subjects      ClassSubject[]
+  posts         ClassPost[]
+  announcements ClassAnnouncement[]
+  notes         ClassNote[]
+  materials     ClassMaterial[]
+
+  @@index([ownerId])
+  @@map("classes")
+}
+
+/// Vinculo de um usuario com uma turma. O dono tambem tem uma linha aqui
+/// (role: OWNER) - simplifica toda consulta de "quem esta na turma" para uma
+/// unica tabela, em vez de sempre ter que unir com `Class.ownerId` a parte.
+model ClassMember {
+  id     String            @id @default(cuid())
+  role   ClassRole         @default(MEMBER)
+  status ClassMemberStatus @default(ACTIVE)
+
+  joinedAt DateTime  @default(now())
+  leftAt   DateTime?
+
+  classId String
+  class   Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// O semestre PESSOAL do membro, correspondente ao ano/periodo da turma.
+  /// Criado (ou reaproveitado, se ja existir um com o mesmo ano/periodo) no
+  /// momento da entrada - nunca e o mesmo registro entre dois membros.
+  semesterId String?
+  semester   Semester? @relation(fields: [semesterId], references: [id], onDelete: SetNull)
+
+  subjectLinks ClassSubjectLink[]
+
+  @@unique([classId, userId])
+  @@index([userId])
+  @@map("class_members")
+}
+
+/// Convite de entrada. So o hash e persistido (mesmo padrao de
+/// `RefreshToken.tokenHash`) - o valor puro existe apenas na resposta da
+/// criacao e no link/QR entregues ao dono.
+model ClassInvite {
+  id String @id @default(cuid())
+
+  tokenHash String @unique
+
+  /// Ausente = sem expiracao por tempo. Mesma logica para `maxUses`.
+  expiresAt DateTime?
+  maxUses   Int?
+  useCount  Int       @default(0)
+  revokedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  classId String
+  class   Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  createdById String
+  createdBy   User   @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([classId])
+  @@map("class_invites")
+}
+
+/// Disciplina no nivel da turma - o registro canonico que o dono mantem.
+/// Distinta de `Subject`: esta carrega dado privado (notas, configuracao) que
+/// nao pode ser compartilhado; `ClassSubject` e so o "molde".
+model ClassSubject {
+  id   String  @id @default(cuid())
+  name String
+  code String?
+
+  color       String  @default("#6366f1")
+  teacherName String?
+  credits     Int?
+
+  /// Ordem de exibicao na aba Disciplinas da turma.
+  order Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  classId String
+  class   Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  links ClassSubjectLink[]
+  posts ClassPost[]
+
+  @@index([classId])
+  @@map("class_subjects")
+}
+
+/// Liga o molde da turma a disciplina real de um membro. Criado ao entrar
+/// (achou disciplina com nome equivalente -> vincula; nao achou -> cria) e
+/// reaproveitado se o membro entrar em outra turma com uma materia homonima.
+///
+/// `subjectId` NAO e unico aqui: a mesma disciplina do usuario pode ser alvo
+/// de vinculos de turmas diferentes.
+model ClassSubjectLink {
+  id String @id @default(cuid())
+
+  createdAt DateTime @default(now())
+
+  classSubjectId String
+  classSubject   ClassSubject @relation(fields: [classSubjectId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  subjectId String
+  subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  /// Referencia auxiliar ao vinculo de associacao (nao usada em cascata -
+  /// sair da turma preserva disciplina e vinculo, ver Etapa 20 no README).
+  classMemberId String
+  classMember   ClassMember @relation(fields: [classMemberId], references: [id], onDelete: Cascade)
+
+  @@unique([classSubjectId, userId])
+  @@index([userId])
+  @@index([subjectId])
+  @@map("class_subject_links")
+}
+
+/// Publicação compartilhada (Etapa 21): o registro canônico que o dono edita.
+/// Guarda a união dos campos das três entidades que pode gerar - só os do
+/// `kind` escolhido são preenchidos, os demais ficam nulos.
+model ClassPost {
+  id   String        @id @default(cuid())
+  kind ClassPostKind
+
+  title       String
+  description String? @db.Text
+
+  // --- Prova (kind: EXAM) ------------------------------------------------------
+  date            DateTime?
+  durationMinutes Int?
+  room            String?
+
+  // --- Atividade (kind: ASSIGNMENT) ---------------------------------------------
+  dueDate   DateTime?
+  priority  Priority?
+  maxPoints Float?
+
+  // --- Evento (kind: EVENT) ------------------------------------------------------
+  startsAt DateTime?
+  endsAt   DateTime?
+  allDay   Boolean?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  classId String
+  class   Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  /// Ausente = publicação avulsa, sem disciplina (só cabe a ASSIGNMENT/EVENT -
+  /// EXAM sempre exige uma, porque `Exam.subjectId` não é anulável).
+  classSubjectId String?
+  classSubject   ClassSubject? @relation(fields: [classSubjectId], references: [id], onDelete: SetNull)
+
+  createdById String
+  createdBy   User   @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  copies ClassPostCopy[]
+
+  /// Selo "Da turma" nas cópias - ver `Assignment.classPostId`.
+  assignments    Assignment[]
+  exams          Exam[]
+  calendarEvents CalendarEvent[]
+
+  @@index([classId])
+  @@index([classSubjectId])
+  @@map("class_posts")
+}
+
+/// Bookkeeping do *fan-out*: qual cópia pessoal pertence a qual membro, e se
+/// ele já divergiu dela. O selo "Da turma" em si mora direto na entidade
+/// (`Assignment.classPostId` etc.) - este registro só sustenta a propagação.
+model ClassPostCopy {
+  id String @id @default(cuid())
+
+  /// Não-nulo = o membro editou a cópia; a propagação de edição futura pula
+  /// esta linha, mas a exclusão do post ainda a preserva (vira definitivamente
+  /// pessoal, perdendo só o selo).
+  detachedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  classPostId String
+  classPost   ClassPost @relation(fields: [classPostId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  assignmentId String?     @unique
+  assignment   Assignment? @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  examId String? @unique
+  exam   Exam?   @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  calendarEventId String?        @unique
+  calendarEvent   CalendarEvent? @relation(fields: [calendarEventId], references: [id], onDelete: Cascade)
+
+  @@unique([classPostId, userId])
+  @@map("class_post_copies")
+}
+
+/// Aviso do mural da turma (Etapa 22). Texto simples e efêmero, diferente de
+/// `ClassNote` - "fixado aparece primeiro" é o único ordenamento que importa.
+/// Só o dono publica (ver tabela de papéis no README); o campo `pinned`
+/// controla a ordenação, não é um tipo à parte.
+model ClassAnnouncement {
+  id      String  @id @default(cuid())
+  title   String
+  content String  @db.Text
+  pinned  Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  classId String
+  class   Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  createdById String
+  createdBy   User   @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([classId, pinned, createdAt])
+  @@map("class_announcements")
+}
+
+/// Anotação duradoura do mural da turma (Etapa 22). Mesmo formato de `Note`
+/// (documento Tiptap/ProseMirror), mas com UM autor só - o dono - nada
+/// colaborativo: não há travamento de edição concorrente porque não existe
+/// edição concorrente.
+model ClassNote {
+  id      String @id @default(cuid())
+  title   String
+  content Json   @default("{\"type\":\"doc\",\"content\":[]}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  classId String
+  class   Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  createdById String
+  createdBy   User   @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([classId])
+  @@map("class_notes")
+}
+
+/// Material da turma (Etapa 23): linha única, sem *fan-out* - duplicar um PDF
+/// de 8 MB por membro seria desperdício direto de armazenamento. Reaproveita
+/// o `StorageProvider`, a validação por *magic bytes* e o `multer` já usados
+/// pelos materiais pessoais (`Attachment`), mas mora em tabela própria: o
+/// acervo é contado por TURMA, não por quem enviou (ver `Aceite` no README).
+model ClassMaterial {
+  id   String         @id @default(cuid())
+  name String
+  type AttachmentType @default(OTHER)
+
+  /// Caminho de download servido pela API (upload) ou o endereço externo (link).
+  url        String  @db.Text
+  /// Chave no storage. Nulo quando o material e apenas um link.
+  storageKey String?
+
+  mimeType  String?
+  sizeBytes Int?
+
+  source AttachmentSource @default(UPLOAD)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  classId String
+  class   Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  /// Quem publicou - qualquer membro, não só o dono (ver tabela de papéis).
+  /// Determina quem pode excluir: o autor, ou o dono, qualquer um.
+  uploadedById String
+  uploadedBy   User   @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+
+  @@index([classId])
+  @@map("class_materials")
 }
 
 // =============================================================================

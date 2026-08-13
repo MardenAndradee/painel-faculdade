@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   ListChecks,
   Plug,
+  Users,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -38,6 +39,7 @@ export const NAV_SECTIONS: NavSection[] = [
     title: 'Geral',
     items: [
       { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { href: '/turmas', label: 'Turmas', icon: Users },
       { href: '/disciplinas', label: 'Disciplinas', icon: GraduationCap },
       { href: '/atividades', label: 'Atividades', icon: ListChecks },
       { href: '/provas', label: 'Provas', icon: ClipboardList },

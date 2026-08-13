@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { paginationQuerySchema, parseLocalDate } from '../common.js';
 import type { SubjectRef } from './dashboard.js';
+import type { ClassPostBadge } from './class-post.js';
 
 /**
  * Contrato de provas.
@@ -140,6 +141,8 @@ export const examQuerySchema = paginationQuerySchema.extend({
   search: z.string().trim().max(200).optional(),
   view: z.enum(EXAM_VIEWS).default('proximas'),
   subjectId: z.string().min(1).optional(),
+  /** Recorta pela turma que publicou (Etapa 21) - só o que tem selo "Da turma". */
+  classId: z.string().min(1).optional(),
   sortBy: z.enum(EXAM_SORT_FIELDS).default('date'),
   order: z.enum(['asc', 'desc']).default('asc'),
 });
@@ -170,6 +173,8 @@ export interface ExamListItem {
   weight: number | null;
   durationMinutes: number | null;
   subject: SubjectRef;
+  /** Não-nulo quando veio de uma publicação de turma (Etapa 21) - selo "Da turma". */
+  fromClass: ClassPostBadge | null;
   /** Negativo se ja aconteceu, 0 se e hoje. */
   daysUntilExam: number;
   /** Verdadeiro quando a data ja passou. */

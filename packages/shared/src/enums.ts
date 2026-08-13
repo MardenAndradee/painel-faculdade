@@ -52,6 +52,8 @@ export const NOTIFICATION_TYPE = [
   'SYNC_COMPLETED',
   'SYNC_FAILED',
   'SYSTEM',
+  /** Aviso publicado no mural de uma turma (Etapa 22). */
+  'CLASS_ANNOUNCEMENT',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPE)[number];
 
@@ -65,6 +67,18 @@ export type NotificationPriority = (typeof NOTIFICATION_PRIORITY)[number];
 
 export const THEME_PREFERENCE = ['LIGHT', 'DARK', 'SYSTEM'] as const;
 export type ThemePreference = (typeof THEME_PREFERENCE)[number];
+
+/// Papel do membro numa turma (Etapa 20).
+export const CLASS_ROLE = ['OWNER', 'MEMBER'] as const;
+export type ClassRole = (typeof CLASS_ROLE)[number];
+
+export const CLASS_MEMBER_STATUS = ['ACTIVE', 'LEFT'] as const;
+export type ClassMemberStatus = (typeof CLASS_MEMBER_STATUS)[number];
+
+/// O que um `ClassPost` publica (Etapa 21): cada um vira uma cópia pessoal por
+/// membro - Assignment, Exam ou CalendarEvent.
+export const CLASS_POST_KIND = ['ASSIGNMENT', 'EXAM', 'EVENT'] as const;
+export type ClassPostKind = (typeof CLASS_POST_KIND)[number];
 
 /** Rotulos em portugues para exibicao na interface. */
 export const PRIORITY_LABELS: Record<Priority, string> = {

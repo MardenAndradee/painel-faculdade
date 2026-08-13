@@ -30,6 +30,7 @@ export const NOTIFICATION_ENTITY_TYPES = [
   'ASSIGNMENT',
   'EXAM',
   'CALENDAR_EVENT',
+  'CLASS_ANNOUNCEMENT',
 ] as const;
 
 export type NotificationEntityType = (typeof NOTIFICATION_ENTITY_TYPES)[number];

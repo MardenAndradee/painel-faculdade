@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { booleanQueryParam, parseLocalDate } from '../common.js';
 import type { SubjectRef } from './dashboard.js';
+import type { ClassPostBadge } from './class-post.js';
 
 /**
  * Contrato do calendario.
@@ -47,6 +48,8 @@ export interface CalendarItem {
   source: 'MANUAL' | 'GOOGLE_CALENDAR' | null;
   /** Somente para ASSIGNMENT: permite riscar entregas ja concluidas. */
   isCompleted: boolean;
+  /** Não-nulo quando veio de uma publicação de turma (Etapa 21) - selo "Da turma". */
+  fromClass: ClassPostBadge | null;
 }
 
 /**
@@ -162,6 +165,8 @@ export interface CalendarEventDetail {
   color: string | null;
   source: 'MANUAL' | 'GOOGLE_CALENDAR';
   subject: SubjectRef | null;
+  /** Não-nulo quando veio de uma publicação de turma (Etapa 21) - selo "Da turma". */
+  fromClass: ClassPostBadge | null;
   createdAt: string;
   updatedAt: string;
 }

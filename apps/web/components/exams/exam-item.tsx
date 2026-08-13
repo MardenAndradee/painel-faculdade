@@ -1,4 +1,4 @@
-import { EllipsisVertical, Pencil, Trash2, Weight } from 'lucide-react';
+import { EllipsisVertical, Pencil, Trash2, Users, Weight } from 'lucide-react';
 import type { ExamListItem } from '@painel/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -73,13 +73,26 @@ export function ExamItem({ exam, onEdit, onDelete }: ExamItemProps) {
             <p className="truncate text-[15px] font-semibold tracking-tight">{exam.subject.name}</p>
           </div>
 
-          {/* O peso vem do componente (Etapa 18) - por isso os dois juntos. */}
-          {exam.gradeComponent && (
-            <Badge variant="outline" className="mt-2 gap-1">
-              <Weight className="size-3" aria-hidden />
-              {exam.gradeComponent.name} · peso {exam.gradeComponent.weight}
-            </Badge>
-          )}
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {/* O peso vem do componente (Etapa 18) - por isso os dois juntos. */}
+            {exam.gradeComponent && (
+              <Badge variant="outline" className="gap-1">
+                <Weight className="size-3" aria-hidden />
+                {exam.gradeComponent.name} · peso {exam.gradeComponent.weight}
+              </Badge>
+            )}
+
+            {exam.fromClass && (
+              <Badge
+                variant="outline"
+                className="gap-1 text-muted-foreground"
+                title={exam.fromClass.className}
+              >
+                <Users className="size-3" aria-hidden />
+                Da turma
+              </Badge>
+            )}
+          </div>
 
           {exam.content && (
             <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{exam.content}</p>

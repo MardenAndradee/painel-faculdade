@@ -11,6 +11,8 @@ const dashboardSelect = {
   priority: true,
   status: true,
   subject: { select: { id: true, name: true, color: true } },
+  classPostId: true,
+  classPost: { select: { class: { select: { id: true, name: true } } } },
 } satisfies Prisma.AssignmentSelect;
 
 // `status` vem no select para que a agenda saiba riscar entregas concluidas.
@@ -35,6 +37,9 @@ const listSelect = {
   createdAt: true,
   updatedAt: true,
   subject: { select: { id: true, name: true, color: true } },
+  // Selo "Da turma" (Etapa 21) - nulo para atividades manuais/Classroom.
+  classPostId: true,
+  classPost: { select: { class: { select: { id: true, name: true } } } },
   _count: { select: { attachments: true } },
 } satisfies Prisma.AssignmentSelect;
 
@@ -49,6 +54,8 @@ export interface AssignmentFilters {
   view: AssignmentView;
   search?: string | undefined;
   subjectId?: string | undefined;
+  /** Recorta pelo selo "Da turma" (Etapa 21). */
+  classId?: string | undefined;
   priority?: Prisma.AssignmentWhereInput['priority'];
   status?: Prisma.AssignmentWhereInput['status'];
   includeUndated: boolean;
@@ -117,6 +124,7 @@ function buildWhere(
   ];
 
   if (filters.subjectId) conditions.push({ subjectId: filters.subjectId });
+  if (filters.classId) conditions.push({ classPost: { classId: filters.classId } });
   if (filters.priority) conditions.push({ priority: filters.priority });
   if (filters.status) conditions.push({ status: filters.status });
 

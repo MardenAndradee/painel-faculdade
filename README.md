@@ -2,7 +2,7 @@
 
 Plataforma web de organização acadêmica para estudantes universitários. Centraliza atividades, provas, notas, materiais e cronograma de estudos em um único lugar, com integração ao Google Classroom e ao Google Calendar.
 
-> **Status:** 17 de 19 etapas concluídas — Etapas 18 e 19 planejadas.
+> **Status:** 24 de 25 etapas concluídas — Etapa 25 planejada (envio de e-mail), pronta para implementar.
 
 ---
 
@@ -17,6 +17,7 @@ Plataforma web de organização acadêmica para estudantes universitários. Cent
 - [Google OAuth](#google-oauth)
 - [Variáveis de ambiente](#variáveis-de-ambiente)
 - [Autenticação](#autenticação)
+- [Autenticação: e-mail + senha (planejado)](#autenticação-e-mail--senha-planejado)
 - [Dashboard](#dashboard)
 - [Disciplinas](#disciplinas)
 - [Atividades](#atividades)
@@ -321,6 +322,435 @@ O início de sessão usa rate limit estrito (20 req / 15 min); `/auth/refresh` t
 ### Proteção de rotas no frontend
 
 Tudo sob o grupo `app/(app)/` passa pelo `AuthGuard`, que aguarda a restauração da sessão antes de renderizar. Não usamos `middleware.ts` do Next para isso: como o cookie tem `path=/api/v1/auth`, ele não é enviado ao servidor do Next — consequência deliberada de restringir o alcance do cookie.
+
+## Autenticação: e-mail + senha (planejado)
+
+> **Só plano — nenhum código, migration ou schema foi alterado nesta etapa.**
+> Este documento é a Etapa 1 (análise) já resolvida, mais arquitetura,
+> modelagem, fluxos, riscos e um plano por etapas. As decisões em aberto
+> foram todas respondidas (ver "Decisões" abaixo) — falta só o sinal final
+> pra começar a implementar.
+
+### Objetivo
+
+Hoje o único jeito de entrar é "Continuar com Google" (seção "## Autenticação"
+acima). Passar a aceitar **e-mail + senha**, com os dois métodos podendo
+representar o **mesmo usuário** quando vinculados — nunca dois `User`
+diferentes pra uma pessoa só.
+
+### O que a análise encontrou (Etapa 1)
+
+Pontos do sistema atual que **restringem** o desenho da solução:
+
+| Onde | O que é hoje | Por que importa pro plano |
+| --- | --- | --- |
+| `User.googleId` | `String @unique`, **obrigatório** | Todo usuário existente tem um. Não pode virar "e-mail OU senha OU google" sem abrir espaço pra usuário sem `googleId` |
+| `User.email` | `String @unique` | Continua sendo a chave humana da conta — os dois métodos apontam pro mesmo e-mail |
+| Identidade do Google | `payload.sub` (`googleId`), **nunca o e-mail** (`apps/api/src/config/google.ts:112`) | O projeto já faz a coisa certa aqui — só precisa mover de coluna do `User` pra uma tabela própria |
+| `googleAccessToken`/`googleRefreshToken`/`googleTokenExpiry`/`googleGrantedScopes` | Colunas do `User`, lidas por `integration.service.ts` pra sincronizar Classroom/Calendar | **Não são identidade — são credencial de integração.** Não precisam (e não devem) mudar de lugar |
+| Sessão (access/refresh JWT, cookie httpOnly, rotação com detecção de reuso) | `auth.service.ts` / `jwt.ts` / `cookies.ts` | Já é sólido — o plano **reaproveita inteiro**, só troca o que autentica antes de chamar `issueSession()` |
+| Proteção de rota | `AuthGuard` no frontend (client-side), sem `middleware.ts` | Sem mudança — continua igual pros dois métodos |
+| Rate limit de login | `authRateLimiter`, 20 req/15min **por IP**, só no fluxo Google hoje | Senha precisa de limite **por IP e por conta** — força bruta distribuída (várias origens, uma conta) escapa de um limite só por IP |
+| Hash de senha | Não existe (`bcrypt`/`argon2` não estão instalados) | Zero legado pra migrar — decisão limpa |
+| Envio de e-mail | Não existe ainda (ver "Etapa 25 — Envio de e-mail", planejada, não implementada) | Verificação de e-mail e recuperação de senha **dependem** dela — ver riscos |
+| Desconectar Classroom/Calendar | Já são ações **próprias e independentes** (`DELETE /integrations/classroom`, `DELETE /integrations/calendar`) | Desvincular o Google como MÉTODO DE LOGIN é uma terceira ação, separada dessas duas — não mexe no acesso ao Classroom/Calendar |
+
+### Arquitetura: `User` + `AuthIdentity`
+
+**Sim, separar é a decisão certa pra este projeto**, pelo motivo que a stack
+já demonstra em outro lugar: o padrão "registro canônico + o que aponta pra
+ele" é o mesmo usado em Turmas (`Class` + `ClassMember`) e em Publicações
+(`ClassPost` + `ClassPostCopy`). Aqui o "registro canônico" é a pessoa
+(`User`), e cada jeito dela provar quem é (senha, Google, e no futuro
+Microsoft/Apple se algum dia fizer sentido) é uma linha que aponta pra ela.
+
+```
+User
+  id, name, email (único), passwordHash?, emailVerifiedAt?
+  ... (todos os campos e relações atuais, sem mudança)
+  googleAccessToken / googleRefreshToken / googleTokenExpiry / googleGrantedScopes
+  → CONTINUAM AQUI: são credencial de integração (Classroom/Calendar), não
+    identidade de login. integration.service.ts não muda uma linha.
+
+AuthIdentity
+  id, provider (enum, hoje só GOOGLE), providerAccountId, userId, createdAt
+  @@unique([provider, providerAccountId])  -- essa conta Google só pode apontar pra 1 User
+  @@unique([userId, provider])             -- 1 User só tem 1 Google vinculado
+```
+
+Por que `providerAccountId` e nunca o e-mail (exatamente como pedido): o
+Google permite trocar o e-mail de uma conta; se a chave fosse o e-mail, essa
+troca faria o sistema "perder" o vínculo com o histórico do usuário. O
+projeto **já faz isso certo hoje** (`googleId = payload.sub`) — a mudança é
+só de *onde* mora essa coluna, não da regra em si.
+
+**Por que a senha não vira uma `AuthIdentity`.** `AuthIdentity` existe pra
+identidades de **terceiros** (OAuth) — provider + id de conta de outro
+sistema. Senha não é isso: é intrínseca ao `User`, então
+`passwordHash`/`emailVerifiedAt` ficam direto nele, do jeito que o próprio
+pedido já esboçou.
+
+**O que propositalmente NÃO muda:** `googleAccessToken`, `googleRefreshToken`,
+`googleTokenExpiry`, `googleGrantedScopes`, `classroomSyncedAt`,
+`calendarSyncedAt` continuam no `User`. São o crachá de acesso às APIs do
+Classroom/Calendar, não a prova de identidade — mover isso pra
+`AuthIdentity` obrigaria a reescrever `integration.service.ts` sem nenhum
+ganho real, e o pedido explícito é **não quebrar essa integração**.
+
+### Modelagem (schema proposto — só documentado, não aplicado)
+
+```prisma
+enum AuthProvider {
+  GOOGLE
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  avatarUrl     String?
+
+  /// Nulo pra quem só usa Google. Nunca em texto puro - hash argon2id.
+  passwordHash    String?
+  /// Nulo = e-mail nunca confirmado. Setado automaticamente no cadastro via
+  /// Google (o Google já verifica), manualmente no fluxo de verificação
+  /// pro cadastro por senha.
+  emailVerifiedAt DateTime?
+  /// Setado no PRIMEIRO login por senha bem-sucedido, nunca mais tocado.
+  /// Distingue "a pessoa já provou que sabe a senha" de "só o e-mail foi
+  /// confirmado" - a diferença que fecha o risco R1 por completo (ver
+  /// "Riscos" e Fluxo 3/4). Nulo = senha nunca comprovada; se um auto-link
+  /// do Google acontecer nesse estado, a senha é invalidada no ato.
+  passwordClaimedAt DateTime?
+
+  /// DEPRECADO - mantido indefinidamente como rede de segurança (Decisões,
+  /// item 4), sem leitura nenhuma depois que `AuthIdentity` vira fonte da
+  /// verdade (Etapa 3). Sem prazo de remoção definido.
+  googleId String? @unique
+
+  // ... todos os campos e relações atuais continuam exatamente iguais ...
+  googleAccessToken   String?   @db.Text
+  googleRefreshToken  String?   @db.Text
+  googleTokenExpiry   DateTime?
+  googleGrantedScopes String[]  @default([])
+
+  authIdentities AuthIdentity[]
+  passwordResetTokens EmailToken[]
+
+  @@map("users")
+}
+
+model AuthIdentity {
+  id                String       @id @default(cuid())
+  provider          AuthProvider
+  /// `sub` do Google - nunca o e-mail (ver "Arquitetura").
+  providerAccountId String
+
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@unique([userId, provider])
+  @@map("auth_identities")
+}
+
+enum EmailTokenPurpose {
+  VERIFY_EMAIL
+  RESET_PASSWORD
+}
+
+/// Token de uso único enviado por e-mail (Etapas 4 e 9) - mesmo padrão de
+/// hash já usado em `RefreshToken`/`ClassInvite`: só o hash é persistido.
+model EmailToken {
+  id        String            @id @default(cuid())
+  purpose   EmailTokenPurpose
+  tokenHash String            @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime          @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+  @@map("email_tokens")
+}
+```
+
+### Fluxos
+
+**1 — Cadastro normal.** `POST /auth/register` (nome, e-mail, senha) → e-mail
+já em uso? `409`. Não → hash da senha (`argon2id`), cria `User` (sem
+`AuthIdentity`, `emailVerifiedAt: null`) → emite sessão igual a hoje
+(`issueSession`, mesmo cookie/JWT) → dashboard, sem esperar verificação
+(Decisões, item 1). Dispara e-mail de verificação em paralelo, sem bloquear
+o login; até verificar, a conta fica fora do auto-link do Fluxo 3/4 (R1).
+
+**2 — Login normal.** `POST /auth/login` (e-mail, senha) → busca `User` por
+e-mail → `passwordHash` nulo (conta só-Google) ou senha não bate → **mesma
+mensagem genérica** nos dois casos ("e-mail ou senha inválidos") — dizer
+"esta conta usa Google" a quem não provou a senha é enumeração de usuário →
+bate → `issueSession()` → dashboard.
+
+**3 — Novo usuário com Google** e **4 — Google já vinculado** são o MESMO
+código (`loginWithGoogle` de hoje, adaptado):
+
+```
+Google OAuth → identidade validada (payload.sub, email_verified obrigatório)
+  → AuthIdentity(GOOGLE, sub) existe?
+      SIM → User dela → login (Fluxo 4)
+      NÃO → User com este e-mail já existe?
+              SIM → cria AuthIdentity apontando pra ele → login
+                    (é o exemplo do pedido: marden@gmail.com já existe,
+                    Google com o mesmo e-mail LINKA, não duplica)
+              NÃO → cria User + AuthIdentity (Fluxo 3, igual a hoje)
+```
+
+O auto-link por e-mail é automático (Decisões, item 2). Duas camadas o
+protegem contra o risco R1 (*pre-hijacking* — ver "Riscos"): o Google **já
+verificou** esse e-mail (`email_verified`, checado hoje em `google.ts:106`);
+a conta local correspondente precisa ter o dela confirmado
+(`emailVerifiedAt` não nulo) pra ser candidata ao link. E, como a verificação
+sozinha não prova que a senha da conta pertence a quem clicou no e-mail (só
+prova que o e-mail chegou), o link **invalida a senha existente** se ela
+nunca foi usada num login bem-sucedido antes — só nesse caso específico,
+nunca quando a própria pessoa já provou a senha alguma vez.
+
+**5 — Vincular Google numa conta já logada.** Sempre autenticado
+(`Bearer` válido). `POST /auth/me/link/google` → mesma tela de consentimento
+→ e-mail do Google bate com o e-mail do usuário **logado**? Sim → cria
+`AuthIdentity`. Não → Fluxo 6.
+
+**6 — Google com e-mail diferente.** Bloqueado, sempre — nunca vincula
+silenciosamente. Mensagem clara: "Esta conta Google usa outro e-mail
+(...); entre com a conta certa ou vincule depois de trocar seu e-mail
+aqui." Vale tanto pra alguém tentando vincular pelo Configurações quanto,
+por segurança, como regra geral de qualquer vínculo.
+
+**7 — Google já vinculado a outro usuário.** `AuthIdentity` tem
+`@@unique([provider, providerAccountId])` — o banco já impede duas linhas
+pra mesma conta Google. O service traduz a violação em `409` claro: "esta
+conta Google já está vinculada a outro usuário do Painel."
+
+### Métodos de login (Configurações → Conta)
+
+Superfície nova (não existe tela de Configurações hoje — ver Etapa 25, que
+cogitou o mesmo toggle solto no menu do usuário; os dois cabem juntos nesta
+tela quando ela existir).
+
+```
+GET /auth/me/login-methods
+  → { hasPassword: boolean, linkedProviders: ['google'?] }
+
+POST   /auth/me/link/google      -- Fluxo 5
+DELETE /auth/me/link/google      -- desvincula (com a trava abaixo)
+POST   /auth/me/password         -- "Adicionar senha" (conta só-Google)
+PATCH  /auth/me/password         -- trocar senha (pede a senha atual)
+```
+
+**Nunca remover o último método válido.** `DELETE /auth/me/link/google`
+checa `passwordHash !== null` antes de apagar a `AuthIdentity`; senha sem
+Google vinculado não tem o que remover (não há "desvincular senha", só
+trocar). Uma conta sem NENHUM jeito de entrar é uma conta perdida.
+
+### Riscos
+
+| # | Risco | Mitigação proposta |
+| --- | --- | --- |
+| R1 | **Sequestro por "ocupação" de e-mail** (categoria conhecida como *pre-hijacking*): alguém cadastra `victim@gmail.com` com senha (sem ser dono da caixa); depois a vítima real usa "Continuar com Google" com o e-mail dela → o auto-link (Fluxo 3/4) linkaria a conta Google real à conta senha do atacante | Base: `emailVerifiedAt` exigido antes de elegível pro auto-link (fecha o caso ingênuo — ninguém nunca verificou). **Refinamento que fecha o caso completo:** só tratar a senha como "reivindicada pelo dono de verdade" depois do PRIMEIRO login por senha bem-sucedido; se o Google linkar numa conta cujo e-mail foi verificado mas cuja senha **nunca** foi usada pra entrar, invalidar essa senha no ato do link e avisar por e-mail ("sua senha foi redefinida por segurança") — fecha a janela mesmo se o atacante induzir a vítima a clicar no link de verificação. Ver nota abaixo dos Fluxos: proponho como parte da Etapa 6, não como extra opcional |
+| R2 | Força bruta distribuída (várias origens, mesma conta) escapando do rate limit por IP | Limite **por conta** além do por IP — contador de tentativas falhas + bloqueio temporário em `User`, não só `express-rate-limit` |
+| R3 | Enumeração de usuário via mensagens diferentes ("e-mail não existe" vs "senha errada", ou "e-mail enviado" só quando a conta existe) | Mensagem genérica sempre — login (Fluxo 2) e "esqueci a senha" (Etapa 9) nunca revelam se o e-mail existe |
+| R4 | Senha fraca | Política simples (comprimento mínimo, sem regra de complexidade artificial — orientação atual do NIST é comprimento > complexidade forçada) |
+| R5 | Migração perder ou duplicar usuário existente | Backfill em duas fases (Etapa 3): criar+conferir `AuthIdentity` ANTES de qualquer leitura mudar de fonte; `User.id` nunca muda, então toda FK do sistema (dezenas de tabelas) permanece intacta o tempo todo |
+| R6 | Recuperação de senha depende de e-mail, que ainda não existe (Etapa 25 não implementada) | Etapa 9 entra no plano (Decisões, item 5); implementação real fica bloqueada até a Etapa 25 (ou um provedor mínimo, só pra isso) estar pronta — mesmo espírito da Etapa 25 em si |
+| R7 | `argon2id` nativo em ambiente serverless (Vercel) | Prisma já exige runtime Node (não Edge) nas functions da API, então módulo nativo funciona pelo mesmo motivo que `@prisma/client` já funciona; confirmar no deploy da Etapa 4 que o binário prebuilt do `argon2` cobre o runtime da Vercel — se der problema de build, `bcrypt`/`bcryptjs` ficam como plano B sem redesenhar nada além da função de hash |
+
+### Decisões
+
+| # | Pergunta | Decisão |
+| --- | --- | --- |
+| 1 | Cadastro por senha entra logo autenticado, ou espera verificação de e-mail? | **Loga na hora** (fricção baixa). A conta fica "não verificada" e continua **fora** da comparação de auto-link do Fluxo 3/4 até verificar (R1) — um Google com esse e-mail, enquanto isso, cai no fluxo de "conta nova" com aviso de e-mail já cadastrado, não linka sozinho |
+| 2 | Vínculo automático por e-mail, sem tela de confirmação? | **Sim, automático** — sem etapa extra de confirmação, exatamente como no pedido original, respeitando a trava do item 1 (só linka conta já verificada) |
+| 3 | `bcrypt` ou `argon2id`? | **`argon2id`** — recomendação atual do OWASP; ver R7 pro risco de deploy e o plano B |
+| 4 | Remover `User.googleId` já, ou manter? | **Mantém** — fica como coluna deprecada, sem leitura, sem prazo definido de remoção |
+| 5 | Etapa 9 (recuperação de senha) entra no plano? | **Sim** — mesmo dependendo da Etapa 25 (R6); a implementação fica *code-complete* e só liga de verdade quando o envio de e-mail existir |
+
+### Plano por etapas
+
+#### Etapa 1 — Análise da autenticação atual ✅
+
+Já feita — é este documento até aqui (seção "O que a análise encontrou").
+
+#### Etapa 2 — Modelagem `User` + `AuthIdentity`
+
+**Objetivo.** Schema pronto, sem mudar nenhum comportamento.
+**Banco.** Migration aditiva: `AuthIdentity`, `EmailToken`, `AuthProvider`,
+`EmailTokenPurpose`; `User` ganha `passwordHash?`, `emailVerifiedAt?` (tudo
+opcional — nenhuma linha existente é afetada). `googleId` continua como
+está, sem tocar.
+**Backend.** Só o client do Prisma regenerado; nenhum service muda.
+**Frontend.** Nada.
+**Riscos.** Baixo — é só schema novo ao lado do que já existe.
+**Testes.** Migration aplica limpo num banco com dados reais (cópia de
+produção ou seed representativo).
+**Aceite.** App sobe normal, login com Google continua idêntico a hoje.
+
+#### Etapa 3 — Migração dos usuários existentes
+
+**Objetivo.** Todo `User` atual ganha a `AuthIdentity` correspondente, sem
+perder nem duplicar ninguém.
+**Banco.** Migration de dado (SQL): `INSERT INTO auth_identities (id,
+provider, "providerAccountId", "userId", "createdAt") SELECT
+gen_random_uuid()::text, 'GOOGLE', "googleId", id, now() FROM users WHERE
+"googleId" IS NOT NULL`. Roda dentro de uma transação; confere
+`COUNT(users) = COUNT(auth_identities)` antes de seguir.
+**Backend.** `loginWithGoogle` passa a resolver por `AuthIdentity` (Fluxos
+3/4); `googleId` para de ser escrito, mas a coluna **continua existindo**
+(não lida por ninguém) até a limpeza posterior — rede de segurança barata.
+**Frontend.** Nada.
+**Riscos.** O único item deste plano inteiro que toca dado de usuário
+real — por isso é etapa própria, isolada de qualquer outra mudança, com
+teste de contagem antes/depois obrigatório.
+**Testes.** Rodar contra um snapshot do banco atual (ou staging com dados
+reais): todo usuário existente continua logando com a MESMA conta depois da
+migração — sem `User` novo criado nem sessão de ninguém invalidada.
+**Aceite.** 100% dos usuários com `googleId` têm exatamente 1
+`AuthIdentity`; login de conta antiga funciona sem diferença perceptível.
+
+#### Etapa 4 — Cadastro com e-mail e senha
+
+**Objetivo.** Fluxo 1 completo.
+**Banco.** Nenhuma mudança nova (já coberta na Etapa 2).
+**Backend.** `POST /auth/register`; hash da senha (`argon2id`);
+`EmailToken(VERIFY_EMAIL)` gerado e "enviado" (loga/mocka até a Etapa 25
+existir de verdade); rate limit próprio (cadastro em massa é o mesmo tipo
+de abuso que login repetido).
+**Frontend.** Formulário de cadastro na tela de login (nome, e-mail, senha,
+confirmar senha), validação client-side espelhando o schema Zod
+(convenção já usada no projeto inteiro).
+**Riscos.** Ver R1 e R4 (política de senha).
+**Testes.** E-mail duplicado rejeita; senha fraca rejeita; sessão emitida
+bate com o mesmo formato do login Google (`AuthUser`/`AuthSession`
+inalterados).
+**Aceite.** Cadastro cria `User` com `passwordHash`, sem `AuthIdentity`,
+loga igual ao fluxo Google.
+
+#### Etapa 5 — Login com e-mail e senha
+
+**Objetivo.** Fluxo 2 completo.
+**Banco.** Nenhuma.
+**Backend.** `POST /auth/login`; comparação de senha sempre passa pelo hash
+(nunca comparação direta); mensagem genérica em qualquer motivo de falha
+(R3); contador de tentativas falhas por conta (R2); grava
+`passwordClaimedAt` no primeiro sucesso, se ainda nulo (base do
+refinamento de R1, usado na Etapa 6).
+**Frontend.** Formulário de login (e-mail, senha) ao lado do botão
+"Continuar com Google" já existente — os dois convivem na mesma tela.
+**Riscos.** R2, R3.
+**Testes.** Senha certa loga; senha errada, e-mail inexistente e conta
+só-Google devolvem a MESMA mensagem; N tentativas seguidas bloqueiam
+temporariamente.
+**Aceite.** Login por senha entrega a mesma sessão (cookie + access token)
+que o login Google.
+
+#### Etapa 6 — Google para usuário novo ou já vinculado
+
+**Objetivo.** Fluxos 3 e 4 — `loginWithGoogle` reescrito sobre
+`AuthIdentity`.
+**Banco.** Nenhuma (a partir daqui `AuthIdentity` já é a fonte da
+verdade, migrada na Etapa 3).
+**Backend.** Reescreve a árvore de decisão do Fluxo 3/4 (ver "Fluxos"
+acima) dentro de `authService.loginWithGoogle`; ao linkar numa conta com
+`emailVerifiedAt` preenchido mas `passwordClaimedAt` nulo, invalida
+`passwordHash` (seta `null`) e loga o evento; `updateGoogleTokens`
+continua exatamente igual (credencial de integração, não muda).
+**Frontend.** Nenhuma mudança visível — o botão "Continuar com Google" já
+existe e continua chamando a mesma rota.
+**Riscos.** R1 (auto-link por e-mail, com o refinamento da senha nunca
+comprovada) — é o coração desta etapa.
+**Testes.** Google novo → `User` novo; Google já vinculado → mesma conta;
+Google com e-mail de conta senha verificada E já usada pra logar
+(`passwordClaimedAt` preenchido) → linka, senha preservada (é o exemplo do
+pedido); verificada mas nunca usada pra logar → linka E invalida a senha;
+não verificada → não linka, e-mail tratado como já cadastrado.
+**Aceite.** Nenhum usuário Google existente percebe diferença; o
+cenário-exemplo do pedido (senha primeiro, Google depois, mesmo e-mail)
+resulta em `User` único.
+
+#### Etapa 7 — Configurações → vincular/desvincular Google
+
+**Objetivo.** Fluxos 5, 6 e 7.
+**Banco.** Nenhuma.
+**Backend.** `POST/DELETE /auth/me/link/google`, com as travas de e-mail
+diferente (Fluxo 6, 409) e conta Google já vinculada em outro lugar
+(Fluxo 7, 409 pelo `@@unique`) e de "não remover o último método" (ver
+"Métodos de login").
+**Frontend.** Ainda sem tela própria — endpoint pronto, consumido pela
+Etapa 8.
+**Riscos.** Confusão de UX se o erro do Fluxo 6 não for claro sobre QUAL
+e-mail bateu e qual não.
+**Testes.** Vincular com e-mail certo funciona; e-mail diferente bloqueia
+com mensagem clara; Google já vinculado a outro `User` bloqueia; conta
+só-Google não consegue desvincular sem senha configurada antes.
+**Aceite.** Os três fluxos de bloqueio (6, 7, "último método") nunca
+deixam uma conta inacessível nem vinculam silenciosamente.
+
+#### Etapa 8 — Tela de métodos de login
+
+**Objetivo.** Superfície visual pros endpoints da Etapa 7.
+**Banco.** Nenhuma.
+**Backend.** `GET /auth/me/login-methods`; `POST/PATCH /auth/me/password`.
+**Frontend.** Primeira tela de Configurações do app (`Configurações →
+Conta → Métodos de login`) — mostra e-mail/senha e Google com estado
+"Configurado"/"Vinculado" e as ações de cada um, conforme o mockup do
+pedido. Ponto de encontro natural com o toggle de "Notificações por
+e-mail" cogitado na Etapa 25.
+**Riscos.** Baixo — é UI sobre endpoints já testados na Etapa 7.
+**Testes.** Estado da tela reflete exatamente `GET
+/auth/me/login-methods`; ação de desvincular/adicionar senha atualiza a
+tela sem recarregar.
+**Aceite.** Dá pra sair de "só Google" para "Google + senha" (ou
+vice-versa) inteiramente pela interface, sem nunca ficar sem nenhum
+método.
+
+#### Etapa 9 — Recuperação de senha
+
+**Objetivo.** "Esqueci minha senha" — entra no plano (Decisões, item 5),
+condicionada à Etapa 25 pra rodar de verdade (R6).
+**Banco.** Reaproveita `EmailToken(RESET_PASSWORD)`, já modelado na Etapa
+2.
+**Backend.** `POST /auth/forgot-password` (sempre resposta genérica,
+R3); `POST /auth/reset-password` (token + nova senha, token de uso único
+com expiração curta — mesmo padrão de `ClassInvite`/`RefreshToken`).
+**Frontend.** Tela "Esqueci minha senha" + "Redefinir senha".
+**Riscos.** R3, R6 — sem envio de e-mail de verdade (Etapa 25), fica
+sem como testar o fluxo ponta a ponta em produção.
+**Testes.** Token expirado/usado rejeita; resposta idêntica pra e-mail
+existente e inexistente.
+**Aceite.** Só pode avançar de verdade quando a Etapa 25 (ou um envio
+mínimo dedicado) estiver pronta — até lá, fica code-complete mas sem
+ligar em produção.
+
+#### Etapa 10 — Segurança e testes
+
+**Objetivo.** Fechar o checklist de segurança do pedido, com tudo que não
+coube dentro de uma etapa específica.
+**Banco.** Índices de suporte se o contador de tentativas falhas (R2)
+precisar (ex. `@@index([email, updatedAt])` se for tabela própria em vez
+de coluna no `User`).
+**Backend.** Revisão cruzada de R1–R7; rate limit dedicado em
+`/auth/register` e `/auth/login` (hoje só Google tem `authRateLimiter`).
+**Frontend.** Nenhuma.
+**Riscos.** É a etapa que EXISTE pra pegar o que ficou barato demais nas
+anteriores — tratar como checklist, não como formalidade.
+**Testes.** Roteiro E2E real (mesmo padrão usado no resto do projeto:
+usuários reais contra banco e servidor rodando) cobrindo os 7 fluxos numa
+sequência só, incluindo o cenário do pedido (senha → Google, mesmo
+e-mail, um `User` só).
+**Aceite.** Todos os pontos de "Aceite" das Etapas 4–9 revalidados juntos,
+numa passada só.
 
 ## Dashboard
 
@@ -1246,8 +1676,43 @@ no semestre dele por nome equivalente (mesma normalização da Etapa 18: `trim`
 > configuradas, com N1/N2/N3, em vez de cadastrar tudo à mão. Vale mais que o
 > quadro de avisos.
 
+**Vínculo direto por id (refinamento pós-lançamento).** O casamento por nome é
+frágil pro DONO: se ele digitar a disciplina-molde com um nome levemente
+diferente do que sua própria `Subject` já usa (acento, plural, "I" vs sem
+número), o vínculo falha silenciosamente e ele ganha uma disciplina nova e
+vazia em vez de vincular na que já tinha. Por isso `classSubjectInputSchema`
+aceita um `existingSubjectId` opcional: ao criar a turma ou adicionar uma
+disciplina, o dono pode escolher entre digitar do zero **ou** escolher de uma
+lista das próprias disciplinas — nesse caso o vínculo é criado direto pelo id,
+sem depender do nome bater. Vale só para o dono (é ele quem monta o molde);
+os demais membros continuam pelo casamento por nome de sempre ao entrar, sem
+mudança nenhuma nesse fluxo.
+
+**Outros três ajustes do mesmo lote (feedback de uso real):**
+- **"Semestre", não "Período"** no formulário de criação da turma — o campo é
+  1 ou 2 (metade do ano civil) e dirige a mesma lógica de datas do `Semester`
+  pessoal (Etapa 18); "período" no vocabulário do curso é cumulativo
+  (8º período = 4 anos), um conceito diferente que não é rastreado como campo
+  — continua expressável no nome livre da turma (ex.: "8º Período — Sistemas
+  de Informação", como já estava no mockup original desta seção).
+- **Atividade e prova da turma perderam o campo de hora**, ficando só data —
+  alinhado com as telas pessoais equivalentes, que já eram só data; a
+  inconsistência era exclusiva do fluxo de publicação da turma. Evento
+  continua com data e hora (mesmo comportamento do Calendário pessoal).
+- **Créditos saiu da criação/edição de `ClassSubject`** — o campo continua
+  existindo no modelo (e ainda entra no cálculo de CR de quem já tinha
+  preenchido), só não é mais pedido nesse formulário; quem quiser, edita
+  depois na disciplina pessoal.
+
 `subjectId` **não** é único em `ClassSubjectLink`: a mesma disciplina do
 usuário pode ser alvo de vínculos de turmas diferentes.
+
+**Renomear propaga.** O dono edita o `ClassSubject` ("Redes de Computadores"
+virou "Redes de Computadores I") e o novo nome é escrito em toda `Subject`
+vinculada — o membro não tem como divergir esse campo, já que quem manda no
+nome da disciplina da turma é o dono, não ele. Mesmo mecanismo de escrita
+direta usado no *fan-out* do `ClassPost`, só que sem `detachedAt`: aqui não há
+"minha versão", é sempre o nome do dono.
 
 **Individual × compartilhado.**
 
@@ -1293,8 +1758,9 @@ interface para um caso que ainda não existe; adicionar depois é aditivo
 | Publicar aviso e anotação | ✅ | — |
 | **Publicar material** | ✅ | ✅ |
 | Excluir material | qualquer | só o próprio |
-| Excluir a turma | ✅ | — |
-| Sair da turma | (transfere antes) | ✅ |
+| Arquivar/desarquivar a turma (ver Etapa 24 — substitui excluir) | ✅ | — |
+| Transferir propriedade (Etapa 24) | ✅ | — |
+| Sair da turma | (transfere antes, ou arquiva) | ✅ |
 
 Um middleware `classGuard` resolve a associação **antes** de qualquer handler:
 `assertMembership(userId, classId) -> { role } | 404`. **404 e não 403** para
@@ -1400,7 +1866,7 @@ turma.
 
 ### Plano por etapas
 
-#### Etapa 20 — Fundação: turma, membros, convite, disciplinas
+#### Etapa 20 — Fundação: turma, membros, convite, disciplinas ✅
 
 **Objetivo.** Criar turma, entrar por código/link, e ter semestre e disciplinas
 montados automaticamente. Nenhuma publicação ainda — esta etapa sozinha já tem
@@ -1424,12 +1890,13 @@ diálogo de criação; popover de convite (código + link + QR); `/turmas/entrar
 - Não-membro recebe **404** em qualquer rota da turma.
 - Convite revogado, expirado e esgotado recusam com mensagens distintas.
 - Sair da turma **não apaga** disciplina nem nota.
+- Dono renomeia um `ClassSubject` → toda `Subject` vinculada é atualizada com o novo nome, na mesma transação da edição.
 
 **Testes.** Unidade da montagem (casamento por nome, acentos, caixa, duplicata,
 disciplina arquivada), validados por mutação. Roteiro E2E com **dois usuários
 reais**, verificando que B não enxerga nada de A.
 
-#### Etapa 21 — Publicação compartilhada (o *fan-out*)
+#### Etapa 21 — Publicação compartilhada (o *fan-out*) ✅
 
 **Objetivo.** O dono publica atividade, prova e evento; aparecem nos módulos
 pessoais de cada membro com selo "Da turma".
@@ -1439,6 +1906,10 @@ pessoais de cada membro com selo "Da turma".
 
 **Backend.** `class-post.service`: publicação, propagação de edição (pulando
 `detachedAt`), despublicação, *fan-out* retroativo para quem entra depois.
+O *fan-out* usa `createMany` (uma query, não N *round trips*) — mesmo no teto
+de 100 membros isso é uma única inserção em lote, bem longe do limite de
+duração de função da Vercel. A propagação de edição é um `updateMany` com o
+mesmo filtro (`classPostId`, `detachedAt: null`), não um loop.
 
 **Frontend.** Formulários de publicação; selo "Da turma"; filtro por turma nas
 listagens; Visão geral com os próximos 7 dias.
@@ -1452,49 +1923,277 @@ listagens; Visão geral com os próximos 7 dias.
 - A prova aparece em Dashboard, Calendário e Provas **sem alteração nesses módulos**.
 
 **Testes.** Unidade da propagação (pura), validada por mutação. E2E com 3
-usuários cobrindo divergência, entrada tardia e exclusão.
+usuários cobrindo divergência, entrada tardia e exclusão. Teste de carga
+publicando numa turma com os 100 membros do teto, medindo a duração da
+requisição de publicação.
 
-#### Etapa 22 — Mural: avisos e anotações
+> **Nota de implementação.** O E2E com 3 usuários e a unidade da propagação
+> foram executados de verdade (roteiro real contra o banco, não simulado) e
+> passaram nos 14 pontos do roteiro, incluindo um bug real encontrado no
+> caminho: o dono da turma não passava pelo mesmo `resolveMemberSemester` /
+> `ensureMemberSubjectLink` que um membro comum usa ao entrar, então nunca
+> recebia cópia das próprias publicações — corrigido fazendo o dono passar
+> pelo mesmo fluxo na criação da turma. O teste de carga rodou até 29
+> membros reais (a mais foi barrada pelo *rate limit* de entrada — o mesmo
+> limite por IP que protege contra adivinhação de token, e que nenhuma turma
+> real atinge porque cada aluno entra do próprio IP); a publicação para
+> esses 29 respondeu em 63ms, e o caminho de escrita é uma única
+> `createMany` por tabela independente do número de membros, então o
+> resultado sustenta a mesma conclusão para 100. O filtro por turma nas
+> listagens de Atividades/Provas existe na API (`?classId=`) mas ainda não
+> tem controle dedicado na interface — só o selo "Da turma" foi construído
+> no frontend.
+
+#### Etapa 22 — Mural: avisos e anotações ✅
 
 **Banco.** `ClassAnnouncement` (fixado, importante), `ClassNote` (Tiptap, mesmo
 formato do `Note`), novo `NotificationType.CLASS_ANNOUNCEMENT`.
 
-**Aceite.** Membro não edita nem apaga aviso alheio — verificado chamando a
-rota diretamente, não pela interface. Fixado aparece primeiro. Aviso notifica
-todos menos o autor.
+**Backend.** `class-announcement.service` e `class-note.service`: só o dono
+publica (mesmo `requireOwner` do `class-post.service`); avisos usam
+`notificationRepository.createMany` — uma inserção em lote para todo membro
+ativo, menos o autor. Sem *fan-out* de cópia: são "compartilhados de
+verdade", a mesma linha para todo mundo (ver "O que é compartilhado de
+verdade" na modelagem).
 
-#### Etapa 23 — Materiais compartilhados
+**Frontend.** Aba "Mural" na turma, com as seções Avisos e Anotações;
+card "Avisos fixados" na Visão geral, ao lado de "Próximos 7 dias"; diálogo
+de publicação de aviso (título, conteúdo, fixar); diálogo de anotação com um
+editor Tiptap compacto (negrito, itálico, título, listas) — só o dono edita,
+membro só lê.
 
-**Banco.** `ClassMaterial`. Sem *fan-out* — blob único.
+**Aceite.**
+- Membro não edita nem apaga aviso alheio — verificado chamando a rota
+  diretamente, não pela interface.
+- Fixado aparece primeiro.
+- Aviso notifica todos menos o autor.
 
-**Backend.** Reaproveita `StorageProvider` e validação por *magic bytes*.
-**Membro pode publicar material** e excluir o próprio; o dono exclui qualquer
-um. Única alteração em código existente: autorização do download.
+**Testes.** Roteiro E2E com três usuários reais (dono, membro, não-membro)
+contra o banco e o servidor HTTP rodando, cobrindo os três pontos do Aceite
+mais o padrão de permissão das anotações e o 404 (nunca 403) para
+não-membro: 22 asserções, todas passando.
+
+#### Etapa 23 — Materiais compartilhados ✅
+
+**Banco.** `ClassMaterial`. Sem *fan-out* — blob único, dono é a turma (`classId`),
+não um usuário; `uploadedById` só registra quem publicou.
+
+**Backend.** Reaproveita `StorageProvider`, a validação por *magic bytes* e o
+`multer` do material pessoal — extraídos para `utils/attachment-content.ts`
+(`sanitizeDisplayName`, mapa de MIME, `buildStorageKey` agora parametrizado
+por prefixo) e importados tanto por `attachment.service` quanto por
+`class-material.service`, sem duplicar a validação. **Membro pode publicar
+material** e excluir o próprio; o dono exclui qualquer um.
+
+**Frontend.** Aba "Materiais" na turma: resumo de arquivos/armazenamento **da
+turma**, área de arraste para upload, diálogo de link, lista de materiais com
+baixar/abrir e excluir (condicionado a dono ou autor).
 
 **Aceite.** Não-membro recebe 404 no download mesmo com a URL exata. Membro não
 consegue excluir material de outro. Cota de armazenamento contabiliza a turma,
 não o membro.
 
-#### Etapa 24 — Refinamentos
+**Testes.** Roteiro E2E com três usuários reais (dono, membro, não-membro)
+contra o banco e o servidor HTTP rodando: 16 asserções, incluindo o
+*round-trip* de bytes do upload até o download. Todas passando.
 
-Transferência de OWNER; arquivar turma; reconciliação de vínculos quando o
-membro renomeia ou apaga uma disciplina; painel de saúde da turma para o dono.
+> **Nota de implementação.** O texto original desta etapa (seção "Modelagem")
+> descrevia a única alteração como a autorização de `GET /attachments/:id/download`
+> passar a aceitar "dono OU membro da turma dona". Optei por **não** tocar
+> nessa rota: `Attachment` é 100% pessoal (`userId`, sem `classId`), e
+> misturar os dois exigiria um campo novo ali E uma exceção na autorização
+> de uma rota usada por todo mundo, todo dia. `ClassMaterial` é tabela e rota
+> própria (`/classes/:id/materials/...`), atrás do mesmo `classGuard`
+> (404-nunca-403) usado no resto de Turmas — isso também é o que deixa a
+> cota "da turma, não do membro" trivial: é uma consulta `WHERE classId = ...`,
+> em vez de somar `Attachment` de N usuários. O reaproveitamento pedido
+> (`StorageProvider`, *magic bytes*, `multer`) foi mantido à risca; só o
+> "único ponto tocado" migrou de uma autorização alterada para um utilitário
+> extraído.
 
-#### Etapa 25 — E-mail (bloqueada: exige plano próprio)
+#### Etapa 24 — Refinamentos ✅
 
-Notificações por e-mail são desejadas, mas **o projeto não tem envio de e-mail**
-— nenhum provedor, nenhum domínio verificado, nenhuma preferência de
-descadastro. Isso não é um detalhe da Turma: é infraestrutura nova que afeta o
-sistema inteiro e precisa do seu próprio plano antes de qualquer código, cobrindo
-no mínimo:
+**Backend.**
+- `classService.transferOwner`: o dono atual vira MEMBER, o escolhido (precisa
+  já ser membro ativo) vira OWNER, numa transação que também move
+  `Class.ownerId`. Não pode transferir para si mesmo nem para não-membro.
+- `classService.archive`/`unarchive`: alterna `Class.archivedAt` (o campo já
+  existia desde a Etapa 20). Turma arquivada bloqueia convite, entrada e
+  publicação nova (post, aviso, anotação, material) via `assertNotArchived`
+  nos quatro services de publicação; leitura, download e sair continuam
+  liberados. Substitui "excluir a turma" da tabela de papéis — mesmo espírito
+  de "excluir disciplina arquiva por padrão", sem dado nenhum apagado, e é
+  também a saída de um dono sozinho na turma (sem outro membro para
+  transferir).
+- **Reconciliação de vínculos:** `ensureMemberSubjectLink` agora verifica se a
+  `Subject` do outro lado do vínculo está arquivada. Se o membro a arquivou
+  depois de vinculada, o vínculo não é mais reaproveitado cegamente — o
+  casamento por nome roda de novo (mesma lógica da entrada) e o vínculo é
+  REPOSICIONADO (`relinkSubject`) para a disciplina resolvida, nunca
+  duplicado. Corrige o cenário em que uma publicação nova cairia
+  silenciosamente numa disciplina que o membro já arquivou.
+- `classService.health`: diagnóstico só de leitura para o dono — membros com
+  alguma disciplina da turma sem vínculo, vínculos ainda apontando para
+  disciplina arquivada (o que a reconciliação acima resolve na próxima
+  publicação, não retroativamente) e publicações cujo nº de cópias é menor
+  que o de membros ativos.
 
-- provedor e custo (Resend, SES, Postmark) e domínio com SPF/DKIM/DMARC;
-- fila ou envio síncrono — lembrando que **não há worker no deploy atual**;
-- preferências por usuário e descadastro (exigência legal);
-- reputação de remetente: *bounce*, reclamação de spam, supressão;
-- quais eventos merecem e-mail — avisar tudo treina a pessoa a ignorar.
+**Frontend.** Diálogo de transferência de propriedade (escolhe entre os
+membros ativos); botão arquivar/desarquivar com confirmação; aviso no topo da
+turma quando arquivada, com os controles de escrita desabilitados; selo
+"Arquivada" na listagem; painel de saúde e as duas ações de dono reunidas
+numa seção "Gestão da turma" na aba Membros.
 
-Até lá, a notificação in-app da Etapa 19 cobre os avisos da turma.
+**Testes.** Roteiro E2E real cobrindo os três fluxos junto - reconciliação
+(membro arquiva a disciplina vinculada, dono publica de novo, a cópia cai
+numa disciplina nova e a saúde volta a zero), transferência (self/não-membro/
+não-dono rejeitados; o dono antigo perde e o novo ganha poder de dono) e
+arquivamento (convite, entrada, post, aviso, anotação e material bloqueados;
+leitura liberada; desarquivar restaura): 24 asserções, todas passando.
+
+#### Etapa 25 — Envio de e-mail 🚧 planejado
+
+**Objetivo.** Dar aos eventos que já viram notificação in-app (Etapa 19) e ao
+Mural da turma (Etapa 22) um segundo canal, sem infraestrutura nova além do
+que o deploy atual (Vercel + Neon, sem worker) já aguenta.
+
+##### Decisões
+
+| Pergunta | Decisão |
+| --- | --- |
+| Provedor | **Resend** — free tier (3.000 e-mails/mês), e o único dos três cotados que envia para qualquer destinatário sem domínio verificado (via `onboarding@resend.dev`) |
+| Domínio | **Nenhum por enquanto.** Sem domínio próprio, o remetente é `onboarding@resend.dev` — funciona, mas carrega a marca do Resend e tem entregabilidade pior que um domínio com SPF/DKIM/DMARC. Migrar para domínio próprio depois é so trocar `EMAIL_FROM`, sem mexer em código |
+| Envio | **Síncrono no request** — sem fila nem tabela de retry |
+| Eventos | Aviso de turma (`CLASS_ANNOUNCEMENT`), provas/atividades próximas (`EXAM_UPCOMING`, `ASSIGNMENT_DUE`), e **convite de turma por e-mail** (pedido novo, ver abaixo) |
+
+> ⚠️ **"Convite de turma por e-mail" é uma funcionalidade nova, não só um
+> evento a mais.** O convite hoje é por link/código/QR — ninguém digita o
+> e-mail de quem está convidando. Meu entendimento do pedido: o dono ganha um
+> campo opcional "e-mail do convidado" no diálogo de convite já existente: ao
+> preencher, o mesmo link que o link/QR usam também vai por e-mail para essa
+> pessoa. **Se a intenção era outra coisa, me avise antes de eu implementar.**
+
+> ⚠️ **Provas/atividades: 1 e-mail por dia (dígest), não 1 por evento.**
+> "Síncrono no request" descreve BEM o aviso de turma e o convite — cada um
+> nasce de uma ação explícita do dono (publicar, convidar), e o e-mail sai
+> dentro dessa mesma requisição. Prazo é diferente: hoje a notificação de prazo
+> só é gerada quando o PRÓPRIO usuário abre o dashboard (Etapa 19, "sob
+> demanda") — se eu mandar e-mail nesse mesmo instante, estaria avisando por
+> e-mail algo que a pessoa está *olhando na tela agora*, e ninguém recebe
+> lembrete se não abrir o app nos dias que importam, exatamente quando o
+> lembrete faria diferença. Por isso este item usa **Vercel Cron** (não é um
+> worker persistente — só uma rota HTTP chamada 1x/dia pela própria Vercel,
+> compatível com serverless) que varre todo usuário com prazo na janela e
+> manda **um e-mail só, agregando tudo que é novo**, não um por atividade
+> (é a preocupação do enunciado original: "avisar tudo treina a pessoa a
+> ignorar"). Cada notificação recebe e-mail **uma única vez** no ciclo de vida
+> dela (quando entra na janela), não todo dia que continuar pendente.
+
+**Banco** (aditivo).
+- `User.emailNotificationsEnabled Boolean @default(true)` — preferência
+  global; convite por e-mail ignora essa flag (é endereçado a uma pessoa
+  específica pelo dono, não é uma notificação recorrente).
+- `Notification.emailedAt DateTime?` — idempotência: o dígest só pega
+  notificações com `emailedAt: null`, e marca todas as incluídas ao enviar.
+  Sem isso o mesmo prazo seria reavisado por e-mail a cada execução do cron.
+- `EmailLog` (novo, para auditoria — ver "reputação de remetente" nas
+  ressalvas originais): `id`, `userId?`, `to`, `kind` (`CLASS_ANNOUNCEMENT` |
+  `DEADLINE_DIGEST` | `CLASS_INVITE`), `status` (`SENT` | `FAILED`),
+  `providerMessageId?`, `error?`, `createdAt`. Não é fila nem retry — é só o
+  registro que falta para diagnosticar "por que ninguém recebeu" sem precisar
+  vasculhar log de aplicação.
+
+**Backend.**
+- `env.ts` ganha `EMAIL_ENABLED` (default `false`), `RESEND_API_KEY`,
+  `EMAIL_FROM` (default `onboarding@resend.dev`), `CRON_SECRET` — mesmo padrão
+  do `STORAGE_DRIVER=r2` (`superRefine` exige as chaves só quando
+  `EMAIL_ENABLED=true`). Com a flag desligada (padrão em dev, como hoje sem
+  credenciais do Google), o app funciona normalmente e só *loga* que enviaria.
+- `email/` (novo, espelha `storage/`): `types.ts` (`EmailProvider.send({to,
+  subject, html, text})`), `resend.ts` (implementação via pacote `resend`),
+  `index.ts` (escolhe o provider pela env; um `NoopEmailProvider` quando
+  desligado). Trocar de provedor no futuro (SES, domínio próprio) não toca
+  em nenhum service, só em `email/`.
+- `email/templates.ts`: funções puras `buildClassAnnouncementEmail`,
+  `buildDeadlineDigestEmail`, `buildClassInviteEmail` — cada uma devolve
+  `{subject, html, text}`. Puras e testáveis sem rede, no mesmo padrão de
+  `notification-rules.ts`. HTML com CSS inline (cliente de e-mail não lê
+  `<style>` externo) e um rodapé com o link de descadastro nos dois primeiros
+  tipos.
+- `utils/unsubscribe-token.ts`: `signUnsubscribeToken(userId)` /
+  `verifyUnsubscribeToken(token)` — mesmo padrão de `jwt.ts` (segredo
+  próprio, `type: 'unsubscribe'`, validade longa), para o link funcionar sem
+  sessão ativa (a pessoa clica a partir do cliente de e-mail, não do app).
+- `notification.service.notifyClassAnnouncement`: além de criar a
+  `Notification`, envia o e-mail (se `emailNotificationsEnabled`), com
+  `try/catch` isolado por destinatário — um envio que falha não pode
+  interromper os demais nem a resposta ao dono que publicou.
+- `email-digest.service.ts` (novo): `sendDailyDigests(now)` — para cada
+  usuário com `emailNotificationsEnabled`, roda a MESMA varredura de
+  `notificationService.generatePending` (garante que o dígest alcance quem
+  não abre o app há dias, não só quem já tem notificação gerada), filtra
+  `type in [EXAM_UPCOMING, ASSIGNMENT_DUE]` e `emailedAt: null`; se houver
+  alguma, manda um e-mail e marca todas como `emailedAt: now`.
+- `POST /internal/cron/email-digest`: protegida por `Authorization: Bearer
+  $CRON_SECRET` (`safeCompare`, mesmo padrão de token opaco do resto do
+  projeto) — nunca autenticada por sessão de usuário.
+- `GET /auth/email-preferences/unsubscribe?token=...`: pública, sem
+  `authenticate`; valida o token, desliga a flag, devolve uma página HTML
+  estática de confirmação (não precisa de tela no SPA — é clique único a
+  partir de fora do app).
+- `updateProfileSchema` (já existe, hoje sem uso na interface) ganha
+  `emailNotificationsEnabled?: boolean` — reaproveita a rota `PATCH
+  /auth/me` que já existe, sem endpoint novo.
+- `classService.createInvite`: `createClassInviteSchema` ganha
+  `inviteeEmail?` (e-mail válido, opcional); quando presente, envia
+  `buildClassInviteEmail` com o `joinUrl` já gerado hoje. Zero mudança no
+  mecanismo de convite em si.
+- `apps/api/vercel.json` ganha `"crons": [{ "path":
+  "/api/v1/internal/cron/email-digest", "schedule": "0 12 * * *" }]`
+  (meio-dia UTC ≈ 9h em Brasília — ajustável). **Confirmar no plano do
+  Vercel em uso**: o tier Hobby historicamente permite só 1 execução/dia por
+  cron, o que já é exatamente o que este dígest precisa — mas vale checar antes
+  do deploy.
+
+**Frontend.**
+- `UserMenu` (menu da conta, hoje só tem "Sair"/"Sair de todos os
+  dispositivos") ganha um item de alternância "Notificações por e-mail" —
+  não existe tela de configurações hoje, e criar uma só para este único
+  toggle seria escopo maior que o pedido.
+- `ClassInviteDialog`: campo opcional "E-mail do convidado" no formulário de
+  criação; ao preencher, o retorno confirma "Convite enviado para
+  fulano@x.com" além do link/QR de sempre (o link continua existindo — o
+  e-mail é só mais uma forma de entregar o mesmo convite).
+- Página estática de confirmação de descadastro (servida pela própria API,
+  não pelo Next — é o destino do link de e-mail).
+
+**Aceite.**
+- Publicar um aviso de turma envia e-mail para todo membro com a preferência
+  ligada, menos o autor (mesma regra do in-app, Etapa 22).
+- Uma prova/atividade que entra na janela de aviso gera **um único** e-mail
+  na vida da notificação, mesmo que o cron rode todo dia até o prazo chegar.
+- Dois prazos na mesma janela pro mesmo usuário no mesmo dia viram **um**
+  e-mail (dígest), não dois.
+- Desligar a preferência (toggle ou link de descadastro) para o envio de
+  aviso e dígest; convite por e-mail continua indo mesmo com a preferência
+  desligada (é endereçado, não é notificação recorrente).
+- `EMAIL_ENABLED=false` (padrão sem credenciais) não quebra nada — só não
+  envia, e registra em log.
+- Convite por e-mail leva exatamente ao mesmo `joinUrl` que o link copiável.
+
+**Testes.** Unidade dos três templates (`email/templates.ts`) e do filtro do
+dígest (quais notificações entram, idempotência via `emailedAt`) — puros,
+sem rede. Envio real de ponta a ponta fica de fora dos automatizados (exige
+credencial do Resend); a verificação manual é: configurar `EMAIL_ENABLED=true`
+com uma chave de teste do Resend, publicar um aviso numa turma de teste, e
+conferir o e-mail recebido.
+
+**Fora do escopo desta etapa** (ver ressalvas originais, ainda válidas):
+tratamento de *bounce*/reclamação de spam via webhook do provedor (o
+`EmailLog` guarda o que foi tentado, mas não fecha o ciclo de supressão
+automática); domínio próprio com SPF/DKIM/DMARC (documentado como upgrade,
+não bloqueia o lançamento); preferência por tipo de evento (só existe o
+toggle global) — qualquer um desses vira FUTURO se a necessidade aparecer.
 
 #### Etapa 26 — Futuro (não detalhar agora)
 
@@ -1509,7 +2208,7 @@ amostra.
 | Ao sair da turma | **Mantém tudo** — as cópias viram itens pessoais, `classPostId` zerado. A nota lançada é do aluno |
 | Quem pode publicar | **Dono publica tudo; membro publica materiais** |
 | Várias turmas no mesmo semestre | **Sim** — o modelo suporta; as listagens ganham filtro por turma |
-| E-mail | **Desejado, pendente** — exige plano próprio (Etapa 25) |
+| E-mail | **Planejado** — Resend, síncrono, dígest diário de prazos via Vercel Cron (Etapa 25) |
 
 ## Banco de dados
 
@@ -1848,11 +2547,12 @@ O Husky roda `lint-staged` no pre-commit: ESLint e Prettier nos arquivos em stag
 | 17 | Notas configuráveis (componentes de avaliação, Simulação) | ✅ |
 | 18 | Modelo de semestre sólido (padrão N1/N2/N3, propagação para disciplinas) | ✅ |
 | 19 | Busca global (⌘K) e central de notificações | ✅ |
-| 20 | Turmas: fundação (turma, membros, convite, disciplinas) | 🚧 planejado |
-| 21 | Turmas: publicação compartilhada (atividades, provas, eventos) | 🚧 planejado |
-| 22 | Turmas: mural (avisos e anotações) | 🚧 planejado |
-| 23 | Turmas: materiais compartilhados | 🚧 planejado |
-| 24 | Turmas: refinamentos (transferência de dono, arquivamento) | 🚧 planejado |
-| 25 | Envio de e-mail | ⛔ bloqueada — exige plano próprio |
+| 20 | Turmas: fundação (turma, membros, convite, disciplinas) | ✅ |
+| 21 | Turmas: publicação compartilhada (atividades, provas, eventos) | ✅ |
+| 22 | Turmas: mural (avisos e anotações) | ✅ |
+| 23 | Turmas: materiais compartilhados | ✅ |
+| 24 | Turmas: refinamentos (transferência de dono, arquivamento) | ✅ |
+| 25 | Envio de e-mail | 🚧 planejado |
+| 26 | Autenticação: e-mail + senha, vínculo com Google (10 etapas próprias — ver seção dedicada) | 🚧 planejado |
 
 Contribuições: veja [CONTRIBUTING.md](CONTRIBUTING.md).

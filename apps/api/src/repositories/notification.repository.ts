@@ -89,6 +89,15 @@ export const notificationRepository = {
     return prisma.notification.create({ data: { userId, ...draft }, select: listSelect });
   },
 
+  /** Mesma notificação para vários destinatários - uma inserção em lote (aviso de turma, Etapa 22). */
+  createMany(userIds: string[], draft: NotificationDraft): Promise<Prisma.BatchPayload> {
+    if (userIds.length === 0) return Promise.resolve({ count: 0 });
+
+    return prisma.notification.createMany({
+      data: userIds.map((userId) => ({ userId, ...draft })),
+    });
+  },
+
   async update(userId: string, id: string, draft: NotificationDraft): Promise<void> {
     await prisma.notification.updateMany({ where: { id, userId }, data: draft });
   },
