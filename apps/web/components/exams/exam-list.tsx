@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   AlertTriangle,
   CalendarClock,
@@ -11,6 +12,7 @@ import {
 } from 'lucide-react';
 import type { ExamListItem } from '@painel/shared';
 import { useDeleteExam, useExams } from '@/hooks/use-exams';
+import { useCreateExamPrep } from '@/hooks/use-exam-preps';
 import type { ExamListParams } from '@/services/exam.service';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -44,12 +46,29 @@ export function ExamList({
   hasActiveFilters,
   onClearFilters,
 }: ExamListProps) {
+  const router = useRouter();
   const { data, isLoading, isError, error, refetch, isFetching } = useExams(params);
   const deleteExam = useDeleteExam();
+  const createExamPrep = useCreateExamPrep();
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<ExamListItem | null>(null);
   const [deleting, setDeleting] = useState<ExamListItem | null>(null);
+
+  /**
+   * Um plano por prova (regra do Plano de Estudos, Etapa 27): se já existe,
+   * só navega; senão cria e navega pro que acabou de nascer.
+   */
+  const handleStudyPlan = (exam: ExamListItem): void => {
+    if (exam.examPrepId) {
+      router.push(`/plano-de-estudos/${exam.examPrepId}`);
+      return;
+    }
+
+    createExamPrep.mutate(exam.id, {
+      onSuccess: (examPrep) => router.push(`/plano-de-estudos/${examPrep.id}`),
+    });
+  };
 
   const exams = data?.data ?? [];
   const meta = data?.meta;
@@ -152,6 +171,7 @@ export function ExamList({
                 setFormOpen(true);
               }}
               onDelete={setDeleting}
+              onStudyPlan={handleStudyPlan}
             />
           ))}
         </ul>

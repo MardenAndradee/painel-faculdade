@@ -52,6 +52,7 @@ function toListItem(row: ExamListRow, now: Date): ExamListItem {
     gradeComponent: row.gradeComponent,
     grade: row.grade,
     attachmentCount: row._count.attachments,
+    examPrepId: row.examPrep?.id ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };

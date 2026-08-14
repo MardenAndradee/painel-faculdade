@@ -41,7 +41,7 @@ interface AttachmentCardProps {
   onDelete: (attachment: AttachmentListItem) => void;
 }
 
-const TYPE_ICONS: Record<AttachmentType, LucideIcon> = {
+export const TYPE_ICONS: Record<AttachmentType, LucideIcon> = {
   PDF: FileText,
   IMAGE: FileImage,
   ZIP: FileArchive,

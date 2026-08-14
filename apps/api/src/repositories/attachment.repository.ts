@@ -103,6 +103,15 @@ function ownerCondition(scope: AttachmentOwnerScope): Prisma.AttachmentWhereInpu
 }
 
 export const attachmentRepository = {
+  /** Materiais já anexados diretamente à prova (Attachment.examId) - base da sugestão automática do Plano de Estudos (Etapa 27). */
+  findByExamId(userId: string, examId: string): Promise<AttachmentListRow[]> {
+    return prisma.attachment.findMany({
+      where: { userId, examId },
+      select: listSelect,
+      orderBy: { createdAt: 'desc' },
+    });
+  },
+
   async findPaginated(
     userId: string,
     filters: AttachmentFilters,

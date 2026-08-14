@@ -184,6 +184,8 @@ export interface ExamListItem {
   /** Nota lancada, quando houver. Alimenta o historico da disciplina. */
   grade: ExamGradeRef | null;
   attachmentCount: number;
+  /** Id do Plano de Estudos desta prova (Etapa 27), quando já existir - decide "Criar" x "Ver" no menu. */
+  examPrepId: string | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -34,11 +34,11 @@ de desenvolvimento. Nada foi perdido na mudança — só reorganizado.
 - [modules/cronograma.md](modules/cronograma.md)
 - [modules/estatisticas.md](modules/estatisticas.md)
 - [modules/turmas.md](modules/turmas.md)
+- [modules/plano-de-estudos.md](modules/plano-de-estudos.md)
 
 ### Planejamento (features aprovadas ou em análise, ainda não implementadas)
 
 - [planning/autenticacao-email-senha.md](planning/autenticacao-email-senha.md)
-- [planning/plano-de-estudos.md](planning/plano-de-estudos.md)
 - [planning/pwa.md](planning/pwa.md) — instalação no celular, Service Worker, cache, offline e Push Notifications
 
 ## Convenção

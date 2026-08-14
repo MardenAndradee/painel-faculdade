@@ -48,6 +48,12 @@ export const studyPlanController = {
     created(res, await studyPlanService.create(user.id, req.body));
   },
 
+  async quickStart(req: Request, res: Response): Promise<void> {
+    const user = getAuthUser(req);
+
+    created(res, await studyPlanService.quickStart(user.id, req.body));
+  },
+
   async update(req: Request, res: Response): Promise<void> {
     const user = getAuthUser(req);
 

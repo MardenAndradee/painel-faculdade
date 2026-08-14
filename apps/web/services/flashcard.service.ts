@@ -19,7 +19,7 @@ import { httpClient } from './http-client';
 export const deckService = {
   list(query: DeckQuery = {}): Promise<DeckListItem[]> {
     return httpClient.get<DeckListItem[]>('/decks', {
-      query: { search: query.search, subjectId: query.subjectId },
+      query: { search: query.search, subjectId: query.subjectId, examPrepId: query.examPrepId },
     });
   },
 

@@ -28,7 +28,7 @@
 | 24 | Turmas: refinamentos (transferência de dono, arquivamento) | ✅ |
 | 25 | Envio de e-mail | 🚧 planejado |
 | 26 | Autenticação: e-mail + senha, vínculo com Google (10 etapas próprias — ver seção dedicada) | 🚧 planejado |
-| 27 | Plano de Estudos: espaço de preparação por prova, com flashcards, materiais e cronograma integrados (13 etapas próprias — ver [planejamento](planning/plano-de-estudos.md)) | 🚧 planejado |
+| 27 | Plano de Estudos: espaço de preparação por prova, com flashcards, materiais e cronograma integrados (ver [documentação](modules/plano-de-estudos.md)) | ✅ |
 | 28 | PWA: instalação no celular, Service Worker, offline básico e Push Notifications (12 etapas próprias — ver [planejamento](planning/pwa.md)) | 🚧 planejado |
 
 Contribuições: veja [CONTRIBUTING.md](CONTRIBUTING.md).

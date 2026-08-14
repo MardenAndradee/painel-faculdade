@@ -4,6 +4,7 @@ import type {
   CreateStudySessionInput,
   GeneratePlanInput,
   GeneratePlanResult,
+  QuickStartStudySessionInput,
   SaveAvailabilityInput,
   StudyPlanSummary,
   StudySessionItem,
@@ -32,6 +33,10 @@ export const studyPlanService = {
 
   create(data: CreateStudySessionInput): Promise<StudySessionItem> {
     return httpClient.post<StudySessionItem>('/study-sessions', data);
+  },
+
+  quickStart(data: QuickStartStudySessionInput): Promise<StudySessionItem> {
+    return httpClient.post<StudySessionItem>('/study-sessions/quick-start', data);
   },
 
   update(id: string, data: UpdateStudySessionInput): Promise<StudySessionItem> {

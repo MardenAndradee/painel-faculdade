@@ -61,6 +61,12 @@ const deckBaseSchema = z.object({
 
 export const createDeckSchema = deckBaseSchema.extend({
   color: hexColorSchema.default('#6366f1'),
+  /**
+   * Presente quando o baralho nasce dentro de um Plano de Estudos (Etapa 27)
+   * - o baralho já nasce vinculado. Só na criação: editar um baralho não
+   * troca (nem remove) esse vínculo por aqui.
+   */
+  examPrepId: z.string().min(1).optional(),
 });
 
 export type CreateDeckInput = z.output<typeof createDeckSchema>;
@@ -73,6 +79,8 @@ export type UpdateDeckInput = z.infer<typeof updateDeckSchema>;
 export const deckQuerySchema = z.object({
   search: z.string().trim().max(200).optional(),
   subjectId: z.string().min(1).optional(),
+  /** Recorta pelos baralhos de um Plano de Estudos (Etapa 27). */
+  examPrepId: z.string().min(1).optional(),
 });
 
 export type DeckQuery = z.infer<typeof deckQuerySchema>;

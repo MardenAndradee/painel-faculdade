@@ -6,6 +6,7 @@ import {
   type DeckRow,
 } from '../repositories/deck.repository.js';
 import { subjectRepository } from '../repositories/subject.repository.js';
+import { examPrepRepository } from '../repositories/exam-prep.repository.js';
 import { AppError } from '../utils/app-error.js';
 import { emptyToNull } from '../utils/text.js';
 
@@ -67,7 +68,11 @@ export const deckService = {
     const now = new Date();
 
     const [rows, counts] = await Promise.all([
-      deckRepository.findMany(userId, { search: query.search, subjectId: query.subjectId }),
+      deckRepository.findMany(userId, {
+        search: query.search,
+        subjectId: query.subjectId,
+        examPrepId: query.examPrepId,
+      }),
       deckRepository.countCardsByDeck(userId, now, MASTERED_INTERVAL_DAYS),
     ]);
 
@@ -91,11 +96,20 @@ export const deckService = {
   async create(userId: string, input: CreateDeckInput): Promise<DeckListItem> {
     const subjectId = await resolveSubjectId(userId, input.subjectId);
 
+    // Baralho criado de dentro de um plano (Etapa 27) já nasce vinculado -
+    // confirma que o plano existe e é do usuário antes de gravar a FK.
+    if (input.examPrepId) {
+      const plan = await examPrepRepository.findRefById(userId, input.examPrepId);
+
+      if (!plan) throw AppError.badRequest('Plano de estudos inválido');
+    }
+
     const row = await deckRepository.create(userId, {
       name: input.name,
       description: emptyToNull(input.description),
       color: input.color,
       subjectId,
+      examPrepId: input.examPrepId ?? null,
     });
 
     return toListItem(row, EMPTY_COUNTS);

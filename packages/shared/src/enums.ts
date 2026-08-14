@@ -80,6 +80,10 @@ export type ClassMemberStatus = (typeof CLASS_MEMBER_STATUS)[number];
 export const CLASS_POST_KIND = ['ASSIGNMENT', 'EXAM', 'EVENT'] as const;
 export type ClassPostKind = (typeof CLASS_POST_KIND)[number];
 
+/// Status de um item de conteúdo do Plano de Estudos (Etapa 27).
+export const EXAM_PREP_ITEM_STATUS = ['NOT_STARTED', 'IN_PROGRESS', 'DONE'] as const;
+export type ExamPrepItemStatus = (typeof EXAM_PREP_ITEM_STATUS)[number];
+
 /** Rotulos em portugues para exibicao na interface. */
 export const PRIORITY_LABELS: Record<Priority, string> = {
   LOW: 'Baixa',

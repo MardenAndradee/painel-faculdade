@@ -3,6 +3,7 @@ import {
   completeStudySessionSchema,
   createStudySessionSchema,
   generatePlanSchema,
+  quickStartStudySessionSchema,
   saveAvailabilitySchema,
   studyPlanRangeSchema,
   updateStudySessionSchema,
@@ -48,6 +49,13 @@ studyPlanRoutes.post(
   '/study-sessions',
   validate({ body: createStudySessionSchema }),
   studyPlanController.create,
+);
+
+// Precede `/study-sessions/:id` para nao ser lida como um id.
+studyPlanRoutes.post(
+  '/study-sessions/quick-start',
+  validate({ body: quickStartStudySessionSchema }),
+  studyPlanController.quickStart,
 );
 
 studyPlanRoutes.patch(

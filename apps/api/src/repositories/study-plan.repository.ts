@@ -66,6 +66,8 @@ const sessionSelect = {
   subject: { select: { id: true, name: true, color: true } },
   assignment: { select: { id: true, title: true } },
   exam: { select: { id: true, title: true } },
+  // Plano de Estudos (Etapa 27) - selo de volta ao plano no Cronograma.
+  examPrepId: true,
 } satisfies Prisma.StudySessionSelect;
 
 export type StudySessionRow = Prisma.StudySessionGetPayload<{ select: typeof sessionSelect }>;

@@ -226,6 +226,7 @@ model User {
   /// Materiais da turma que este usuário enviou (Etapa 23) - qualquer membro
   /// publica, não só o dono.
   uploadedClassMaterials ClassMaterial[]
+  examPreps              ExamPrep[]
 
   @@index([email])
   @@map("users")
@@ -484,6 +485,10 @@ model Exam {
   classPost     ClassPost?     @relation(fields: [classPostId], references: [id], onDelete: SetNull)
   classPostCopy ClassPostCopy?
 
+  /// Plano de Estudos (Etapa 27) - no maximo um por prova, ja que a prova em
+  /// si e exclusiva de um aluno (inclusive quando veio de turma, via fan-out).
+  examPrep ExamPrep?
+
   @@index([userId, date])
   @@index([subjectId])
   @@index([gradeComponentId])
@@ -698,6 +703,11 @@ model Attachment {
   examId String?
   exam   Exam?   @relation(fields: [examId], references: [id], onDelete: Cascade)
 
+  /// Referencias de Planos de Estudo a este material (Etapa 27) - o material
+  /// continua pertencendo a quem/o-que ja pertence acima; isto e so a lista
+  /// de planos que o "adicionaram" como leitura de apoio.
+  examPrepLinks ExamPrepMaterial[]
+
   @@index([userId, subjectId])
   @@index([assignmentId])
   @@map("attachments")
@@ -798,8 +808,15 @@ model StudySession {
   examId String?
   exam   Exam?   @relation(fields: [examId], references: [id], onDelete: Cascade)
 
+  /// Plano de Estudos (Etapa 27) - SetNull, nao Cascade: a sessao ja soma nas
+  /// Estatisticas, e excluir o plano nao pode apagar retroativamente um
+  /// minuto ja contado.
+  examPrepId String?
+  examPrep   ExamPrep? @relation(fields: [examPrepId], references: [id], onDelete: SetNull)
+
   @@index([userId, scheduledStart])
   @@index([userId, status])
+  @@index([examPrepId])
   @@map("study_sessions")
 }
 
@@ -1178,10 +1195,18 @@ model Deck {
   subjectId String?
   subject   Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
 
+  /// Plano de Estudos (Etapa 27) - opcional: baralhos existentes continuam
+  /// soltos (nunca migrados automaticamente, ver decisao no plano). Um
+  /// baralho criado a partir de um plano nasce com este vinculo, e Cascade
+  /// porque nesse caso ele e dado exclusivo do plano.
+  examPrepId String?
+  examPrep   ExamPrep? @relation(fields: [examPrepId], references: [id], onDelete: Cascade)
+
   cards Flashcard[]
 
   @@index([userId, subjectId])
   @@index([userId, archivedAt])
+  @@index([examPrepId])
   @@map("decks")
 }
 
@@ -1290,4 +1315,87 @@ model StudyAvailability {
 
   @@index([userId, dayOfWeek])
   @@map("study_availability")
+}
+
+// =============================================================================
+// Plano de Estudos (Etapa 27)
+// =============================================================================
+//
+// Nome interno "ExamPrep", nao "StudyPlan": esse nome ja pertence ao
+// Cronograma (study-plan.routes.ts, study-sessions, StudySession/
+// StudyAvailability acima). O rotulo em portugues que o aluno ve continua
+// "Plano de Estudos" - mesma separacao entre nome interno e rotulo que o
+// projeto ja usa em "Materiais" (Attachment) e "Cronograma" (study-plan).
+//
+// Ver docs/modules/plano-de-estudos.md para a documentacao completa.
+
+enum ExamPrepItemStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  DONE
+}
+
+/// O espaco de preparacao de UM aluno para UMA prova. Reune o que ja existe
+/// no sistema (materiais, flashcards, sessoes de estudo) em vez de duplicar.
+model ExamPrep {
+  id String @id @default(cuid())
+
+  /// Anotacoes da prova, um blob so - mesmo padrao do ClassNote (Mural da
+  /// turma), nao do Note/NoteFolder (que existe para organizar muitas notas
+  /// de uma disciplina inteira em pastas - excesso para uma prova so).
+  notes Json @default("{\"type\":\"doc\",\"content\":[]}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Exam.userId ja torna a prova exclusiva de um aluno (inclusive quando
+  /// veio de turma, via fan-out) - @unique aqui ja garante "no maximo um
+  /// plano por prova, por aluno" sem precisar compor com userId.
+  examId String @unique
+  exam   Exam   @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  items         ExamPrepItem[]
+  materials     ExamPrepMaterial[]
+  decks         Deck[]
+  studySessions StudySession[]
+
+  @@index([userId])
+  @@map("exam_preps")
+}
+
+/// Conteudos do plano - "o que estudar" (checklist simples).
+model ExamPrepItem {
+  id     String             @id @default(cuid())
+  title  String
+  status ExamPrepItemStatus @default(NOT_STARTED)
+  order  Int                @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  examPrepId String
+  examPrep   ExamPrep @relation(fields: [examPrepId], references: [id], onDelete: Cascade)
+
+  @@index([examPrepId])
+  @@map("exam_prep_items")
+}
+
+/// Referencia a um material JA EXISTENTE (Attachment) - nao duplica o
+/// arquivo, nao move o vinculo que ele ja tem (disciplina/atividade/prova/
+/// solto). So a linha de juncao some se o plano for excluido.
+model ExamPrepMaterial {
+  id      String   @id @default(cuid())
+  addedAt DateTime @default(now())
+
+  examPrepId String
+  examPrep   ExamPrep @relation(fields: [examPrepId], references: [id], onDelete: Cascade)
+
+  attachmentId String
+  attachment   Attachment @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+
+  @@unique([examPrepId, attachmentId])
+  @@map("exam_prep_materials")
 }

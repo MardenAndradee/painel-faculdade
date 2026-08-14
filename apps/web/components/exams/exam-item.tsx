@@ -1,4 +1,4 @@
-import { EllipsisVertical, Pencil, Trash2, Users, Weight } from 'lucide-react';
+import { BookOpen, EllipsisVertical, Pencil, Trash2, Users, Weight } from 'lucide-react';
 import type { ExamListItem } from '@painel/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,7 @@ interface ExamItemProps {
   exam: ExamListItem;
   onEdit: (exam: ExamListItem) => void;
   onDelete: (exam: ExamListItem) => void;
+  onStudyPlan: (exam: ExamListItem) => void;
 }
 
 type UrgencyTone = 'danger' | 'warning' | 'info' | 'muted';
@@ -51,7 +52,7 @@ function countdownContent(daysUntilExam: number): { big: string; small: string |
  * o quadrado a direita mostra a contagem regressiva colorida por urgencia.
  * Provas ja realizadas mostram a nota no lugar da contagem.
  */
-export function ExamItem({ exam, onEdit, onDelete }: ExamItemProps) {
+export function ExamItem({ exam, onEdit, onDelete, onStudyPlan }: ExamItemProps) {
   const countdown = countdownContent(exam.daysUntilExam);
   const tone = urgencyTone(exam.daysUntilExam);
 
@@ -184,6 +185,11 @@ export function ExamItem({ exam, onEdit, onDelete }: ExamItemProps) {
             <DropdownMenuItem onClick={() => onEdit(exam)}>
               <Pencil aria-hidden />
               Editar
+            </DropdownMenuItem>
+
+            <DropdownMenuItem onClick={() => onStudyPlan(exam)}>
+              <BookOpen aria-hidden />
+              {exam.examPrepId ? 'Ver plano de estudo' : 'Criar plano de estudo'}
             </DropdownMenuItem>
 
             <DropdownMenuSeparator />

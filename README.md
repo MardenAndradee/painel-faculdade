@@ -10,6 +10,7 @@ Plataforma web de organização acadêmica para estudantes universitários. Cent
 - **Calendário** — eventos manuais e sincronizados com o Google Calendar
 - **Materiais** — upload de arquivos ou links, vinculáveis a disciplinas, atividades ou provas
 - **Flashcards** — repetição espaçada (SM-2) por baralho
+- **Plano de Estudos** — espaço de preparação por prova, reunindo conteúdos, objetivos, anotações, materiais e flashcards
 - **Cronograma de estudos** — geração automática de sessões de estudo a partir da disponibilidade semanal e dos prazos pendentes
 - **Estatísticas** — desempenho por disciplina/semestre, tempo estudado, adesão ao cronograma
 - **Busca global** (⌘K) e central de notificações

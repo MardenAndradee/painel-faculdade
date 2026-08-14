@@ -34,12 +34,15 @@ export interface DeckCardCounts {
 export interface DeckFilters {
   search?: string | undefined;
   subjectId?: string | undefined;
+  /** Recorta pelos baralhos de um Plano de Estudos (Etapa 27). */
+  examPrepId?: string | undefined;
 }
 
 function buildWhere(userId: string, filters: DeckFilters): Prisma.DeckWhereInput {
   const conditions: Prisma.DeckWhereInput[] = [{ userId }];
 
   if (filters.subjectId) conditions.push({ subjectId: filters.subjectId });
+  if (filters.examPrepId) conditions.push({ examPrepId: filters.examPrepId });
 
   if (filters.search) {
     conditions.push({

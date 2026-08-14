@@ -40,6 +40,8 @@ const listSelect = {
   classPostId: true,
   classPost: { select: { class: { select: { id: true, name: true } } } },
   _count: { select: { attachments: true } },
+  // Plano de Estudos (Etapa 27) - so o id, pro menu decidir "Criar" x "Ver".
+  examPrep: { select: { id: true } },
 } satisfies Prisma.ExamSelect;
 
 export type ExamListRow = Prisma.ExamGetPayload<{ select: typeof listSelect }>;

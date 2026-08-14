@@ -132,6 +132,17 @@ export const createStudySessionSchema = studySessionBaseSchema.refine(
 export type CreateStudySessionInput = z.output<typeof createStudySessionSchema>;
 export type StudySessionFormValues = z.input<typeof studySessionBaseSchema>;
 
+/**
+ * "Começar sessão" (Etapa 27/9): dispara um bloco `IN_PROGRESS` agora, sem
+ * agendamento - diferente da criação normal, que exige início e fim
+ * planejados de antemão.
+ */
+export const quickStartStudySessionSchema = z.object({
+  examPrepId: z.string().min(1, 'Informe o plano de estudos'),
+});
+
+export type QuickStartStudySessionInput = z.infer<typeof quickStartStudySessionSchema>;
+
 /** Edicao sem defaults: um PATCH de nota nao pode mexer no horario. */
 export const updateStudySessionSchema = studySessionBaseSchema.partial();
 export type UpdateStudySessionInput = z.infer<typeof updateStudySessionSchema>;
@@ -196,6 +207,8 @@ export interface StudySessionItem {
   subject: SubjectRef | null;
   assignment: { id: string; title: string } | null;
   exam: { id: string; title: string } | null;
+  /** Presente quando a sessão pertence a um Plano de Estudos (Etapa 27) - selo de volta ao plano. */
+  examPrepId: string | null;
   createdAt: string;
   updatedAt: string;
 }

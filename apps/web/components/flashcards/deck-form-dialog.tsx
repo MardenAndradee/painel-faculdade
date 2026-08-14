@@ -12,6 +12,7 @@ import {
   type DeckListItem,
 } from '@painel/shared';
 import { useCreateDeck, useUpdateDeck } from '@/hooks/use-flashcards';
+import { useCreateExamPrepDeck } from '@/hooks/use-exam-preps';
 import { useSubjects } from '@/hooks/use-subjects';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,6 +38,13 @@ interface DeckFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   deck?: DeckListItem | null;
+  /**
+   * Presente quando o baralho nasce de dentro de um Plano de Estudos (Etapa
+   * 27) - o baralho já sai vinculado, e a criação não navega pra fora do
+   * plano (o `/flashcards/:id` continua existindo, só não é o próximo passo
+   * aqui).
+   */
+  examPrepId?: string;
 }
 
 /** O Radix nao aceita `value=""` num item. */
@@ -45,10 +53,11 @@ const NO_SUBJECT = 'none';
 /** Paleta fixa: cores escolhidas a dedo legiveis nos dois temas. */
 const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#0ea5e9'];
 
-export function DeckFormDialog({ open, onOpenChange, deck }: DeckFormDialogProps) {
+export function DeckFormDialog({ open, onOpenChange, deck, examPrepId }: DeckFormDialogProps) {
   const isEditing = Boolean(deck);
   const router = useRouter();
   const createDeck = useCreateDeck();
+  const createExamPrepDeck = useCreateExamPrepDeck(examPrepId ?? '');
   const updateDeck = useUpdateDeck();
   const { data: subjects } = useSubjects({ page: 1, perPage: 100 });
 
@@ -82,6 +91,11 @@ export function DeckFormDialog({ open, onOpenChange, deck }: DeckFormDialogProps
     try {
       if (isEditing && deck) {
         await updateDeck.mutateAsync({ id: deck.id, data: values });
+        onOpenChange(false);
+      } else if (examPrepId) {
+        // Criado de dentro de um plano: fica na própria tela do plano - o
+        // baralho novo aparece na seção de Flashcards ali mesmo.
+        await createExamPrepDeck.mutateAsync(values);
         onOpenChange(false);
       } else {
         const created = await createDeck.mutateAsync(values);
