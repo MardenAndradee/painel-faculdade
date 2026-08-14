@@ -23,3 +23,4 @@ export * from './schemas/class.js';
 export * from './schemas/class-post.js';
 export * from './schemas/class-mural.js';
 export * from './schemas/class-material.js';
+export * from './schemas/module-settings.js';

@@ -43,8 +43,8 @@ export class AppError extends Error {
     return new AppError(`${resource} nao encontrado`, 404, ERROR_CODES.NOT_FOUND);
   }
 
-  static conflict(message: string): AppError {
-    return new AppError(message, 409, ERROR_CODES.CONFLICT);
+  static conflict(message: string, details?: Record<string, string[]>): AppError {
+    return new AppError(message, 409, ERROR_CODES.CONFLICT, details);
   }
 
   static internal(message = 'Erro interno do servidor'): AppError {

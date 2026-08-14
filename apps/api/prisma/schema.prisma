@@ -153,6 +153,26 @@ enum ClassPostKind {
   EVENT
 }
 
+/// Modulos configuraveis pelo usuario (Etapa 29) - cada valor mapeia 1:1 pra
+/// uma tela da experiencia principal. Desativar um modulo nunca apaga dado
+/// nenhum, so tira da Sidebar/Dashboard/busca/notificacoes. Integracoes fica
+/// de fora: dobrou para dentro de Configuracoes, sem toggle proprio. Ver
+/// docs/planning/modulos-configuraveis.md.
+enum AppModule {
+  SUBJECTS
+  ASSIGNMENTS
+  EXAMS
+  CALENDAR
+  GRADES
+  HISTORY
+  MATERIALS
+  FLASHCARDS
+  STUDY_PLAN
+  EXAM_PREP
+  STATISTICS
+  CLASSES
+}
+
 // =============================================================================
 // Usuario e autenticacao
 // =============================================================================
@@ -227,9 +247,33 @@ model User {
   /// publica, não só o dono.
   uploadedClassMaterials ClassMaterial[]
   examPreps              ExamPrep[]
+  moduleSettings         UserModuleSetting[]
 
   @@index([email])
   @@map("users")
+}
+
+// =============================================================================
+// Modulos configuraveis (Etapa 29)
+// =============================================================================
+
+/// Preferencia de UM usuario para UM modulo. Tabela esparsa de proposito: uma
+/// linha so existe quando o usuario desvia do padrao (MODULE_DEFAULT_ENABLED,
+/// em packages/shared) - ausencia de linha = padrao. Como o padrao de quase
+/// todo modulo ja e "ativado" (unica excecao e FLASHCARDS), nenhuma migracao
+/// de backfill foi necessaria para usuarios existentes ao lancar esta etapa.
+model UserModuleSetting {
+  id        String    @id @default(cuid())
+  module    AppModule
+  enabled   Boolean
+  updatedAt DateTime  @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, module])
+  @@index([userId])
+  @@map("user_module_settings")
 }
 
 /// Refresh tokens ficam em tabela propria (e nao em coluna do usuario) para

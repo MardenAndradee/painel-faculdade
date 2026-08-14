@@ -84,6 +84,25 @@ export type ClassPostKind = (typeof CLASS_POST_KIND)[number];
 export const EXAM_PREP_ITEM_STATUS = ['NOT_STARTED', 'IN_PROGRESS', 'DONE'] as const;
 export type ExamPrepItemStatus = (typeof EXAM_PREP_ITEM_STATUS)[number];
 
+/// Módulos configuráveis pelo usuário (Etapa 29) - cada valor mapeia 1:1 pra
+/// uma tela da experiência principal. Integrações fica de fora: dobrou pra
+/// dentro de Configurações, sem toggle próprio.
+export const APP_MODULES = [
+  'SUBJECTS',
+  'ASSIGNMENTS',
+  'EXAMS',
+  'CALENDAR',
+  'GRADES',
+  'HISTORY',
+  'MATERIALS',
+  'FLASHCARDS',
+  'STUDY_PLAN',
+  'EXAM_PREP',
+  'STATISTICS',
+  'CLASSES',
+] as const;
+export type AppModule = (typeof APP_MODULES)[number];
+
 /** Rotulos em portugues para exibicao na interface. */
 export const PRIORITY_LABELS: Record<Priority, string> = {
   LOW: 'Baixa',
