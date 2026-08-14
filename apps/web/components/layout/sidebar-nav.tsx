@@ -121,14 +121,14 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
         <div className="flex-1 space-y-6">
           {visibleSections.map((section) => (
             <div key={section.title}>
-              {/* Esconde o título quando sobra 1 item só: um cabeçalho de
-                  grupo pra um item embaixo parece mais poluição do que
-                  organização (possível simplificação #3 do plano). */}
-              {section.items.length > 1 && (
-                <p className="px-2 pb-2 text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
-                  {section.title}
-                </p>
-              )}
+              {/* O título só some quando a seção inteira fica vazia - e aí
+                  `useVisibleSections` já a descarta antes de chegar aqui.
+                  Escondê-lo com 1 item só deixava o item restante "sem teto",
+                  parecendo fora de lugar (ex.: Estatísticas sozinho quando
+                  Histórico é desativado). */}
+              <p className="px-2 pb-2 text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
+                {section.title}
+              </p>
 
               <ul className="space-y-0.5">
                 {section.items.map((item) => (
