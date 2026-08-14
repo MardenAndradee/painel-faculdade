@@ -1,3 +1,4 @@
+import type { NotificationType } from '@painel/shared';
 import { prisma, type Prisma } from '../config/prisma.js';
 
 /** Acesso a dados da central de notificacoes (Etapa 19). */
@@ -31,10 +32,13 @@ export const notificationRepository = {
     unreadOnly: boolean,
     skip: number,
     take: number,
+    /** Tipos de módulo desativado (Etapa 29) - nunca apagados, só de fora da leitura. */
+    excludedTypes: NotificationType[],
   ): Promise<{ rows: NotificationRow[]; total: number }> {
     const where: Prisma.NotificationWhereInput = {
       userId,
       ...(unreadOnly ? { readAt: null } : {}),
+      ...(excludedTypes.length > 0 ? { type: { notIn: excludedTypes } } : {}),
     };
 
     const [rows, total] = await prisma.$transaction([
@@ -53,8 +57,14 @@ export const notificationRepository = {
     return { rows, total };
   },
 
-  countUnread(userId: string): Promise<number> {
-    return prisma.notification.count({ where: { userId, readAt: null } });
+  countUnread(userId: string, excludedTypes: NotificationType[]): Promise<number> {
+    return prisma.notification.count({
+      where: {
+        userId,
+        readAt: null,
+        ...(excludedTypes.length > 0 ? { type: { notIn: excludedTypes } } : {}),
+      },
+    });
   },
 
   /**

@@ -1,5 +1,6 @@
 import {
   buildPaginationMeta,
+  type AppModule,
   type NotificationEntityType,
   type NotificationItem,
   type NotificationQuery,
@@ -15,11 +16,13 @@ import {
 } from '../repositories/notification.repository.js';
 import { AppError } from '../utils/app-error.js';
 import {
+  NOTIFICATION_TYPE_MODULE,
   planNotifications,
   SCAN_WINDOW,
   SCANNED_TYPES,
   type NotificationPlan,
 } from '../utils/notification-rules.js';
+import { moduleSettingsService } from './module-settings.service.js';
 
 /**
  * Regra de negocio da central de notificacoes (Etapa 19).
@@ -67,6 +70,18 @@ function matches(row: NotificationRow, draft: NotificationDraft): boolean {
   );
 }
 
+/**
+ * Tipos que devem ficar de fora da leitura (Etapa 29) - o módulo dono está
+ * desativado. Nunca usado para apagar, só para `WHERE type NOT IN (...)`.
+ */
+function excludedTypesFor(enabledModules: Set<AppModule>): NotificationType[] {
+  return (Object.keys(NOTIFICATION_TYPE_MODULE) as NotificationType[]).filter((type) => {
+    const module = NOTIFICATION_TYPE_MODULE[type];
+
+    return module !== undefined && !enabledModules.has(module);
+  });
+}
+
 export const notificationService = {
   /**
    * Sincroniza as notificacoes de prazo com a realidade.
@@ -88,6 +103,13 @@ export const notificationService = {
    * Notificacao ja lida nunca e tocada: e historico do que a pessoa viu.
    */
   async generatePending(userId: string, now = new Date()): Promise<void> {
+    const enabledModules = await moduleSettingsService.getEnabledSet(userId);
+    const isModuleEnabled = (type: NotificationType): boolean => {
+      const module = NOTIFICATION_TYPE_MODULE[type];
+
+      return module === undefined || enabledModules.has(module);
+    };
+
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
     const sources = await notificationRepository.findScanSources(userId, {
@@ -154,7 +176,12 @@ export const notificationService = {
       const draft = toDraft(plan);
 
       if (!current) {
-        await notificationRepository.create(userId, draft);
+        // Modulo desativado: nao gera a notificacao nova. Nao ha o que
+        // "esconder" depois - ela simplesmente nao chega a nascer.
+        if (isModuleEnabled(plan.type)) {
+          await notificationRepository.create(userId, draft);
+        }
+
         continue;
       }
 
@@ -205,11 +232,14 @@ export const notificationService = {
   async list(userId: string, query: NotificationQuery): Promise<PaginatedResult<NotificationItem>> {
     await this.generatePending(userId);
 
+    const excludedTypes = excludedTypesFor(await moduleSettingsService.getEnabledSet(userId));
+
     const { rows, total } = await notificationRepository.findPaginated(
       userId,
       query.unreadOnly,
       (query.page - 1) * query.perPage,
       query.perPage,
+      excludedTypes,
     );
 
     return {
@@ -228,7 +258,9 @@ export const notificationService = {
   async unreadCount(userId: string): Promise<UnreadCount> {
     await this.generatePending(userId);
 
-    return { unread: await notificationRepository.countUnread(userId) };
+    const excludedTypes = excludedTypesFor(await moduleSettingsService.getEnabledSet(userId));
+
+    return { unread: await notificationRepository.countUnread(userId, excludedTypes) };
   },
 
   async markAsRead(userId: string, id: string): Promise<NotificationItem> {

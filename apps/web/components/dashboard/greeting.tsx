@@ -34,6 +34,8 @@ interface GreetingProps {
   dueThisWeekCount: number;
   /** Dias ate a proxima prova, ou nulo quando nao ha prova marcada. */
   nextExamDays: number | null;
+  showAssignments: boolean;
+  showExams: boolean;
 }
 
 /** "uma prova hoje" / "amanhã" / "em N dias" - por extenso perto do prazo, porque le melhor. */
@@ -44,25 +46,42 @@ function examPhrase(days: number): string {
   return `uma prova em ${days} dias`;
 }
 
-/** Resumo da semana: entregas nos proximos 7 dias e a proxima prova, quando houver. */
-function buildSummary(dueThisWeekCount: number, nextExamDays: number | null): string {
+/**
+ * Resumo da semana: entregas nos proximos 7 dias e a proxima prova, quando
+ * houver - cada clausula so entra se o modulo dono (Atividades/Provas)
+ * estiver ativo (Etapa 29.10).
+ */
+function buildSummary(
+  dueThisWeekCount: number,
+  nextExamDays: number | null,
+  showAssignments: boolean,
+  showExams: boolean,
+): string {
   const parts: string[] = [];
 
-  if (dueThisWeekCount > 0) {
+  if (showAssignments && dueThisWeekCount > 0) {
     parts.push(
       `${dueThisWeekCount} ${dueThisWeekCount === 1 ? 'entrega' : 'entregas'} nesta semana`,
     );
   }
 
-  if (nextExamDays !== null) parts.push(examPhrase(nextExamDays));
+  if (showExams && nextExamDays !== null) parts.push(examPhrase(nextExamDays));
 
-  if (parts.length === 0)
-    return 'Nenhuma entrega ou prova esta semana. Aproveite para adiantar os estudos.';
+  if (parts.length > 0) return `Você tem ${parts.join(' e ')}.`;
 
-  return `Você tem ${parts.join(' e ')}.`;
+  if (!showAssignments && !showExams) return 'Organize o resto do seu semestre por aqui.';
+
+  return 'Nenhuma entrega ou prova esta semana. Aproveite para adiantar os estudos.';
 }
 
-export function Greeting({ name, semesterName, dueThisWeekCount, nextExamDays }: GreetingProps) {
+export function Greeting({
+  name,
+  semesterName,
+  dueThisWeekCount,
+  nextExamDays,
+  showAssignments,
+  showExams,
+}: GreetingProps) {
   const [greeting, setGreeting] = useState('Olá');
   const [dateLabel, setDateLabel] = useState('');
 
@@ -74,7 +93,7 @@ export function Greeting({ name, semesterName, dueThisWeekCount, nextExamDays }:
   }, []);
 
   const firstName = name.split(' ')[0] ?? name;
-  const summary = buildSummary(dueThisWeekCount, nextExamDays);
+  const summary = buildSummary(dueThisWeekCount, nextExamDays, showAssignments, showExams);
 
   return (
     <div>

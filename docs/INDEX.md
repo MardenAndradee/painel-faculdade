@@ -35,12 +35,12 @@ de desenvolvimento. Nada foi perdido na mudança — só reorganizado.
 - [modules/estatisticas.md](modules/estatisticas.md)
 - [modules/turmas.md](modules/turmas.md)
 - [modules/plano-de-estudos.md](modules/plano-de-estudos.md)
+- [modules/modulos-configuraveis.md](modules/modulos-configuraveis.md)
 
 ### Planejamento (features aprovadas ou em análise, ainda não implementadas)
 
 - [planning/autenticacao-email-senha.md](planning/autenticacao-email-senha.md)
-- [planning/pwa.md](planning/pwa.md) — instalação no celular, Service Worker, cache, offline e Push Notifications
-- [planning/modulos-configuraveis.md](planning/modulos-configuraveis.md) — módulos ativáveis/desativáveis, Configurações, simplificação de Sidebar e Dashboard
+- [planning/pwa.md](planning/pwa.md) — instalação no celular, Service Worker, cache, offline e Push Notifications (Etapa 28.1 já implementada, resto planejado)
 
 ## Convenção
 

@@ -1,4 +1,5 @@
 import type {
+  AppModule,
   NotificationEntityType,
   NotificationPriority,
   NotificationType,
@@ -69,6 +70,23 @@ export const SCANNED_TYPES: NotificationType[] = [
   'ASSIGNMENT_OVERDUE',
   'EXAM_UPCOMING',
 ];
+
+/**
+ * Tipo de notificacao -> modulo dono (Etapa 29).
+ *
+ * Um tipo ausente daqui e estrutural - `SYNC_COMPLETED`/`SYNC_FAILED` (sync
+ * nao e mais um modulo, dobrou pra Configuracoes) e `SYSTEM` nunca sao
+ * filtrados, sempre aparecem.
+ */
+export const NOTIFICATION_TYPE_MODULE: Partial<Record<NotificationType, AppModule>> = {
+  ASSIGNMENT_DUE: 'ASSIGNMENTS',
+  ASSIGNMENT_OVERDUE: 'ASSIGNMENTS',
+  ASSIGNMENT_CREATED: 'ASSIGNMENTS',
+  EXAM_UPCOMING: 'EXAMS',
+  GRADE_POSTED: 'GRADES',
+  STUDY_SESSION: 'STUDY_PLAN',
+  CLASS_ANNOUNCEMENT: 'CLASSES',
+};
 
 function withSubject(text: string, subjectName: string | null): string {
   return subjectName ? `${text} · ${subjectName}` : text;
