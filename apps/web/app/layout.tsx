@@ -23,6 +23,9 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
+  // Sem isso, `env(safe-area-inset-*)` resolve como zero no iOS - qualquer
+  // padding de area segura (Etapa 28.1/28.8) ficaria inerte.
+  viewportFit: 'cover',
   // Cor da barra do navegador no celular: os mesmos `--background` de
   // `globals.css`. O valor escuro estava em `#09090b`, de antes da paleta
   // "Nocturne" - a barra destoava do topo da pagina por dois tons.

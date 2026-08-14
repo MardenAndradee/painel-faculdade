@@ -80,6 +80,20 @@
   --brand-mark-panel: #e2e8f0;
   --brand-mark-dot: #2563eb;
   --brand-wordmark: #1d4ed8;
+
+  /*
+   * Insets de area segura (notch, ilha dinamica, gesto do sistema).
+   *
+   * So tem efeito com `viewportFit: 'cover'` no layout (Etapa 28.1) - sem
+   * isso, os `env()` abaixo resolvem como zero. Mesmo valor nos dois temas,
+   * por isso mora so no `:root`. Ainda sem consumidor: aplicar padding com
+   * eles em header/rodape fica pra Etapa 28.8, quando fizer sentido em modo
+   * standalone.
+   */
+  --safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --safe-area-inset-right: env(safe-area-inset-right, 0px);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-inset-left: env(safe-area-inset-left, 0px);
 }
 
 .dark {

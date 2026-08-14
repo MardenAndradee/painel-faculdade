@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import type { AuthSession, AuthUser } from '@painel/shared';
 import { authService } from '@/services/auth.service';
 import { setAccessToken, setSessionExpiredHandler } from '@/services/http-client';
@@ -32,6 +33,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUserState] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   /**
    * Renovacao proativa agendada para pouco antes do token expirar, evitando
@@ -106,19 +108,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await authService.logout();
 
     setUserState(null);
+    // Zera o cache do TanStack Query: sem isso, trocar de usuario no mesmo
+    // aparelho sem recarregar a pagina podia mostrar dado do usuario anterior
+    // por ate `gcTime` (5 min) - vazamento existente antes desta correcao.
+    queryClient.clear();
     router.replace('/login');
-  }, [router, clearRenewalTimer]);
+  }, [router, clearRenewalTimer, queryClient]);
 
   // Quando a renovacao falha em definitivo, o http-client avisa por aqui.
   useEffect(() => {
     setSessionExpiredHandler(() => {
       clearRenewalTimer();
       setUserState(null);
+      queryClient.clear();
       router.replace('/login?error=sessao_expirada');
     });
 
     return () => setSessionExpiredHandler(null);
-  }, [router, clearRenewalTimer]);
+  }, [router, clearRenewalTimer, queryClient]);
 
   const refreshUser = useCallback(async (): Promise<void> => {
     const current = await authService.me();
