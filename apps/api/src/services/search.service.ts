@@ -7,6 +7,7 @@ import {
   type SearchResults,
 } from '@painel/shared';
 import { searchRepository, type SearchHits } from '../repositories/search.repository.js';
+import { moduleSettingsService } from './module-settings.service.js';
 
 /** Regra de negocio da busca global (Etapa 19). */
 
@@ -102,7 +103,17 @@ function toGroups(hits: SearchHits): SearchGroup[] {
 
 export const searchService = {
   async search(userId: string, query: string): Promise<SearchResults> {
-    const groups = toGroups(await searchRepository.findAll(userId, query));
+    const enabledModules = await moduleSettingsService.getEnabledSet(userId);
+
+    const groups = toGroups(
+      await searchRepository.findAll(userId, query, {
+        subjects: enabledModules.has('SUBJECTS'),
+        assignments: enabledModules.has('ASSIGNMENTS'),
+        exams: enabledModules.has('EXAMS'),
+        calendarEvents: enabledModules.has('CALENDAR'),
+        attachments: enabledModules.has('MATERIALS'),
+      }),
+    );
 
     return {
       query,

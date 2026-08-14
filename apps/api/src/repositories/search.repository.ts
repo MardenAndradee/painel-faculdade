@@ -57,80 +57,104 @@ export interface SearchHits {
   attachments: AttachmentHit[];
 }
 
+/**
+ * Um módulo desativado (Etapa 29) nem chega a ser consultado - não é só
+ * filtrado do resultado. Mais barato, e não depende de o cliente mandar o
+ * filtro certo (o service já resolve isso a partir do próprio usuário
+ * autenticado).
+ */
+export interface SearchModuleFlags {
+  subjects: boolean;
+  assignments: boolean;
+  exams: boolean;
+  calendarEvents: boolean;
+  attachments: boolean;
+}
+
 export const searchRepository = {
-  async findAll(userId: string, term: string): Promise<SearchHits> {
+  async findAll(userId: string, term: string, flags: SearchModuleFlags): Promise<SearchHits> {
     const take = SEARCH_LIMIT_PER_KIND;
 
     const [subjects, assignments, exams, calendarEvents, attachments] = await Promise.all([
-      prisma.subject.findMany({
-        // Arquivadas ficam de fora: quem arquivou tirou da frente de proposito.
-        where: {
-          userId,
-          archivedAt: null,
-          OR: [{ name: contains(term) }, { code: contains(term) }],
-        },
-        select: { id: true, name: true, code: true, color: true },
-        orderBy: { name: 'asc' },
-        take,
-      }),
+      !flags.subjects
+        ? Promise.resolve([])
+        : prisma.subject.findMany({
+            // Arquivadas ficam de fora: quem arquivou tirou da frente de proposito.
+            where: {
+              userId,
+              archivedAt: null,
+              OR: [{ name: contains(term) }, { code: contains(term) }],
+            },
+            select: { id: true, name: true, code: true, color: true },
+            orderBy: { name: 'asc' },
+            take,
+          }),
 
-      prisma.assignment.findMany({
-        where: {
-          userId,
-          OR: [{ title: contains(term) }, { description: contains(term) }],
-        },
-        select: {
-          id: true,
-          title: true,
-          dueDate: true,
-          status: true,
-          subject: subjectRef,
-        },
-        // Pendentes com prazo mais proximo primeiro; sem prazo, no fim.
-        orderBy: [{ dueDate: { sort: 'asc', nulls: 'last' } }],
-        take,
-      }),
+      !flags.assignments
+        ? Promise.resolve([])
+        : prisma.assignment.findMany({
+            where: {
+              userId,
+              OR: [{ title: contains(term) }, { description: contains(term) }],
+            },
+            select: {
+              id: true,
+              title: true,
+              dueDate: true,
+              status: true,
+              subject: subjectRef,
+            },
+            // Pendentes com prazo mais proximo primeiro; sem prazo, no fim.
+            orderBy: [{ dueDate: { sort: 'asc', nulls: 'last' } }],
+            take,
+          }),
 
-      prisma.exam.findMany({
-        where: {
-          userId,
-          OR: [
-            { title: contains(term) },
-            { content: contains(term) },
-            { subject: { name: contains(term) } },
-          ],
-        },
-        select: { id: true, title: true, date: true, subject: subjectRef },
-        orderBy: { date: 'asc' },
-        take,
-      }),
+      !flags.exams
+        ? Promise.resolve([])
+        : prisma.exam.findMany({
+            where: {
+              userId,
+              OR: [
+                { title: contains(term) },
+                { content: contains(term) },
+                { subject: { name: contains(term) } },
+              ],
+            },
+            select: { id: true, title: true, date: true, subject: subjectRef },
+            orderBy: { date: 'asc' },
+            take,
+          }),
 
-      prisma.calendarEvent.findMany({
-        where: {
-          userId,
-          OR: [
-            { title: contains(term) },
-            { description: contains(term) },
-            { location: contains(term) },
-          ],
-        },
-        select: {
-          id: true,
-          title: true,
-          startsAt: true,
-          location: true,
-          subject: subjectRef,
-        },
-        orderBy: { startsAt: 'asc' },
-        take,
-      }),
+      !flags.calendarEvents
+        ? Promise.resolve([])
+        : prisma.calendarEvent.findMany({
+            where: {
+              userId,
+              OR: [
+                { title: contains(term) },
+                { description: contains(term) },
+                { location: contains(term) },
+              ],
+            },
+            select: {
+              id: true,
+              title: true,
+              startsAt: true,
+              location: true,
+              subject: subjectRef,
+            },
+            orderBy: { startsAt: 'asc' },
+            take,
+          }),
 
-      prisma.attachment.findMany({
-        where: { userId, name: contains(term) },
-        select: { id: true, name: true, type: true, subject: subjectRef },
-        orderBy: { createdAt: 'desc' },
-        take,
-      }),
+      !flags.attachments
+        ? Promise.resolve([])
+        : prisma.attachment.findMany({
+            where: { userId, name: contains(term) },
+            select: { id: true, name: true, type: true, subject: subjectRef },
+            orderBy: { createdAt: 'desc' },
+            take,
+          }),
     ]);
 
     return { subjects, assignments, exams, calendarEvents, attachments };
