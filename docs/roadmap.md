@@ -30,5 +30,6 @@
 | 26 | Autenticação: e-mail + senha, vínculo com Google (10 etapas próprias — ver seção dedicada) | 🚧 planejado |
 | 27 | Plano de Estudos: espaço de preparação por prova, com flashcards, materiais e cronograma integrados (ver [documentação](modules/plano-de-estudos.md)) | ✅ |
 | 28 | PWA: instalação no celular, Service Worker, offline básico e Push Notifications (12 etapas próprias — ver [planejamento](planning/pwa.md)) | 🚧 planejado |
+| 29 | Módulos configuráveis: Configurações, ativar/desativar módulos sem perder dados, simplificação de Sidebar e Dashboard (12 etapas próprias — ver [planejamento](planning/modulos-configuraveis.md)) | 🚧 planejado |
 
 Contribuições: veja [CONTRIBUTING.md](CONTRIBUTING.md).
