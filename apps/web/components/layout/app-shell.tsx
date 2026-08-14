@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { Menu, RefreshCw, Search } from 'lucide-react';
+import { Menu, Search } from 'lucide-react';
 import { SidebarNav } from './sidebar-nav';
 import { Breadcrumbs } from './breadcrumbs';
 import { ThemeToggle } from './theme-toggle';
@@ -12,8 +12,6 @@ import { NotificationBell } from '@/components/notifications/notification-bell';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { useAutoSync } from '@/hooks/use-auto-sync';
-import { useAuth } from '@/hooks/use-auth';
-import { useSyncClassroom } from '@/hooks/use-integrations';
 
 /**
  * Estrutura das telas autenticadas: sidebar + navbar + area de conteudo.
@@ -26,8 +24,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const pathname = usePathname();
-  const { user } = useAuth();
-  const sync = useSyncClassroom();
 
   // Sincroniza o Classroom ao abrir o app. Fica AQUI, e nao numa tela
   // especifica, porque o shell monta uma vez e persiste enquanto o usuario
@@ -106,26 +102,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Button>
 
           <div className="ml-auto flex items-center gap-1">
-            {/* So aparece pra quem ja conectou o Classroom: sem conta ligada,
-                a sincronizacao nao teria o que fazer. */}
-            {user?.hasClassroomAccess && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => sync.mutate()}
-                disabled={sync.isPending}
-                aria-label="Sincronizar com o Classroom"
-              >
-                <RefreshCw
-                  className={sync.isPending ? 'size-4 animate-spin' : 'size-4'}
-                  aria-hidden
-                />
-                <span className="hidden sm:inline">
-                  {sync.isPending ? 'Sincronizando...' : 'Sincronizar'}
-                </span>
-              </Button>
-            )}
-
             <NotificationBell />
             <ThemeToggle />
             <UserMenu />

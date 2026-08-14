@@ -49,13 +49,13 @@ function AuthCallbackContent() {
         const session = await authService.exchangeSession(token);
         applySession(session);
 
-        // Autorizacao incremental parte da tela de integracoes e volta para la.
+        // Autorizacao incremental parte de Configuracoes -> Integracoes e volta para la.
         const destino = searchParams.get('destino');
         const conectado = searchParams.get('conectado');
 
         router.replace(
           destino === 'integracoes'
-            ? `/integracoes?conectado=${conectado ?? 'classroom'}`
+            ? `/configuracoes?tab=integracoes&conectado=${conectado ?? 'classroom'}`
             : '/dashboard',
         );
       } catch {
