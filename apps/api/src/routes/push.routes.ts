@@ -5,14 +5,24 @@ import { authenticate } from '../middlewares/authenticate.js';
 import { cronAuth } from '../middlewares/cron-auth.js';
 import { validate } from '../middlewares/validate.js';
 
-/** Rotas de Push Notifications (Etapa 28.11). */
-export const pushRoutes: Router = Router();
+/**
+ * Rota pública do cron (Etapa 28.11) - segredo compartilhado em vez de
+ * sessão de usuário. Router SEPARADO de propósito: `pushRoutes` abaixo tem
+ * `.use(authenticate)` sem caminho, que rodaria para QUALQUER request que
+ * caia nele, mesmo uma que nenhuma rota sua atenda - colocar essa rota no
+ * mesmo router e registrá-lo cedo (antes de `authRoutes`) já quebrou login
+ * em produção uma vez (o `authenticate` interceptava `/auth/google` antes
+ * de ele chegar em `authRoutes`). Este router nunca deve ganhar uma rota
+ * autenticada.
+ */
+export const pushCronRoutes: Router = Router();
 
-// Chamada pelo Vercel Cron, nao por um usuario - segredo compartilhado em
-// vez de sessao. Registrada antes do `authenticate` abaixo para não herdá-lo.
 // GET porque e assim que o Vercel Cron invoca (nao ha como configurar outro
 // metodo em `vercel.json`), mesmo o disparo tendo efeito colateral.
-pushRoutes.get('/push/dispatch', cronAuth, pushController.dispatch);
+pushCronRoutes.get('/push/dispatch', cronAuth, pushController.dispatch);
+
+/** Rotas de Push Notifications que exigem sessão (Etapa 28.11). */
+export const pushRoutes: Router = Router();
 
 pushRoutes.use(authenticate);
 

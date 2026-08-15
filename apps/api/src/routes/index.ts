@@ -19,7 +19,7 @@ import { searchRoutes } from './search.routes.js';
 import { notificationRoutes } from './notification.routes.js';
 import { classRoutes } from './class.routes.js';
 import { moduleSettingsRoutes } from './module-settings.routes.js';
-import { pushRoutes } from './push.routes.js';
+import { pushCronRoutes, pushRoutes } from './push.routes.js';
 
 /**
  * Registro central de rotas. Cada modulo entregue nas proximas etapas
@@ -28,13 +28,16 @@ import { pushRoutes } from './push.routes.js';
 export const routes: Router = Router();
 
 routes.use(healthRoutes);
-// Antes de qualquer router com `.use(authenticate)` sem caminho (todos os
-// abaixo): esse middleware roda para QUALQUER path que caia neste router,
-// mesmo um que nenhuma rota dele de fato atenda - se ele barrar primeiro
-// (401), o pedido nunca chega ao `pushRoutes` mais abaixo. `GET
-// /push/dispatch` (cron, sem sessao de usuario) so funciona registrado
-// antes de todos eles; `authRoutes` segue a mesma regra pelo mesmo motivo.
-routes.use(pushRoutes);
+// `pushCronRoutes` (só `GET /push/dispatch`, sem `.use(authenticate)`
+// nenhum) precisa estar antes de qualquer router com `.use(authenticate)`
+// sem caminho (todos os que exigem sessão, abaixo) - esse middleware roda
+// para QUALQUER path que caia no router, mesmo um que nenhuma rota sua
+// atenda, e barraria o pedido (401) antes de ele alcançar a rota certa.
+// `authRoutes` segue a mesma regra pelo mesmo motivo - é por isso que vem
+// logo em seguida, e não lá no meio da lista. `pushRoutes` (subscribe/
+// unsubscribe, autenticado) fica registrado mais abaixo, junto dos outros
+// routers que exigem sessão - a ordem entre eles não importa.
+routes.use(pushCronRoutes);
 routes.use(authRoutes);
 routes.use(dashboardRoutes);
 routes.use(subjectRoutes);
@@ -54,3 +57,4 @@ routes.use(searchRoutes);
 routes.use(notificationRoutes);
 routes.use(classRoutes);
 routes.use(moduleSettingsRoutes);
+routes.use(pushRoutes);
