@@ -12,6 +12,7 @@ import { GoogleCalendarApiClient } from '../integrations/calendar/calendar.clien
 import { classroomSyncService } from './classroom-sync.service.js';
 import { calendarSyncService } from './calendar-sync.service.js';
 import { userRepository } from '../repositories/user.repository.js';
+import { authIdentityRepository } from '../repositories/auth-identity.repository.js';
 import { AppError } from '../utils/app-error.js';
 import { logger } from '../config/logger.js';
 
@@ -48,15 +49,21 @@ export const integrationService = {
 
     if (!user) throw AppError.notFound('Usuário');
 
-    const [importedSubjects, importedAssignments] = await prisma.$transaction([
+    const [importedSubjects, importedAssignments, googleIdentity] = await Promise.all([
       prisma.subject.count({ where: { userId, googleCourseId: { not: null } } }),
       prisma.assignment.count({ where: { userId, source: 'GOOGLE_CLASSROOM' } }),
+      authIdentityRepository.findByUserAndProvider(userId, 'GOOGLE'),
     ]);
 
     const granted = user.googleGrantedScopes;
 
     return {
-      googleConnected: Boolean(user.googleId),
+      // Desde a Etapa 26 (autenticacao e-mail+senha) a identidade do Google
+      // mora em AuthIdentity, nao mais em `User.googleId` (deprecado, nunca
+      // mais escrito). Ler a coluna antiga aqui voltaria a mostrar
+      // "desconectado" pra qualquer conta que fizer login/vinculo com o
+      // Google a partir de agora.
+      googleConnected: Boolean(googleIdentity),
       classroomConnected: hasScopes(granted, 'classroom'),
       calendarConnected: hasScopes(granted, 'calendar'),
       classroomSyncedAt: user.classroomSyncedAt?.toISOString() ?? null,

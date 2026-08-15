@@ -1,4 +1,16 @@
-import type { AuthSession, AuthUser, UpdateProfileInput } from '@painel/shared';
+import type {
+  AuthSession,
+  AuthUser,
+  ChangePasswordInput,
+  ForgotPasswordInput,
+  LoginInput,
+  LoginMethods,
+  RegisterInput,
+  ResetPasswordInput,
+  SetPasswordInput,
+  UpdateProfileInput,
+  VerifyEmailInput,
+} from '@painel/shared';
 import { API_URL, httpClient, setAccessToken } from './http-client';
 
 /**
@@ -72,5 +84,68 @@ export const authService = {
     setAccessToken(null);
 
     return result;
+  },
+
+  // --- E-mail e senha (Etapa 26) -------------------------------------------------
+
+  async register(data: RegisterInput): Promise<AuthSession> {
+    const session = await httpClient.post<AuthSession>('/auth/register', data, {
+      skipAuth: true,
+    });
+
+    setAccessToken(session.accessToken);
+    return session;
+  },
+
+  async login(data: LoginInput): Promise<AuthSession> {
+    const session = await httpClient.post<AuthSession>('/auth/login', data, { skipAuth: true });
+
+    setAccessToken(session.accessToken);
+    return session;
+  },
+
+  forgotPassword(data: ForgotPasswordInput): Promise<{ message: string }> {
+    return httpClient.post<{ message: string }>('/auth/forgot-password', data, {
+      skipAuth: true,
+    });
+  },
+
+  async resetPassword(data: ResetPasswordInput): Promise<AuthSession> {
+    const session = await httpClient.post<AuthSession>('/auth/reset-password', data, {
+      skipAuth: true,
+    });
+
+    setAccessToken(session.accessToken);
+    return session;
+  },
+
+  verifyEmail(data: VerifyEmailInput): Promise<void> {
+    return httpClient.post<void>('/auth/verify-email', data, { skipAuth: true });
+  },
+
+  getLoginMethods(): Promise<LoginMethods> {
+    return httpClient.get<LoginMethods>('/auth/me/login-methods');
+  },
+
+  /**
+   * Pede a URL de consentimento para vincular o Google a conta atual (Fluxo
+   * 5). Diferente do login (`redirectToGoogle`), passa por um `fetch`
+   * autenticado antes de navegar - a rota exige o header `Authorization`, que
+   * uma navegacao de pagina inteira nao consegue enviar. Quem chama navega.
+   */
+  startGoogleLink(): Promise<{ url: string }> {
+    return httpClient.post<{ url: string }>('/auth/me/link/google');
+  },
+
+  unlinkGoogle(): Promise<void> {
+    return httpClient.delete<void>('/auth/me/link/google');
+  },
+
+  setPassword(data: SetPasswordInput): Promise<void> {
+    return httpClient.post<void>('/auth/me/password', data);
+  },
+
+  changePassword(data: ChangePasswordInput): Promise<void> {
+    return httpClient.patch<void>('/auth/me/password', data);
   },
 };

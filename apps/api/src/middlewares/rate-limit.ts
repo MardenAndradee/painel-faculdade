@@ -56,6 +56,27 @@ export const refreshRateLimiter = rateLimit({
 });
 
 /**
+ * Limite dedicado para autenticacao por e-mail e senha (Etapa 26): cadastro,
+ * login, "esqueci a senha" e redefinicao.
+ *
+ * Mesmo perfil do `authRateLimiter` do Google (tentativas repetidas indicam
+ * abuso, nao uso legitimo), mas em contador PROPRIO - antes desta etapa so o
+ * fluxo Google tinha limite por IP. Cadastro em massa e forca bruta de senha
+ * sao o mesmo tipo de abuso: nenhuma pessoa real cadastra ou tenta entrar 20
+ * vezes em 15 minutos. Complementa, e nao substitui, o limite POR CONTA em
+ * `auth.service.ts` (recordFailedLogin) - aquele pega forca bruta distribuida
+ * entre varios IPs contra uma unica conta; este pega um unico IP varrendo
+ * varias contas.
+ */
+export const passwordAuthRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: payload,
+});
+
+/**
  * Limite dedicado para entrar em turma (Etapa 20).
  *
  * Um token de convite e curto e de alta entropia, mas nao ilimitadamente

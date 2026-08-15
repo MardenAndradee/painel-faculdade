@@ -39,7 +39,6 @@ de desenvolvimento. Nada foi perdido na mudança — só reorganizado.
 
 ### Planejamento (features aprovadas ou em análise, ainda não implementadas)
 
-- [planning/autenticacao-email-senha.md](planning/autenticacao-email-senha.md)
 - [planning/pwa.md](planning/pwa.md) — instalação no celular, Service Worker, cache, offline e Push Notifications (Etapa 28.1 já implementada, resto planejado)
 
 ## Convenção

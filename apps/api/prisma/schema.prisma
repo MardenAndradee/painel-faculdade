@@ -177,19 +177,64 @@ enum AppModule {
 // Usuario e autenticacao
 // =============================================================================
 
+/// Provedor de uma AuthIdentity (autenticacao e-mail+senha, Etapa 26). So
+/// GOOGLE por enquanto - a tabela ja nasce pronta para um segundo provedor
+/// (Microsoft/Apple) sem migracao nova.
+enum AuthProvider {
+  GOOGLE
+}
+
+/// Motivo de um EmailToken (Etapa 26): confirmar o e-mail no cadastro por
+/// senha, ou autorizar a troca de uma senha esquecida.
+enum EmailTokenPurpose {
+  VERIFY_EMAIL
+  RESET_PASSWORD
+}
+
 model User {
   id        String  @id @default(cuid())
-  googleId  String  @unique
   email     String  @unique
   name      String
   avatarUrl String?
+
+  /// DEPRECADO desde a Etapa 26 (autenticacao e-mail+senha) - a identidade do
+  /// Google mora em `AuthIdentity` a partir dai. Mantido sem leitura, sem
+  /// prazo definido de remocao, como rede de seguranca barata contra bug de
+  /// migracao. Nunca mais escrito.
+  googleId String? @unique
+
+  /// Hash argon2id da senha. Nulo para quem so usa Google.
+  passwordHash      String?
+  /// Nulo = e-mail nunca confirmado. Setado automaticamente no cadastro via
+  /// Google (o Google ja verifica) e manualmente no fluxo de verificacao do
+  /// cadastro por senha. So contas verificadas entram no auto-link do Google
+  /// (ver `passwordClaimedAt` e docs/modules/autenticacao.md, risco R1).
+  emailVerifiedAt   DateTime?
+  /// Setado no PRIMEIRO login por senha bem-sucedido, nunca mais tocado.
+  /// Distingue "a pessoa ja provou que sabe a senha" de "so o e-mail foi
+  /// confirmado" - fecha o risco de sequestro por ocupacao de e-mail
+  /// (pre-hijacking, R1): se o Google linkar numa conta cujo e-mail foi
+  /// verificado mas cuja senha nunca foi usada pra entrar, a senha e
+  /// invalidada no ato do link.
+  passwordClaimedAt DateTime?
+
+  /// Tentativas de senha erradas consecutivas. Zerado em qualquer login por
+  /// senha bem-sucedido. Base do limite POR CONTA (R2) - o rate limit por IP
+  /// (`express-rate-limit`) sozinho nao pega forca bruta distribuida entre
+  /// varias origens contra a mesma conta.
+  failedLoginAttempts Int       @default(0)
+  /// Login por senha bloqueado ate este instante, apos exceder o limite de
+  /// tentativas. Nulo = sem bloqueio ativo. Nao afeta login por Google.
+  lockedUntil         DateTime?
 
   theme    ThemePreference @default(SYSTEM)
   timezone String          @default("America/Sao_Paulo")
   locale   String          @default("pt-BR")
 
   /// Tokens do Google guardados para sincronizar Classroom e Calendar sem
-  /// exigir novo consentimento a cada acesso.
+  /// exigir novo consentimento a cada acesso. Credencial de INTEGRACAO, nao
+  /// de identidade - por isso continuam aqui mesmo apos a Etapa 26 mover a
+  /// identidade do Google para `AuthIdentity`.
   googleAccessToken  String?   @db.Text
   googleRefreshToken String?   @db.Text
   googleTokenExpiry  DateTime?
@@ -205,6 +250,8 @@ model User {
   lastLogin DateTime?
 
   refreshTokens       RefreshToken[]
+  authIdentities      AuthIdentity[]
+  emailTokens         EmailToken[]
   semesters           Semester[]
   teachers            Teacher[]
   subjects            Subject[]
@@ -297,6 +344,50 @@ model RefreshToken {
   @@index([userId])
   @@index([expiresAt])
   @@map("refresh_tokens")
+}
+
+/// Identidade de terceiro vinculada a um usuario (Etapa 26 - autenticacao
+/// e-mail+senha). So provedores OAuth entram aqui - senha e intrinseca ao
+/// `User` (`passwordHash`), nao uma identidade de terceiro.
+///
+/// A chave e SEMPRE o id de conta do provedor (`providerAccountId` = `sub` do
+/// Google), nunca o e-mail: o Google permite trocar o e-mail de uma conta, e
+/// usar o e-mail como chave faria o vinculo se perder nessa troca. Mesma
+/// regra que ja valia para `User.googleId` antes desta etapa.
+model AuthIdentity {
+  id                String       @id @default(cuid())
+  provider          AuthProvider
+  providerAccountId String
+
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Esta conta do provedor so pode apontar para 1 usuario.
+  @@unique([provider, providerAccountId])
+  /// 1 usuario so tem 1 vinculo por provedor.
+  @@unique([userId, provider])
+  @@map("auth_identities")
+}
+
+/// Token de uso unico enviado por e-mail (Etapa 26: verificacao de cadastro e
+/// recuperacao de senha). Mesmo padrao de `RefreshToken`: so o hash SHA-256 e
+/// persistido, o valor puro trafega apenas na URL do e-mail enviado.
+model EmailToken {
+  id        String            @id @default(cuid())
+  purpose   EmailTokenPurpose
+  tokenHash String            @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+  @@map("email_tokens")
 }
 
 // =============================================================================

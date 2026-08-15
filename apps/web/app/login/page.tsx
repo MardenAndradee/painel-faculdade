@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { CalendarDays, ChartColumn, ListChecks, TriangleAlert } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
@@ -8,13 +8,15 @@ import { Button } from '@/components/ui/button';
 import { FullPageSpinner } from '@/components/ui/spinner';
 import { GoogleIcon } from '@/components/google-icon';
 import { Logo } from '@/components/brand/logo';
+import { LoginForm } from '@/components/auth/login-form';
+import { RegisterForm } from '@/components/auth/register-form';
 
 /**
  * Tela de login.
  *
- * O botao dispara uma navegacao completa para a API, que redireciona ao
- * consentimento do Google. Nao ha formulario: a identidade e inteiramente
- * delegada ao provedor.
+ * Dois métodos convivem lado a lado desde a Etapa 26: e-mail/senha (formulário
+ * próprio) e Google (navegação completa - o consentimento acontece no
+ * domínio do Google e o retorno precisa carregar o cookie httpOnly).
  */
 
 /** Mensagens dos codigos de erro devolvidos pelo callback da API. */
@@ -23,7 +25,10 @@ const ERROR_MESSAGES: Record<string, string> = {
   estado_invalido: 'A sessão de login expirou. Tente novamente.',
   codigo_ausente: 'O Google não retornou os dados esperados. Tente novamente.',
   falha_google: 'Não foi possível concluir a autenticação com o Google.',
-  conflict: 'Este e-mail já está vinculado a outra conta Google.',
+  // Cobre tanto "Google já vinculado a outra conta" quanto "este e-mail já
+  // tem cadastro por senha, ainda não confirmado" (Etapa 26) - os dois casos
+  // chegam aqui como o mesmo código de erro.
+  conflict: 'Este e-mail já tem uma conta. Entre com sua senha, ou use "Esqueci minha senha".',
   sessao_expirada: 'Sua sessão expirou. Entre novamente para continuar.',
   falha_login: 'Não foi possível entrar. Tente novamente em instantes.',
 };
@@ -38,6 +43,7 @@ function LoginContent() {
   const { login, isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [mode, setMode] = useState<'login' | 'register'>('login');
 
   const errorCode = searchParams.get('error');
   const errorMessage = errorCode ? (ERROR_MESSAGES[errorCode] ?? ERROR_MESSAGES.falha_login) : null;
@@ -66,7 +72,9 @@ function LoginContent() {
           </h1>
 
           <p className="mt-3 text-sm text-muted-foreground">
-            Entre com sua conta institucional para começar.
+            {mode === 'login'
+              ? 'Entre com sua conta para começar.'
+              : 'Crie sua conta para começar.'}
           </p>
         </div>
 
@@ -81,14 +89,47 @@ function LoginContent() {
         )}
 
         <div className="rounded-xl border bg-card p-6 shadow-sm">
-          <Button onClick={() => login()} size="lg" variant="outline" className="w-full">
+          {mode === 'login' ? (
+            <LoginForm onSuccess={() => router.replace('/dashboard')} />
+          ) : (
+            <RegisterForm onSuccess={() => router.replace('/dashboard')} />
+          )}
+
+          <div className="my-5 flex items-center gap-3">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-xs text-muted-foreground">ou</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
+          <Button onClick={() => login()} variant="outline" className="w-full">
             <GoogleIcon className="size-4" />
-            Entrar com Google
+            Continuar com Google
           </Button>
 
-          <p className="mt-4 text-center text-xs leading-relaxed text-muted-foreground">
-            Pedimos apenas seu nome, e-mail e foto. O acesso ao Classroom e ao Calendar é solicitado
-            depois, só quando você ativar a sincronização.
+          <p className="mt-4 text-center text-xs text-muted-foreground">
+            {mode === 'login' ? (
+              <>
+                Não tem conta?{' '}
+                <button
+                  type="button"
+                  onClick={() => setMode('register')}
+                  className="font-medium text-foreground hover:underline"
+                >
+                  Criar conta
+                </button>
+              </>
+            ) : (
+              <>
+                Já tem conta?{' '}
+                <button
+                  type="button"
+                  onClick={() => setMode('login')}
+                  className="font-medium text-foreground hover:underline"
+                >
+                  Entrar
+                </button>
+              </>
+            )}
           </p>
         </div>
 

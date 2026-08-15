@@ -80,12 +80,26 @@ async function main(): Promise<void> {
     where: { email: 'estudante@painel.dev' },
     update: {},
     create: {
-      googleId: 'dev-google-id-000001',
       email: 'estudante@painel.dev',
       name: 'Estudante de Desenvolvimento',
       avatarUrl: null,
       theme: 'SYSTEM',
+      // Simula um cadastro por Google: e-mail ja verificado, como
+      // `userRepository.createFromGoogle` faz de verdade (Etapa 26).
+      emailVerifiedAt: new Date(),
     },
+  });
+
+  // A identidade do Google mora em AuthIdentity desde a Etapa 26, nao mais em
+  // `User.googleId` (deprecado). Sem isso o usuario de seed nao teria como
+  // "logar com Google" pelo fluxo novo, e a tela de Integracoes o mostraria
+  // como desconectado.
+  await prisma.authIdentity.upsert({
+    where: {
+      provider_providerAccountId: { provider: 'GOOGLE', providerAccountId: 'dev-google-id-000001' },
+    },
+    update: {},
+    create: { provider: 'GOOGLE', providerAccountId: 'dev-google-id-000001', userId: user.id },
   });
 
   console.log(`Usuario: ${user.email}`);

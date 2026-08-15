@@ -5,7 +5,7 @@ npm test          # execução única
 npm run test:watch
 ```
 
-**122 testes**, sobre as regras puras — repetição espaçada, gerador de cronograma, cálculo de notas e os contratos Zod. São elas que concentram a lógica de negócio e, na prática, foi nelas que os bugs apareceram.
+**153 testes**, sobre as regras puras — repetição espaçada, gerador de cronograma, cálculo de notas, decisão de vínculo de login e os contratos Zod. São elas que concentram a lógica de negócio e, na prática, foi nelas que os bugs apareceram.
 
 ### O que os testes protegem
 
@@ -22,6 +22,7 @@ Cada bloco existe por causa de um bug real que aconteceu durante o desenvolvimen
 | `contracts.test.ts` — data local | `"2026-10-05"` lido como meia-noite UTC: prova cadastrada para 05/10 aparecia como 04/10 no calendário |
 | `notification-rules.test.ts` — dia de calendário | comparar prazos por 24 horas corridas fazia a atividade que vence hoje às 9h aparecer como atrasada às 14h |
 | `notification-rules.test.ts` — escalonamento | estados diferentes precisam gerar conteúdo diferente (senão o texto não atualiza) e o mesmo estado precisa gerar conteúdo idêntico (senão a notificação dispensada volta ao sino) |
+| `google-link-resolution.test.ts` — vínculo automático (R1) | um auto-link ingênuo entre Google e uma conta por senha permitiria sequestrar um e-mail ocupado por terceiro antes da vítima real chegar — a decisão que evita isso é pura e testada à parte da chamada real ao Google |
 
 > **Ao rodar verificações manuais em sequência, atenção ao rate limit.** A API
 > permite 300 requisições por 15 minutos por IP (`RATE_LIMIT_MAX`). Um roteiro

@@ -9,8 +9,7 @@ import type { User } from '../generated/prisma/client.js';
  * de negocio.
  */
 
-export interface GoogleIdentity {
-  googleId: string;
+export interface GoogleProfileData {
   email: string;
   name: string;
   avatarUrl: string | null;
@@ -29,35 +28,55 @@ export const userRepository = {
     return prisma.user.findUnique({ where: { id } });
   },
 
-  findByGoogleId(googleId: string): Promise<User | null> {
-    return prisma.user.findUnique({ where: { googleId } });
-  },
-
   findByEmail(email: string): Promise<User | null> {
     return prisma.user.findUnique({ where: { email } });
   },
 
   /**
-   * Cria ou atualiza o usuario a partir da identidade do Google.
+   * Cria um usuario a partir de um login social (Google) pela primeira vez.
    *
-   * A chave e o `googleId` e nao o e-mail: o Google permite trocar o endereco
-   * de uma conta, e usar o e-mail como identidade faria o usuario perder o
-   * historico apos essa troca.
+   * `emailVerifiedAt` ja nasce preenchido: o Google so chega ate aqui apos
+   * `email_verified` ser conferido em `google.ts`, entao nao ha o que
+   * verificar de novo. Sem `passwordHash` - a pessoa so ganha senha se
+   * escolher "Adicionar senha" depois.
    */
-  upsertFromGoogle(identity: GoogleIdentity): Promise<User> {
-    return prisma.user.upsert({
-      where: { googleId: identity.googleId },
-      update: {
-        email: identity.email,
-        name: identity.name,
-        avatarUrl: identity.avatarUrl,
+  createFromGoogle(profile: GoogleProfileData): Promise<User> {
+    return prisma.user.create({
+      data: {
+        email: profile.email,
+        name: profile.name,
+        avatarUrl: profile.avatarUrl,
+        emailVerifiedAt: new Date(),
         lastLogin: new Date(),
       },
-      create: {
-        googleId: identity.googleId,
-        email: identity.email,
-        name: identity.name,
-        avatarUrl: identity.avatarUrl,
+    });
+  },
+
+  /** Atualiza nome/avatar/ultimo-login num login social repetido. */
+  touchFromGoogle(userId: string, profile: GoogleProfileData): Promise<User> {
+    return prisma.user.update({
+      where: { id: userId },
+      data: {
+        name: profile.name,
+        avatarUrl: profile.avatarUrl,
+        lastLogin: new Date(),
+      },
+    });
+  },
+
+  /**
+   * Cria um usuario a partir do cadastro por senha.
+   *
+   * `emailVerifiedAt` fica nulo: ninguem verificou este e-mail ainda (ver
+   * `EmailToken`, proposito VERIFY_EMAIL). Ate a verificacao, esta conta fica
+   * de fora do auto-link de um Google com o mesmo e-mail (risco R1).
+   */
+  createWithPassword(data: { name: string; email: string; passwordHash: string }): Promise<User> {
+    return prisma.user.create({
+      data: {
+        name: data.name,
+        email: data.email,
+        passwordHash: data.passwordHash,
         lastLogin: new Date(),
       },
     });
@@ -89,5 +108,77 @@ export const userRepository = {
     data: { name?: string; theme?: User['theme']; timezone?: string },
   ): Promise<User> {
     return prisma.user.update({ where: { id: userId }, data });
+  },
+
+  // --- Senha (Etapa 26) ---------------------------------------------------------
+
+  /**
+   * Grava um novo hash de senha.
+   *
+   * `claim`, quando true, tambem marca `passwordClaimedAt` se ainda nulo -
+   * usado no cadastro (a propria pessoa acabou de escolher a senha, entao ja
+   * conta como "provada") e na redefinicao via token de e-mail (provou o
+   * controle da caixa de entrada, equivalente). No login comum a marca so
+   * acontece separadamente, apos a senha bater (ver `markPasswordClaimed`).
+   */
+  setPassword(userId: string, passwordHash: string, claim: boolean): Promise<User> {
+    return prisma.user.update({
+      where: { id: userId },
+      data: {
+        passwordHash,
+        failedLoginAttempts: 0,
+        lockedUntil: null,
+        ...(claim ? { passwordClaimedAt: new Date() } : {}),
+      },
+    });
+  },
+
+  /** Remove a senha (usada quando o auto-link do Google invalida uma senha nunca comprovada - risco R1). */
+  clearPassword(userId: string): Promise<User> {
+    return prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: null, passwordClaimedAt: null },
+    });
+  },
+
+  markEmailVerified(userId: string): Promise<User> {
+    return prisma.user.update({ where: { id: userId }, data: { emailVerifiedAt: new Date() } });
+  },
+
+  /** Primeiro login por senha bem-sucedido: so grava se ainda nao havia marca. */
+  async markPasswordClaimed(userId: string): Promise<void> {
+    await prisma.user.updateMany({
+      where: { id: userId, passwordClaimedAt: null },
+      data: { passwordClaimedAt: new Date() },
+    });
+  },
+
+  async recordFailedLogin(
+    userId: string,
+    lockThreshold: number,
+    lockDurationMs: number,
+  ): Promise<{ attempts: number; lockedUntil: Date | null }> {
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: { failedLoginAttempts: { increment: 1 } },
+      select: { failedLoginAttempts: true },
+    });
+
+    if (user.failedLoginAttempts < lockThreshold) {
+      return { attempts: user.failedLoginAttempts, lockedUntil: null };
+    }
+
+    const lockedUntil = new Date(Date.now() + lockDurationMs);
+
+    await prisma.user.update({ where: { id: userId }, data: { lockedUntil } });
+
+    return { attempts: user.failedLoginAttempts, lockedUntil };
+  },
+
+  async resetFailedLogins(userId: string): Promise<void> {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { failedLoginAttempts: 0, lockedUntil: null },
+    });
   },
 };

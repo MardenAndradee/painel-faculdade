@@ -49,15 +49,22 @@ function AuthCallbackContent() {
         const session = await authService.exchangeSession(token);
         applySession(session);
 
-        // Autorizacao incremental parte de Configuracoes -> Integracoes e volta para la.
+        // Autorizacao incremental parte de Configuracoes -> Integracoes/Conta e volta para la.
         const destino = searchParams.get('destino');
         const conectado = searchParams.get('conectado');
+        const vinculado = searchParams.get('vinculado');
 
-        router.replace(
-          destino === 'integracoes'
-            ? `/configuracoes?tab=integracoes&conectado=${conectado ?? 'classroom'}`
-            : '/dashboard',
-        );
+        if (destino === 'integracoes') {
+          router.replace(`/configuracoes?tab=integracoes&conectado=${conectado ?? 'classroom'}`);
+          return;
+        }
+
+        if (destino === 'conta') {
+          router.replace(`/configuracoes?tab=conta&vinculado=${vinculado ?? 'google'}`);
+          return;
+        }
+
+        router.replace('/dashboard');
       } catch {
         router.replace('/login?error=falha_login');
       }

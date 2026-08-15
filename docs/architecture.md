@@ -149,7 +149,9 @@ impor o `NOT NULL`.
 
 | Entidade        | Papel                                                                    |
 | --------------- | ------------------------------------------------------------------------ |
-| `User`          | Conta, preferências e tokens do Google                                   |
+| `User`          | Conta, preferências, senha (opcional) e tokens do Google                 |
+| `AuthIdentity`  | Identidade de provedor de terceiro vinculada a um usuário (Google — Etapa 26) |
+| `EmailToken`    | Token de uso único para verificar e-mail ou redefinir senha (Etapa 26)   |
 | `RefreshToken`  | Sessões ativas (hash SHA-256, revogáveis individualmente)                |
 | `Semester`      | Período letivo; base do Histórico                                        |
 | `Teacher`       | Professor, vinculável a várias disciplinas                               |

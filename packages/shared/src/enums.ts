@@ -103,6 +103,12 @@ export const APP_MODULES = [
 ] as const;
 export type AppModule = (typeof APP_MODULES)[number];
 
+/// Provedor de uma identidade de login de terceiro (Etapa 26 - autenticação
+/// e-mail+senha). Senha não entra aqui: é intrínseca ao `User`, não uma
+/// identidade de terceiro.
+export const AUTH_PROVIDER = ['GOOGLE'] as const;
+export type AuthProvider = (typeof AUTH_PROVIDER)[number];
+
 /** Rotulos em portugues para exibicao na interface. */
 export const PRIORITY_LABELS: Record<Priority, string> = {
   LOW: 'Baixa',

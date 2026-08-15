@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { THEME_PREFERENCE } from '../enums.js';
+import { AUTH_PROVIDER, THEME_PREFERENCE } from '../enums.js';
 
 /**
  * Contrato de autenticacao compartilhado entre API e frontend.
@@ -105,3 +105,110 @@ export const GOOGLE_SCOPE_GROUPS = {
 } as const;
 
 export type GoogleScopeGroup = keyof typeof GOOGLE_SCOPE_GROUPS;
+
+// --- Autenticacao por e-mail e senha (Etapa 26) -------------------------------
+
+/**
+ * Politica de senha: so comprimento, sem regra de complexidade artificial.
+ *
+ * Orientacao atual do NIST (SP 800-63B): exigir maiuscula+numero+simbolo
+ * empurra o usuario para padroes previsiveis ("Senha123!") sem ganho real de
+ * seguranca; comprimento minimo protege mais e incomoda menos.
+ */
+export const PASSWORD_MIN_LENGTH = 8;
+export const PASSWORD_MAX_LENGTH = 128;
+
+const emailField = z
+  .string({ error: 'Informe o e-mail' })
+  .trim()
+  .toLowerCase()
+  .min(1, 'Informe o e-mail')
+  .email('E-mail inválido');
+
+/** Usada nos formularios de CRIACAO de senha (cadastro, definir, redefinir). */
+const newPasswordField = z
+  .string({ error: 'Informe a senha' })
+  .min(PASSWORD_MIN_LENGTH, `A senha precisa de pelo menos ${PASSWORD_MIN_LENGTH} caracteres`)
+  .max(PASSWORD_MAX_LENGTH, 'Senha muito longa');
+
+/**
+ * Usada para CONFERIR uma senha ja existente (login, senha atual na troca).
+ *
+ * Sem `.min(PASSWORD_MIN_LENGTH)`: se a politica mudar no futuro, uma conta
+ * antiga com senha mais curta que o novo minimo ainda precisa conseguir
+ * entrar - so o CADASTRO de senha nova segue a regra vigente.
+ */
+const existingPasswordField = z.string({ error: 'Informe a senha' }).min(1, 'Informe a senha');
+
+export const registerSchema = z.object({
+  name: z
+    .string({ error: 'Informe o nome' })
+    .trim()
+    .min(2, 'Nome muito curto')
+    .max(120, 'Nome muito longo'),
+  email: emailField,
+  password: newPasswordField,
+});
+
+export type RegisterInput = z.infer<typeof registerSchema>;
+
+export const loginSchema = z.object({
+  email: emailField,
+  password: existingPasswordField,
+});
+
+export type LoginInput = z.infer<typeof loginSchema>;
+
+export const forgotPasswordSchema = z.object({
+  email: emailField,
+});
+
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+
+export const verifyEmailSchema = z.object({
+  token: z.string().min(1, 'Token obrigatório'),
+});
+
+export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(1, 'Token obrigatório'),
+  password: newPasswordField,
+});
+
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+
+/** Adiciona senha a uma conta que hoje so entra pelo Google. */
+export const setPasswordSchema = z.object({
+  password: newPasswordField,
+});
+
+export type SetPasswordInput = z.infer<typeof setPasswordSchema>;
+
+export const changePasswordSchema = z.object({
+  currentPassword: existingPasswordField,
+  newPassword: newPasswordField,
+});
+
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+
+/**
+ * Metodos de login da conta (Configuracoes -> Conta, Etapa 26).
+ *
+ * `emailVerified` decide se a conta e candidata ao auto-link automatico de um
+ * Google com o mesmo e-mail (ver docs/modules/autenticacao.md, risco R1).
+ */
+export const loginMethodsSchema = z.object({
+  hasPassword: z.boolean(),
+  emailVerified: z.boolean(),
+  linkedProviders: z.array(z.enum(AUTH_PROVIDER)),
+});
+
+export type LoginMethods = z.infer<typeof loginMethodsSchema>;
+
+/** URL de consentimento para iniciar o vinculo/login com um provedor (mesmo formato do login inicial). */
+export const oauthStartSchema = z.object({
+  url: z.string(),
+});
+
+export type OAuthStart = z.infer<typeof oauthStartSchema>;

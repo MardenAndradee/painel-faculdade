@@ -5,8 +5,10 @@ import { getAuthUser } from '../middlewares/authenticate.js';
 import { env } from '../config/env.js';
 import { logger } from '../config/logger.js';
 import { AppError } from '../utils/app-error.js';
-import { ok, noContent } from '../utils/http-response.js';
-import { safeCompare } from '../utils/crypto.js';
+import { ok, created, noContent } from '../utils/http-response.js';
+import { safeCompare, hashToken } from '../utils/crypto.js';
+import { verifyRefreshToken } from '../utils/jwt.js';
+import { refreshTokenRepository } from '../repositories/refresh-token.repository.js';
 import {
   REFRESH_COOKIE_NAME,
   OAUTH_STATE_COOKIE_NAME,
@@ -32,6 +34,33 @@ function sessionContext(req: Request): { userAgent: string | null; ipAddress: st
   };
 }
 
+/**
+ * Identifica o usuario logado a partir do cookie de sessao, para o fluxo de
+ * VINCULO do Google (Fluxo 5).
+ *
+ * A navegacao completa ate o Google e de volta perde qualquer estado em
+ * memoria do frontend (o access token so existe la) - mas o cookie httpOnly
+ * sobrevive a navegacao, entao e ele que identifica "quem estava logado
+ * quando isto comecou". Mesma leitura que `POST /auth/refresh` faz, sem
+ * rotacionar o token aqui - so precisamos do `userId`.
+ */
+async function resolveUserIdFromCookie(req: Request): Promise<string | null> {
+  const token = req.cookies?.[REFRESH_COOKIE_NAME] as string | undefined;
+
+  if (!token) return null;
+
+  try {
+    const payload = verifyRefreshToken(token);
+    const record = await refreshTokenRepository.findByHash(hashToken(token));
+
+    if (!record || record.revokedAt || record.expiresAt < new Date()) return null;
+
+    return payload.sub;
+  } catch {
+    return null;
+  }
+}
+
 export const authController = {
   /** Inicia o fluxo OAuth redirecionando para a tela de consentimento. */
   startGoogleLogin(req: Request, res: Response): void {
@@ -41,6 +70,20 @@ export const authController = {
 
     setOAuthStateCookie(res, state);
     res.redirect(url);
+  },
+
+  /**
+   * Inicia o vinculo do Google a uma conta ja autenticada (Fluxo 5).
+   *
+   * Devolve a URL em vez de redirecionar: e chamada via `fetch` autenticado
+   * (precisa do header `Authorization`, que uma navegacao de pagina inteira
+   * nao consegue enviar); o FRONTEND navega para a URL devolvida.
+   */
+  startGoogleLink(_req: Request, res: Response): void {
+    const { url, state } = authService.buildLinkUrl();
+
+    setOAuthStateCookie(res, state);
+    ok(res, { url });
   },
 
   /**
@@ -60,6 +103,10 @@ export const authController = {
    * cookie e gravado com a validade correta. O access token, por sua vez,
    * segue nunca viajando pela URL - isso o exporia no historico do
    * navegador, nos logs de acesso e no header Referer.
+   *
+   * O prefixo do `state` decide qual fluxo concluir: `link:` e o vinculo do
+   * Google (Etapa 26, Fluxo 5); `classroom:`/`calendar:` e a autorizacao
+   * incremental das integracoes; sem prefixo e o login comum.
    */
   async handleGoogleCallback(req: Request, res: Response): Promise<void> {
     const { code, state, error } = req.query as {
@@ -92,12 +139,29 @@ export const authController = {
       return;
     }
 
+    const isLinkFlow = state.startsWith('link:');
+
     try {
-      const { refreshToken } = await authService.loginWithGoogle(code, sessionContext(req));
+      const { refreshToken } = isLinkFlow
+        ? await (async () => {
+            const userId = await resolveUserIdFromCookie(req);
+
+            if (!userId) {
+              throw AppError.unauthorized('Sessao expirada - entre novamente antes de vincular');
+            }
+
+            return authService.linkGoogleAccount(userId, code, sessionContext(req));
+          })()
+        : await authService.loginWithGoogle(code, sessionContext(req));
 
       clearOAuthStateCookie(res);
 
       const fragment = `#session=${encodeURIComponent(refreshToken)}`;
+
+      if (isLinkFlow) {
+        res.redirect(`${env.WEB_APP_URL}/auth/callback?destino=conta&vinculado=google${fragment}`);
+        return;
+      }
 
       // O prefixo do `state` indica que a autorizacao partiu da tela de
       // integracoes; nesse caso o usuario volta para la, e nao ao dashboard.
@@ -122,9 +186,21 @@ export const authController = {
        */
       logger.error('Falha no callback do Google', {
         reason,
+        isLinkFlow,
         message: err instanceof Error ? err.message : String(err),
         stack: err instanceof Error ? err.stack : undefined,
       });
+
+      if (isLinkFlow) {
+        // O vinculo falhou, mas a pessoa continua logada (a falha nao mexeu
+        // na sessao atual) - devolve para Configuracoes com o motivo, em vez
+        // do tratamento generico de erro de LOGIN.
+        clearOAuthStateCookie(res);
+        res.redirect(
+          `${env.WEB_APP_URL}/configuracoes?tab=conta&erroVinculo=${encodeURIComponent(reason)}`,
+        );
+        return;
+      }
 
       redirectWithError(reason);
     }
@@ -212,5 +288,83 @@ export const authController = {
     const user = getAuthUser(req);
 
     ok(res, await authService.updateProfile(user.id, req.body));
+  },
+
+  // --- E-mail e senha (Etapa 26) -------------------------------------------------
+
+  async register(req: Request, res: Response): Promise<void> {
+    const { session, refreshToken } = await authService.register(req.body, sessionContext(req));
+
+    setRefreshCookie(res, refreshToken);
+    created(res, session);
+  },
+
+  async login(req: Request, res: Response): Promise<void> {
+    const { session, refreshToken } = await authService.login(req.body, sessionContext(req));
+
+    setRefreshCookie(res, refreshToken);
+    ok(res, session);
+  },
+
+  async forgotPassword(req: Request, res: Response): Promise<void> {
+    await authService.forgotPassword(req.body);
+
+    // Resposta identica exista ou nao a conta (R3) - o service ja decide por
+    // dentro se algo de fato foi enviado.
+    ok(res, { message: 'Se este e-mail existir, enviamos um link de redefinição.' });
+  },
+
+  async resetPassword(req: Request, res: Response): Promise<void> {
+    const { session, refreshToken } = await authService.resetPassword(
+      req.body,
+      sessionContext(req),
+    );
+
+    setRefreshCookie(res, refreshToken);
+    ok(res, session);
+  },
+
+  async verifyEmail(req: Request, res: Response): Promise<void> {
+    const { token } = req.body as { token: string };
+
+    await authService.verifyEmail(token);
+
+    noContent(res);
+  },
+
+  async getLoginMethods(req: Request, res: Response): Promise<void> {
+    const user = getAuthUser(req);
+
+    ok(res, await authService.getLoginMethods(user.id));
+  },
+
+  async unlinkGoogle(req: Request, res: Response): Promise<void> {
+    const user = getAuthUser(req);
+
+    await authService.unlinkGoogle(user.id);
+    noContent(res);
+  },
+
+  async setPassword(req: Request, res: Response): Promise<void> {
+    const user = getAuthUser(req);
+
+    await authService.setPassword(user.id, req.body);
+    noContent(res);
+  },
+
+  async changePassword(req: Request, res: Response): Promise<void> {
+    const user = getAuthUser(req);
+
+    // O cookie de refresh viaja em qualquer rota sob /api/v1/auth (inclusive
+    // esta) - seu hash e o que identifica "a sessao deste dispositivo" para
+    // o service preservar, ao revogar as demais.
+    const currentToken = req.cookies?.[REFRESH_COOKIE_NAME] as string | undefined;
+
+    await authService.changePassword(
+      user.id,
+      req.body,
+      currentToken ? hashToken(currentToken) : undefined,
+    );
+    noContent(res);
   },
 };

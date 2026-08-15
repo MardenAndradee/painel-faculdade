@@ -47,12 +47,21 @@ export const refreshTokenRepository = {
   /**
    * Revoga todas as sessoes do usuario.
    *
-   * Acionado quando um refresh token ja usado reaparece - sinal de token
-   * roubado. Derrubar tudo forca um novo login por um caminho confiavel.
+   * Acionado quando um refresh token ja usado reaparece (sinal de token
+   * roubado) e quando a senha muda (Etapa 26 - trocar ou redefinir a senha
+   * precisa encerrar qualquer sessao que nao seja a de quem fez a troca,
+   * senao um invasor com sessao ativa sobrevive a proprio motivo de a
+   * pessoa ter trocado a senha). `exceptTokenHash` preserva a sessao
+   * ATUAL nesse segundo caso - a pessoa trocando a propria senha nao
+   * deveria ser deslogada do dispositivo que ela esta usando.
    */
-  async revokeAllForUser(userId: string): Promise<number> {
+  async revokeAllForUser(userId: string, exceptTokenHash?: string): Promise<number> {
     const result = await prisma.refreshToken.updateMany({
-      where: { userId, revokedAt: null },
+      where: {
+        userId,
+        revokedAt: null,
+        ...(exceptTokenHash ? { tokenHash: { not: exceptTokenHash } } : {}),
+      },
       data: { revokedAt: new Date() },
     });
 

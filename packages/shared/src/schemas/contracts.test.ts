@@ -6,6 +6,7 @@ import { updateGradeSchema } from './grade.js';
 import { updateAssignmentSchema } from './assignment.js';
 import { createLinkAttachmentSchema } from './attachment.js';
 import { saveAvailabilitySchema } from './study-plan.js';
+import { loginSchema, registerSchema, PASSWORD_MIN_LENGTH } from './auth.js';
 
 /**
  * Testes dos contratos.
@@ -215,5 +216,59 @@ describe('data digitada é a data salva (bug do dia anterior)', () => {
     const parsed = updateAssignmentSchema.parse({ dueDate: '2026-10-05' });
 
     expect(parsed.dueDate?.getDate()).toBe(5);
+  });
+});
+
+describe('e-mail e senha (Etapa 26)', () => {
+  /**
+   * Duas contas com o mesmo endereço em caixas diferentes ("Ana@x.com" e
+   * "ana@x.com") teriam que ser tratadas como a MESMA - a coluna é única no
+   * banco pelo valor literal, então a normalização precisa acontecer aqui,
+   * antes de qualquer comparação ou escrita.
+   */
+  it('normaliza o e-mail para minúsculas e sem espaços, no cadastro e no login', () => {
+    const registered = registerSchema.parse({
+      name: 'Ana',
+      email: '  Ana@Exemplo.COM  ',
+      password: 'senha-forte-123',
+    });
+
+    expect(registered.email).toBe('ana@exemplo.com');
+
+    const logged = loginSchema.parse({ email: ' Ana@Exemplo.COM ', password: 'x' });
+
+    expect(logged.email).toBe('ana@exemplo.com');
+  });
+
+  it('cadastro recusa senha mais curta que o mínimo', () => {
+    const result = registerSchema.safeParse({
+      name: 'Ana',
+      email: 'ana@exemplo.com',
+      password: 'a'.repeat(PASSWORD_MIN_LENGTH - 1),
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('cadastro aceita senha no tamanho mínimo exato', () => {
+    const result = registerSchema.safeParse({
+      name: 'Ana',
+      email: 'ana@exemplo.com',
+      password: 'a'.repeat(PASSWORD_MIN_LENGTH),
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('login NÃO exige o tamanho mínimo atual - uma senha antiga, mais curta que a política de hoje, ainda precisa entrar', () => {
+    const result = loginSchema.safeParse({ email: 'ana@exemplo.com', password: '123' });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('login recusa senha vazia', () => {
+    const result = loginSchema.safeParse({ email: 'ana@exemplo.com', password: '' });
+
+    expect(result.success).toBe(false);
   });
 });

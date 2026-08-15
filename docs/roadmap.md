@@ -27,7 +27,7 @@
 | 23 | Turmas: materiais compartilhados | ✅ |
 | 24 | Turmas: refinamentos (transferência de dono, arquivamento) | ✅ |
 | 25 | Envio de e-mail | 🚧 planejado |
-| 26 | Autenticação: e-mail + senha, vínculo com Google (10 etapas próprias — ver seção dedicada) | 🚧 planejado |
+| 26 | Autenticação: e-mail + senha, vínculo com Google (ver [documentação](modules/autenticacao.md)) | ✅ |
 | 27 | Plano de Estudos: espaço de preparação por prova, com flashcards, materiais e cronograma integrados (ver [documentação](modules/plano-de-estudos.md)) | ✅ |
 | 28 | PWA: instalação no celular, Service Worker, offline básico e Push Notifications (só a Etapa 28.1 — limpeza de cache no logout — foi implementada; o resto segue planejado — ver [planejamento](planning/pwa.md)) | 🚧 planejado |
 | 29 | Módulos configuráveis: Configurações, ativar/desativar módulos sem perder dados, simplificação de Sidebar e Dashboard (ver [documentação](modules/modulos-configuraveis.md)) | ✅ |

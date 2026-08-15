@@ -150,6 +150,8 @@ CI, e a ausência deles não pode impedir o deploy. Localmente nada muda — o
 
 **Rate limit por instância, não global.** `express-rate-limit` guarda os contadores em memória do processo. Em funções serverless cada instância fria tem sua própria memória, então o limite efetivo é "por instância ativa", não um teto global preciso como no Docker (processo único de longa duração). Para um uso pessoal isso não chega a importar; se o tráfego crescer, a correção é trocar o store por um compartilhado (Redis/Upstash).
 
+**`argon2` (hash de senha, Etapa 26) precisa do runtime Node, nunca Edge.** O pacote é um binário nativo prebuilt — mesma exigência que `@prisma/client` já impõe às funções da API, então não é uma restrição nova. Confirme no primeiro deploy que o login/cadastro por senha funciona de ponta a ponta; se o binário não cobrir o runtime da Vercel, o plano B é trocar por `bcrypt`/`bcryptjs` só em `apps/api/src/utils/password.ts`, sem mexer em mais nada.
+
 **Upload tem teto de ~4,5 MB no corpo da requisição.** É limite da própria função Vercel (runtime Node.js), aplicado antes do multer rodar — arquivos maiores que isso recebem 413 mesmo com `MAX_UPLOAD_SIZE_MB` configurado mais alto. No Docker esse teto não existe. Se materiais grandes (slides, vídeos) forem comuns, vale baixar `MAX_UPLOAD_SIZE_MB` para refletir o limite real ou avaliar upload direto do navegador para o R2 (URL pré-assinada), fora do escopo desta preparação.
 
 
