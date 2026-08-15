@@ -22,5 +22,9 @@
   },
   "references": [{ "path": "../../packages/shared" }],
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  // app/sw.ts roda no escopo de um Service Worker, com globais incompativeis
+  // com "dom" (ServiceWorkerGlobalScope/self conflita com o self do DOM
+  // normal) - TypeScript nao aceita as libs "dom" e "webworker" juntas no
+  // mesmo tsconfig. Checado a parte por tsconfig.worker.json (Etapa 28.4).
+  "exclude": ["node_modules", "app/sw.ts"]
 }

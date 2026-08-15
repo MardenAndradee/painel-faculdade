@@ -295,6 +295,7 @@ model User {
   uploadedClassMaterials ClassMaterial[]
   examPreps              ExamPrep[]
   moduleSettings         UserModuleSetting[]
+  pushSubscriptions      PushSubscription[]
 
   @@index([email])
   @@map("users")
@@ -973,6 +974,12 @@ model Notification {
   readAt       DateTime?
   scheduledFor DateTime?
 
+  /// Push ja enviado para esta notificacao (Etapa 28.11). Nulo = ainda nao
+  /// despachada. So URGENT/ATTENTION viram push - o disparo so seta isto
+  /// para essas, nunca para INFO. Independente de `readAt`: uma notificacao
+  /// pode ser lida no sino sem nunca ter sido empurrada, e vice-versa.
+  pushedAt DateTime?
+
   createdAt DateTime @default(now())
 
   userId String
@@ -983,7 +990,32 @@ model Notification {
   /// A varredura sob demanda procura por entidade para atualizar em vez de
   /// duplicar a mesma notificacao a cada abertura do sino.
   @@index([userId, entityType, entityId])
+  /// O disparo de push varre por isto - so as pendentes de envio.
+  @@index([pushedAt])
   @@map("notifications")
+}
+
+/// Inscricao de push (Etapa 28.11). Varios registros por usuario - cada
+/// navegador/aparelho onde a permissao foi concedida gera um `endpoint`
+/// proprio, e nao ha limite de quantos um usuario pode ter simultaneamente.
+model PushSubscription {
+  id        String  @id @default(cuid())
+  /// URL unica do endpoint do provedor push (FCM, Mozilla Push, etc.) -
+  /// identifica o par navegador+dispositivo, nao o usuario.
+  endpoint  String  @unique
+  p256dh    String
+  auth      String
+  /// So para exibir "qual aparelho" numa tela de gerenciamento futura -
+  /// nunca usado para decisao de negocio.
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
 }
 
 // =============================================================================

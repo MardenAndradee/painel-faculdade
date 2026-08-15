@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { AuthSession, AuthUser } from '@painel/shared';
 import { authService } from '@/services/auth.service';
 import { setAccessToken, setSessionExpiredHandler } from '@/services/http-client';
+import { clearServiceWorkerState } from '@/lib/pwa-cleanup';
 
 /**
  * Estado global de autenticacao.
@@ -112,6 +113,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // aparelho sem recarregar a pagina podia mostrar dado do usuario anterior
     // por ate `gcTime` (5 min) - vazamento existente antes desta correcao.
     queryClient.clear();
+    void clearServiceWorkerState();
     router.replace('/login');
   }, [router, clearRenewalTimer, queryClient]);
 
@@ -121,6 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       clearRenewalTimer();
       setUserState(null);
       queryClient.clear();
+      void clearServiceWorkerState();
       router.replace('/login?error=sessao_expirada');
     });
 

@@ -2,11 +2,12 @@
 
 import { Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Plug, SlidersHorizontal, UserCog } from 'lucide-react';
+import { Plug, Sparkles, SlidersHorizontal, UserCog } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ModuleSettingsPanel } from '@/components/settings/module-settings-panel';
 import { IntegrationsPanel } from '@/components/settings/integrations-panel';
 import { AccountSettingsPanel } from '@/components/settings/account-settings-panel';
+import { PreferencesPanel } from '@/components/settings/preferences-panel';
 import { Skeleton } from '@/components/ui/skeleton';
 
 /**
@@ -17,7 +18,7 @@ import { Skeleton } from '@/components/ui/skeleton';
  * dentro de Configurações junto do botão "Sincronizar", que saiu da Navbar.
  */
 
-const TABS = ['modulos', 'integracoes', 'conta'] as const;
+const TABS = ['modulos', 'integracoes', 'conta', 'preferencias'] as const;
 type SettingsTab = (typeof TABS)[number];
 
 function isSettingsTab(value: string | null): value is SettingsTab {
@@ -45,6 +46,10 @@ function SettingsContent() {
           <UserCog className="size-4" aria-hidden />
           Conta
         </TabsTrigger>
+        <TabsTrigger value="preferencias">
+          <Sparkles className="size-4" aria-hidden />
+          Preferências
+        </TabsTrigger>
       </TabsList>
 
       <TabsContent value="modulos" className="mt-4">
@@ -57,6 +62,10 @@ function SettingsContent() {
 
       <TabsContent value="conta" className="mt-4">
         <AccountSettingsPanel />
+      </TabsContent>
+
+      <TabsContent value="preferencias" className="mt-4">
+        <PreferencesPanel />
       </TabsContent>
     </Tabs>
   );

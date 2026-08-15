@@ -53,6 +53,26 @@ const envSchema = z
     R2_BUCKET_NAME: z.string().default(''),
 
     LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+
+    /**
+     * Push Notifications (Etapa 28.11). Par gerado uma vez com
+     * `web-push generate-vapid-keys` - trocar a chave invalida todas as
+     * subscriptions existentes. Vazias por padrao: sem elas o app sobe
+     * normalmente, e so o disparo de push falha explicitamente (ver
+     * `push.service.ts`), igual ao padrao ja usado para `STORAGE_DRIVER=r2`.
+     */
+    VAPID_PUBLIC_KEY: z.string().default(''),
+    VAPID_PRIVATE_KEY: z.string().default(''),
+    /** Contato exigido pelo protocolo Web Push, indo no header `mailto:`. */
+    VAPID_SUBJECT: z.string().default('mailto:contato@painelfaculdade.app'),
+
+    /**
+     * Segredo compartilhado com o Vercel Cron que dispara `/push/dispatch`.
+     * A Vercel envia `Authorization: Bearer <CRON_SECRET>` automaticamente
+     * nas chamadas de cron quando esta variavel esta definida no projeto -
+     * e o que a rota confere antes de rodar.
+     */
+    CRON_SECRET: z.string().default(''),
   })
   .superRefine((data, ctx) => {
     // Falha no boot, nao na primeira tentativa de upload: `STORAGE_DRIVER=r2`

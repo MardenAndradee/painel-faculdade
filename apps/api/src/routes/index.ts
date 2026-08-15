@@ -19,6 +19,7 @@ import { searchRoutes } from './search.routes.js';
 import { notificationRoutes } from './notification.routes.js';
 import { classRoutes } from './class.routes.js';
 import { moduleSettingsRoutes } from './module-settings.routes.js';
+import { pushRoutes } from './push.routes.js';
 
 /**
  * Registro central de rotas. Cada modulo entregue nas proximas etapas
@@ -27,6 +28,13 @@ import { moduleSettingsRoutes } from './module-settings.routes.js';
 export const routes: Router = Router();
 
 routes.use(healthRoutes);
+// Antes de qualquer router com `.use(authenticate)` sem caminho (todos os
+// abaixo): esse middleware roda para QUALQUER path que caia neste router,
+// mesmo um que nenhuma rota dele de fato atenda - se ele barrar primeiro
+// (401), o pedido nunca chega ao `pushRoutes` mais abaixo. `GET
+// /push/dispatch` (cron, sem sessao de usuario) so funciona registrado
+// antes de todos eles; `authRoutes` segue a mesma regra pelo mesmo motivo.
+routes.use(pushRoutes);
 routes.use(authRoutes);
 routes.use(dashboardRoutes);
 routes.use(subjectRoutes);

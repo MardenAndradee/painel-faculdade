@@ -25,6 +25,10 @@ function NavLink({
 }) {
   const { href, label, icon: Icon, stage } = item;
   const isActive = pathname === href || pathname.startsWith(`${href}/`);
+  // `onNavigate` so existe na gaveta do celular (Etapa 28.8): alvo de toque
+  // maior la (~44px, `py-3`), sem alterar a sidebar fixa do desktop (`py-2`,
+  // ~36px), que nao precisa disso e ficaria com espacamento desperdicado.
+  const touchPadding = onNavigate ? 'py-3' : 'py-2';
 
   // Telas ainda nao construidas nao viram link: um <span> evita navegar
   // para uma rota que resultaria em 404.
@@ -32,7 +36,10 @@ function NavLink({
     return (
       <li>
         <span
-          className="flex cursor-not-allowed items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-muted-foreground/60"
+          className={cn(
+            'flex cursor-not-allowed items-center gap-2.5 rounded-lg px-2.5 text-sm text-muted-foreground/60',
+            touchPadding,
+          )}
           title={`Disponível na Etapa ${stage}`}
         >
           <Icon className="size-4 shrink-0" aria-hidden />
@@ -50,7 +57,8 @@ function NavLink({
         onClick={onNavigate}
         aria-current={isActive ? 'page' : undefined}
         className={cn(
-          'relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors',
+          'relative flex items-center gap-2.5 rounded-lg px-2.5 text-sm transition-colors',
+          touchPadding,
           isActive
             ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
             : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground',

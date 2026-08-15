@@ -62,6 +62,10 @@ interface ViewProps {
 // --- Mês -----------------------------------------------------------------------
 
 const MAX_ITEMS_PER_CELL = 3;
+// Abaixo de `sm` a celula do mes mal cabe ~45px de largura - titulo truncado
+// vira ilegivel. Decisao #5 do plano de PWA: so um marcador de cor por item,
+// sem texto, com toque em qualquer ponto abrindo o dia inteiro.
+const MAX_DOTS_MOBILE = 4;
 
 export function MonthView({ reference, items, onSelectItem, onSelectDay }: ViewProps) {
   const byDay = useMemo(() => groupByDay(items), [items]);
@@ -121,17 +125,45 @@ export function MonthView({ reference, items, onSelectItem, onSelectDay }: ViewP
                 {format(day, 'd')}
               </button>
 
-              {visible.map((item) => (
-                <CalendarItemChip key={item.key} item={item} onClick={onSelectItem} />
-              ))}
+              {/* >= sm: titulo truncado, ate MAX_ITEMS_PER_CELL, com link "+N". */}
+              <div className="hidden flex-col gap-1 sm:flex">
+                {visible.map((item) => (
+                  <CalendarItemChip key={item.key} item={item} onClick={onSelectItem} />
+                ))}
 
-              {hidden > 0 && (
+                {hidden > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => onSelectDay(day)}
+                    className="px-1.5 text-left text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    +{hidden} {hidden === 1 ? 'item' : 'itens'}
+                  </button>
+                )}
+              </div>
+
+              {/* < sm: so os marcadores de cor - tocar em qualquer um abre o dia. */}
+              {dayItems.length > 0 && (
                 <button
                   type="button"
                   onClick={() => onSelectDay(day)}
-                  className="px-1.5 text-left text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+                  aria-label={`${dayItems.length} ${dayItems.length === 1 ? 'item' : 'itens'} em ${format(day, "d 'de' MMMM", { locale: ptBR })}`}
+                  className="flex flex-wrap items-center gap-1 px-0.5 sm:hidden"
                 >
-                  +{hidden} {hidden === 1 ? 'item' : 'itens'}
+                  {dayItems.slice(0, MAX_DOTS_MOBILE).map((item) => (
+                    <span
+                      key={item.key}
+                      className="size-1.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: item.color ?? 'var(--primary)' }}
+                      aria-hidden
+                    />
+                  ))}
+
+                  {dayItems.length > MAX_DOTS_MOBILE && (
+                    <span className="text-[10px] text-muted-foreground tabular-nums">
+                      +{dayItems.length - MAX_DOTS_MOBILE}
+                    </span>
+                  )}
                 </button>
               )}
             </div>

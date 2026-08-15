@@ -19,6 +19,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/empty-state';
 import { Greeting } from '@/components/dashboard/greeting';
+import { InstallAppCard } from '@/components/dashboard/install-app-card';
 import { StatCard } from '@/components/ui/stat-card';
 import { AssignmentRow } from '@/components/dashboard/assignment-row';
 import { ExamRow } from '@/components/dashboard/exam-row';
@@ -126,6 +127,8 @@ export default function DashboardPage() {
           </Button>
         </div>
       </div>
+
+      <InstallAppCard />
 
       {/* Estatísticas rápidas */}
       {statCount > 0 && (

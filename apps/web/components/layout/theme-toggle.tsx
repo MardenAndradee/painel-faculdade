@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { useTheme } from 'next-themes';
 import { Monitor, Moon, Sun } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toThemePreference, type NextTheme } from '@/lib/theme-preference';
+import { useUpdateProfile } from '@/hooks/use-update-profile';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -27,10 +29,19 @@ const OPTIONS = [
 export function ThemeToggle() {
   const { theme, setTheme, resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const updateProfile = useUpdateProfile();
 
   useEffect(() => setMounted(true), []);
 
   const CurrentIcon = mounted && resolvedTheme === 'dark' ? Moon : Sun;
+
+  // Persiste no servidor (Etapa 28.12) - mesma escolha que a aba
+  // Configurações → Preferências salva, para não haver duas fontes de
+  // verdade do tema dependendo de qual atalho a pessoa usou.
+  function handleThemeChange(value: NextTheme): void {
+    setTheme(value);
+    updateProfile.mutate({ theme: toThemePreference(value) });
+  }
 
   return (
     <DropdownMenu>
@@ -45,7 +56,7 @@ export function ThemeToggle() {
         {OPTIONS.map(({ value, label, icon: Icon }) => (
           <DropdownMenuItem
             key={value}
-            onClick={() => setTheme(value)}
+            onClick={() => handleThemeChange(value)}
             className={theme === value ? 'bg-accent' : undefined}
           >
             <Icon aria-hidden />
