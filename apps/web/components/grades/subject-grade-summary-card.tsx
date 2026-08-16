@@ -151,29 +151,33 @@ export function SubjectGradeSummaryCard({
           {footerLabel(summary)}
         </span>
 
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1.5">
           <Button
-            variant="ghost"
+            variant="outline"
             size="icon"
-            className="size-7 text-muted-foreground"
+            className="size-9 text-muted-foreground sm:size-7"
             onClick={() => onSimulate(subject.id)}
             aria-label={`Simular notas de ${subject.name}`}
           >
             <Calculator className="size-4" aria-hidden />
           </Button>
+
+          {/* Configurar continua acessível pela tela da disciplina - some só
+              aqui no mobile, onde o espaço é mais disputado. */}
           <Button
             variant="ghost"
             size="icon"
-            className="size-7 text-muted-foreground"
+            className="hidden size-7 text-muted-foreground sm:inline-flex"
             onClick={() => onConfigure(subject.id)}
             aria-label={`Configurar notas de ${subject.name}`}
           >
             <Settings className="size-4" aria-hidden />
           </Button>
+
           <Button
-            variant="ghost"
+            variant="accent"
             size="icon"
-            className="size-7 text-muted-foreground"
+            className="size-9 sm:size-7"
             onClick={() => onAddGrade(subject.id)}
             aria-label={`Lançar nota em ${subject.name}`}
           >
