@@ -34,6 +34,19 @@ export const classMembershipService = {
       throw AppError.conflict('Você já é membro desta turma');
     }
 
+    // Limite de uma turma ativa por vez (Etapa 30.1) - roda tanto numa entrada
+    // nova quanto numa reativação (LEFT -> ACTIVE de novo): o que importa é o
+    // RESULTADO (o usuário fica ACTIVE aqui), não como ele chegou até esse
+    // estado. Reativar sem essa checagem deixaria alguém com duas turmas
+    // ativas se ele tiver entrado em outra enquanto estava LEFT desta.
+    const activeMembership = await classRepository.findActiveMembership(userId);
+
+    if (activeMembership) {
+      throw AppError.conflict(
+        'Você já participa de uma turma ativa — saia ou arquive antes de entrar em outra',
+      );
+    }
+
     if (!existingMembership) {
       const memberCount = await classRepository.countActiveMembers(classId);
 
@@ -44,13 +57,19 @@ export const classMembershipService = {
       }
     }
 
-    const semester = await resolveMemberSemester(userId, invite.class.year, invite.class.term);
+    const semester = await resolveMemberSemester(
+      userId,
+      invite.class.semester.year,
+      invite.class.semester.term,
+    );
 
     const member = existingMembership
       ? await classRepository.reactivateMember(existingMembership.id, semester.id)
       : await classRepository.createMember(classId, userId, semester.id);
 
-    const classSubjects = await classRepository.listSubjectsFull(classId);
+    // Só o ciclo atual (Etapa 30.8) - quem entra agora não deve ganhar
+    // vínculo/molde de disciplinas de um ciclo que a turma já finalizou.
+    const classSubjects = await classRepository.listSubjectsFull(classId, invite.class.semester.id);
 
     let subjectsLinked = 0;
     let subjectsCreated = 0;

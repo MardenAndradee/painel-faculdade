@@ -94,10 +94,15 @@ async function assertClassSubjectBelongs(
 }
 
 export const classPostService = {
+  /** Só o ciclo atual (Etapa 30.8) - publicações de semestres já finalizados vivem na aba Histórico da turma. */
   async list(userId: string, classId: string): Promise<ClassPostListItem[]> {
     await requireMembership(userId, classId);
 
-    return (await classPostRepository.listByClass(classId)).map(toListItem);
+    const cycle = await classRepository.findCycle(classId);
+
+    if (!cycle) throw AppError.notFound('Turma');
+
+    return (await classPostRepository.listByClass(classId, cycle.semesterId)).map(toListItem);
   },
 
   async getById(userId: string, classId: string, postId: string): Promise<ClassPostListItem> {
@@ -110,14 +115,20 @@ export const classPostService = {
     return toListItem(row);
   },
 
-  /** Recorte usado pela Visão geral da turma. */
+  /** Recorte usado pela Visão geral da turma - só o ciclo atual (Etapa 30.8). */
   async upcoming(userId: string, classId: string, days = 7): Promise<ClassPostListItem[]> {
     await requireMembership(userId, classId);
+
+    const cycle = await classRepository.findCycle(classId);
+
+    if (!cycle) throw AppError.notFound('Turma');
 
     const now = new Date();
     const to = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
 
-    return (await classPostRepository.findUpcoming(classId, now, to)).map(toListItem);
+    return (await classPostRepository.findUpcoming(classId, cycle.semesterId, now, to)).map(
+      toListItem,
+    );
   },
 
   async publish(
@@ -133,11 +144,16 @@ export const classPostService = {
 
     await assertClassSubjectBelongs(classId, classSubjectId);
 
+    const cycle = await classRepository.findCycle(classId);
+
+    if (!cycle) throw AppError.notFound('Turma');
+
     const row = await classPostRepository.create(classId, userId, {
       kind: input.kind,
       title: input.title,
       description: emptyToNull(input.description),
       classSubjectId,
+      ...cycle,
       date: input.kind === 'EXAM' ? input.date : null,
       durationMinutes: input.kind === 'EXAM' ? (input.durationMinutes ?? null) : null,
       room: input.kind === 'EXAM' ? emptyToNull(input.room) : null,
@@ -232,8 +248,10 @@ export const classPostService = {
 
   /**
    * *Fan-out* retroativo (Etapa 21): chamado quando alguém entra na turma
-   * depois - percorre as publicações já vigentes e cria a cópia que faltava
-   * para esse único membro, reaproveitando `fanOutCreate`.
+   * depois - percorre as publicações já vigentes do CICLO ATUAL (Etapa 30.8)
+   * e cria a cópia que faltava para esse único membro, reaproveitando
+   * `fanOutCreate`. Publicações de ciclos já finalizados ficam só no
+   * Histórico - quem entra agora não recebe cópia pessoal delas.
    */
   async fanOutToNewMember(
     classId: string,
@@ -241,7 +259,11 @@ export const classPostService = {
     userId: string,
     semesterId: string,
   ): Promise<void> {
-    const posts = await classPostRepository.listByClass(classId);
+    const cycle = await classRepository.findCycle(classId);
+
+    if (!cycle) return;
+
+    const posts = await classPostRepository.listByClass(classId, cycle.semesterId);
 
     for (const post of posts) {
       await this.fanOutCreate(post, [{ id: memberId, userId, semesterId }]);

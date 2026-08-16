@@ -23,6 +23,7 @@ import { refreshTokenRepository } from '../repositories/refresh-token.repository
 import { authIdentityRepository } from '../repositories/auth-identity.repository.js';
 import { emailTokenRepository } from '../repositories/email-token.repository.js';
 import { gradeConfigurationService } from './grade-configuration.service.js';
+import { semesterService } from './semester.service.js';
 import { AppError } from '../utils/app-error.js';
 import { hashToken, randomToken } from '../utils/crypto.js';
 import { hashPassword, verifyPassword } from '../utils/password.js';
@@ -117,6 +118,30 @@ async function issueSession(
     },
     refreshToken,
   };
+}
+
+/**
+ * Bootstrap de usuario novo: modelo de notas padrao (Etapa 19) + semestre
+ * atual (Etapa 31), no mesmo gatilho.
+ *
+ * So loga a falha - nao pode derrubar o cadastro/login. Pior caso, o usuario
+ * fica sem um dos dois ate a resolucao "sob demanda" (`getOrCreateCurrent`,
+ * `gradeConfigurationService.ensureForSubject`) cobrir na proxima leitura.
+ *
+ * Chamado nos dois fluxos de cadastro (Google e senha) - antes so o Google
+ * bootstrapava; quem se cadastrava por senha ficava sem N1/N2/N3 e sem
+ * semestre ate criar um a mao, que deixou de ser possivel nesta etapa.
+ */
+async function bootstrapNewUser(userId: string): Promise<void> {
+  await Promise.all([
+    gradeConfigurationService.ensureUserDefault(userId),
+    semesterService.getOrCreateCurrent(userId),
+  ]).catch((error: unknown) => {
+    logger.warn('Falha ao bootstrapar usuario novo (modelo de notas/semestre)', {
+      userId,
+      message: error instanceof Error ? error.message : 'erro desconhecido',
+    });
+  });
 }
 
 /** E-mail invalido/inexistente e senha errada devolvem a MESMA mensagem (R3 - nao revelar se a conta existe). */
@@ -247,16 +272,7 @@ export const authService = {
     });
 
     if (isNewUser) {
-      // Modelo de notas padrao (Etapa 19): da um ponto de partida (N1/N2/N3)
-      // em vez de deixar o usuario novo sem nenhuma configuracao. Nao pode
-      // derrubar o login se falhar - o pior caso e o usuario configurar as
-      // notas manualmente depois, o que ele ja podia fazer de qualquer jeito.
-      await gradeConfigurationService.ensureUserDefault(user.id).catch((error: unknown) => {
-        logger.warn('Falha ao criar o modelo padrao de notas do usuario novo', {
-          userId: user.id,
-          message: error instanceof Error ? error.message : 'erro desconhecido',
-        });
-      });
+      await bootstrapNewUser(user.id);
     }
 
     logger.info('Login com Google realizado', {
@@ -392,6 +408,8 @@ export const authService = {
       email: input.email,
       passwordHash,
     });
+
+    await bootstrapNewUser(user.id);
 
     const token = await issueEmailToken(user.id, 'VERIFY_EMAIL', VERIFY_EMAIL_TOKEN_TTL_MS);
 

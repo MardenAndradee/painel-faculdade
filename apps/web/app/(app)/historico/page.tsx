@@ -8,16 +8,14 @@ import {
   CheckCircle2,
   EllipsisVertical,
   GraduationCap,
-  History,
   Lock,
   LockOpen,
   Pencil,
-  Plus,
   RefreshCw,
   Trash2,
 } from 'lucide-react';
 import type { HistorySemester, HistorySubject, SemesterListItem } from '@painel/shared';
-import { SUBJECT_STATUS_LABELS } from '@painel/shared';
+import { SUBJECT_STATUS_LABELS, isCurrentSemester } from '@painel/shared';
 import {
   useDeleteSemester,
   useHistory,
@@ -129,6 +127,9 @@ function SemesterCard({
   onDelete: (semester: SemesterListItem) => void;
 }) {
   const isFinished = semester.status === 'FINISHED';
+  // "Atual" e calculado, nunca gravado (Etapa 31) - pode coexistir com
+  // "Encerrado" ate o calendario virar para o proximo periodo.
+  const isCurrent = isCurrentSemester({ year: semester.year, term: semester.term }, new Date());
 
   return (
     <Card className="transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-accent/40">
@@ -137,7 +138,7 @@ function SemesterCard({
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-base font-semibold">{semester.name}</p>
 
-            {semester.isCurrent && <Badge>Atual</Badge>}
+            {isCurrent && <Badge>Atual</Badge>}
             {isFinished && (
               <Badge variant="secondary" className="gap-1">
                 <Lock className="size-3" aria-hidden />
@@ -256,26 +257,11 @@ export default function HistoryPage() {
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-5 px-4 py-6 sm:px-6 lg:py-8">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Histórico</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Seu percurso acadêmico, período por período.
-          </p>
-        </div>
-
-        <Button
-          variant="accent"
-          onClick={() => {
-            setEditing(null);
-            setFormOpen(true);
-          }}
-          className="shrink-0"
-        >
-          <Plus className="size-4" aria-hidden />
-          <span className="hidden sm:inline">Novo semestre</span>
-          <span className="sm:hidden">Novo</span>
-        </Button>
+      <div className="min-w-0">
+        <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Histórico</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Seu percurso acadêmico, período por período.
+        </p>
       </div>
 
       {isLoading ? (
@@ -305,21 +291,9 @@ export default function HistoryPage() {
       ) : data.semesters.length === 0 && data.unassignedSubjects.length === 0 ? (
         <Card>
           <EmptyState
-            icon={History}
-            title="Nenhum semestre cadastrado"
-            description="Crie um período letivo para organizar suas disciplinas e acompanhar o histórico."
-            action={
-              <Button
-                size="sm"
-                onClick={() => {
-                  setEditing(null);
-                  setFormOpen(true);
-                }}
-              >
-                <Plus className="size-4" aria-hidden />
-                Criar semestre
-              </Button>
-            }
+            icon={GraduationCap}
+            title="Nenhuma disciplina ainda"
+            description="Cadastre uma disciplina para começar a acompanhar seu histórico."
           />
         </Card>
       ) : (

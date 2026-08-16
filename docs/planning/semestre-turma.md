@@ -1,4 +1,56 @@
-# Etapa 30 — Semestre como hierarquia central (Turma + Período do curso)
+# Etapa 30 — Semestre como hierarquia central (Turma + Período do curso) ✅
+
+> **Status: implementado.** As 9 sub-etapas abaixo estão concluídas — ver "Nota de
+> implementação" em cada uma para os desvios do texto original. Executada de uma vez, em
+> sequência (banco/backend primeiro, depois frontend), com `typecheck`/`test`/`lint` limpos ao
+> final. Sem Postgres acessível no ambiente de implementação — a migração foi escrita à mão
+> seguindo os padrões já usados no repo, mas o roteiro manual (criar turma, entrar por convite,
+> finalizar semestre, aba Histórico) fica pendente de rodar contra um banco real.
+
+## O que a Etapa 31 já mudou (ler antes de executar)
+
+A Etapa 31 (semestre automático — [`semestre-automatico.md`](semestre-automatico.md)) foi
+implementada **antes** desta, de propósito (ver a nota logo abaixo). Ela mexeu em código que
+este plano assume como "hoje" em vários pontos. Resumo do que já mudou e do que continua igual:
+
+- **`resolveMemberSemester` não mudou de assinatura** — continua `(userId, year, term) => { id,
+  name }` (`class-subject-linking.service.ts`), exatamente como a Etapa 30.3/30.5 assumem. Por
+  dentro, agora delega para `semesterService.ensure`, mas isso é transparente pra quem chama.
+- **A função pura de sugestão de semestre que a Etapa 30.4 planejava extrair já existe** —
+  `packages/shared/src/semester-period.ts` (`getCurrentSemesterKey`, `defaultSemesterName`,
+  `defaultSemesterDates`, `isCurrentSemester`), não com o nome `suggestSemesterFromDate` que o
+  texto original sugeria e dividida em funções menores em vez de uma só. A Etapa 30.4 deve
+  **reaproveitar essas funções**, não recriar a lógica.
+- **O form de Semestre (`semester-form-dialog.tsx`) não tem mais campo de Período/Ano/Data
+  nenhum** — virou edição de nome apenas (`Semester` nasce sozinho, sem formulário). A instrução
+  da Etapa 30.4 de "trocar o `label="Período"` por 'Metade do ano'" não se aplica mais: **não há
+  mais esse campo pra renomear**. A ambiguidade da palavra "Período" que a 30.4 queria resolver já
+  não existe nesse form — só sobra o rótulo em `class-form-dialog.tsx`, que é o que a Etapa 30.6
+  redesenha de qualquer forma.
+- **`isCurrent` e `SemesterStatus.PLANNED` não existem mais** — se qualquer sub-etapa nova tocar
+  em `Semester`, "semestre atual" é sempre `isCurrentSemester(...)`, nunca um campo lido do banco.
+- **⚠️ Conflito real para a Etapa 30.6.** O plano original assume que o dropdown de Semestre no
+  form de criar Turma pode ficar vazio (usuário sem nenhum semestre ainda) e resolve isso com um
+  atalho "Criar {sugestão}" que chama criação de semestre a partir do frontend. Isso não é mais
+  possível: **`POST /semesters` foi removida** — criação de `Semester` é sempre interna
+  (`semesterService.ensure`), sem rota pública. Além disso, o cenário "dropdown vazio" ficou raro
+  (todo usuário autenticado sempre tem pelo menos o semestre atual, criado no bootstrap ou sob
+  demanda) — mas continua possível o dono querer um `(year, term)` **diferente** do atual pra essa
+  turma. A Etapa 30.6 precisa decidir: (a) o formulário de Turma manda só `(year, term)` e o
+  backend resolve/cria via `semesterService.ensure` no `class.service.create` — dispensando
+  dropdown E atalho de criação por completo — ou (b) alguma rota nova, escopada à criação de
+  Turma, expõe esse "acha-ou-cria". A opção (a) é a mais simples e a mais coerente com "semestre
+  nasce sozinho": revisar antes de implementar 30.6 como está escrito.
+- **Etapa 30.5, passo 2** ("pode reaproveitar um `Semester` pessoal que ele já tenha, ex.: já
+  criou manualmente em Histórico") — o exemplo está desatualizado (não existe mais criação manual),
+  mas o mecanismo continua correto: `resolveMemberSemester`/`ensure` acha-ou-cria automaticamente,
+  sem exigir nada manual do dono.
+
+> Este plano (Etapa 30) e o de semestre automático (Etapa 31) foram desenhados como
+> compatíveis e independentes — a 30 não depende de como um `Semester` nasce, só de que ele
+> exista e tenha um id. A 31 rodou primeiro porque simplifica o ciclo de vida de `Semester`
+> (remove o gerenciamento manual de `isCurrent`) antes que a ação "Finalizar semestre" da Turma
+> (30.5) se apoiasse nele — evita reescrever essa lógica duas vezes.
 
 ## Problema
 
@@ -55,7 +107,7 @@ Cada vez que a turma finaliza um semestre, os dois andam juntos: `period += 1` e
 
 ## Plano por etapas
 
-### Etapa 30.1 — Banco: um aluno participa de no máximo uma turma ativa por vez
+### Etapa 30.1 — Banco: um aluno participa de no máximo uma turma ativa por vez ✅
 
 **Objetivo.** Garantir que cada usuário tenha, no máximo, uma participação ativa (`ClassMember.status: ACTIVE`) em turmas não arquivadas por vez — dono ou membro comum, é a mesma regra. Fecha uma ambiguidade que ficaria pior a partir da Etapa 30.3 em diante: não faz sentido um usuário estar "em dois períodos do curso ao mesmo tempo".
 
@@ -76,7 +128,7 @@ Cada vez que a turma finaliza um semestre, os dois andam juntos: `period += 1` e
 
 ---
 
-### Etapa 30.2 — Frontend: sidebar leva direto pra visão geral da Turma
+### Etapa 30.2 — Frontend: sidebar leva direto pra visão geral da Turma ✅
 
 **Objetivo.** Como cada usuário participa de no máximo uma turma ativa (Etapa 30.1), a tela de listagem de turmas nunca mostra mais de um card pra clicar — então não faz sentido continuar sendo uma lista. Clicar em "Turmas" na sidebar deve levar direto pra visão geral da turma que o usuário já faz parte.
 
@@ -91,7 +143,7 @@ Cada vez que a turma finaliza um semestre, os dois andam juntos: `period += 1` e
 
 ---
 
-### Etapa 30.3 — Banco: Turma referencia Semestre de verdade
+### Etapa 30.3 — Banco: Turma referencia Semestre de verdade ✅
 
 **Objetivo.** `Class` ganha `semesterId` (FK obrigatória pro `Semester` do dono) e `period` (1-8); `ClassSubject` e `ClassPost` ganham `semesterId` próprio, tagueando a qual ciclo pertencem. `Class.year`/`Class.term` somem, substituídos pela leitura via `class.semester.year`/`.term`.
 
@@ -110,7 +162,7 @@ Cada vez que a turma finaliza um semestre, os dois andam juntos: `period += 1` e
 
 ---
 
-### Etapa 30.4 — Unificar sugestão de semestre e tirar a ambiguidade de "Período"
+### Etapa 30.4 — Unificar sugestão de semestre e tirar a ambiguidade de "Período" ✅
 
 **Objetivo.** Uma função só decide "que semestre sugerir a partir de hoje" (nome, ano, `term`, datas de início/fim) — hoje existem **duas versões divergentes** da mesma regra (frontend: fev-jun/ago-dez; backend `defaultSemesterDates`: fev-jul/jul-dez). E renomear o campo do form de Semestre que hoje se chama "Período" sem ser um período de curso.
 
@@ -128,7 +180,7 @@ Cada vez que a turma finaliza um semestre, os dois andam juntos: `period += 1` e
 
 ---
 
-### Etapa 30.5 — Backend: ação "Finalizar semestre" da turma
+### Etapa 30.5 — Backend: ação "Finalizar semestre" da turma ✅
 
 **Objetivo.** Endpoint novo que avança a turma pro próximo semestre/período automaticamente, arquivando o ciclo atual sem apagar nada — com uma pré-visualização antes de executar de verdade (Decisão #12).
 
@@ -151,7 +203,7 @@ Cada vez que a turma finaliza um semestre, os dois andam juntos: `period += 1` e
 
 ---
 
-### Etapa 30.6 — Frontend: criação de Turma com Semestre real + Período do curso
+### Etapa 30.6 — Frontend: criação de Turma com Semestre real + Período do curso ✅
 
 **Objetivo.** `class-form-dialog.tsx` troca o dropdown solto de "Semestre" (1/2) por um seletor de `Semester` de verdade, com sugestão guiada quando não existe nenhum, e ganha o campo novo "Período" (1º a 8º).
 
@@ -166,7 +218,7 @@ Cada vez que a turma finaliza um semestre, os dois andam juntos: `period += 1` e
 
 ---
 
-### Etapa 30.7 — Frontend: editar turma (nome, cor, descrição, período)
+### Etapa 30.7 — Frontend: editar turma (nome, cor, descrição, período) ✅
 
 **Objetivo.** Hoje não existe nenhuma tela de editar turma — `ClassFormDialog` só é usado pra criação (`turmas/page.tsx:85`) e o hook `useUpdateClass` já existe mas nenhuma UI o chama. Sem essa tela, a Decisão #4 (período editável depois) seria uma promessa vazia. O backend já está pronto: `PATCH /classes/:id` já existe (`class.controller.update`), e `updateClassSchema` é `classBaseSchema.partial()` — herda `period` automaticamente assim que a Etapa 30.3 adicionar o campo à base, sem precisar de nenhum trabalho de backend novo nesta etapa.
 
@@ -182,7 +234,7 @@ Cada vez que a turma finaliza um semestre, os dois andam juntos: `period += 1` e
 
 ---
 
-### Etapa 30.8 — Frontend: "Finalizar semestre" na Turma + Histórico da turma
+### Etapa 30.8 — Frontend: "Finalizar semestre" na Turma + Histórico da turma ✅
 
 **Objetivo.** Dono ganha a ação de finalizar semestre na tela da turma; a turma passa a mostrar só o conteúdo do período atual por padrão. **Nada é apagado nem fica inacessível** (Decisão #13) — o conteúdo do período anterior só muda de aba, pra Histórico, visível a qualquer membro ativo, não só o dono.
 
@@ -197,7 +249,7 @@ Cada vez que a turma finaliza um semestre, os dois andam juntos: `period += 1` e
 
 ---
 
-### Etapa 30.9 — Frontend: cards de Prova/Publicações no padrão do projeto
+### Etapa 30.9 — Frontend: cards de Prova/Publicações no padrão do projeto ✅
 
 **Objetivo.** A lista de publicações dentro da turma hoje mistura aviso/atividade/prova/evento num único `Card` genérico por item, com todos os metadados espremidos numa linha só concatenada por "·" — sem cor de disciplina, sem indicador de urgência, sem separação por tipo. É essa mistura sem separação, não o tamanho de cada card isoladamente, que causa a sensação de "extenso demais".
 
@@ -209,6 +261,49 @@ Cada vez que a turma finaliza um semestre, os dois andam juntos: `period += 1` e
 **Aceite.** Nenhuma publicação perde informação que já era exibida hoje (sala, contagem de cópias, etc. continuam visíveis, só reorganizados). Visual consistente com `ExamRow`/`ExamItem` do resto do projeto — não parece um componente à parte.
 
 **Testes.** Nenhuma regra pura nova; verificação visual manual em larguras de tela variadas (mobile e desktop), consistente com a prática já usada nas telas de calendário/dashboard.
+
+## Notas de implementação (desvios do texto acima)
+
+- **30.1 virou checagem de aplicação, sem migração.** Um índice único parcial
+  (`status='ACTIVE'`) não consegue expressar a exceção "turma arquivada não conta" (Decisão #9),
+  porque `archivedAt` mora em `Class`, não em `ClassMember` — Postgres não indexa por coluna de
+  outra tabela. `classRepository.findActiveMembership(userId)` faz o `JOIN` e o guard entra em
+  `class.service.create` e `class-membership.service.join`, mesmo padrão sem constraint de banco
+  já usado pelo teto de 100 membros (`MAX_MEMBERS_PER_CLASS`).
+- **30.3 ganhou uma coluna a mais que o texto original: `period` também em `ClassSubject` e
+  `ClassPost`**, não só `semesterId`. Sem isso a aba Histórico (30.8) não tinha como saber a que
+  período do curso um ciclo antigo pertencia — `Semester` sozinho carrega ano/metade, não o
+  contador cumulativo. Os dois campos são herdados da turma no momento da criação e imutáveis
+  depois, exatamente como `semesterId`.
+- **`ClassSummary`/`ClassDetail`/`ClassInvitePreview` mantiveram `year`/`term` "achatados"** na
+  resposta (agora vindos do `JOIN` com `Semester`, não de coluna própria) — decisão tomada para
+  minimizar mudança nas telas que só exibem (`class-card.tsx`, header da turma, preview de
+  convite, tela de entrar). Só os formulários de criar/editar turma mudaram de fato.
+- **30.4**: a função unificada já existia antes desta etapa começar (Etapa 31,
+  `packages/shared/src/semester-period.ts`) — ver a seção "O que a Etapa 31 já mudou" no topo
+  deste documento. Único trabalho real aqui foi a função pura nova `nextSemesterKey`, usada pela
+  30.5.
+- **30.5**: sem endpoint de rollback/desfazer — "Finalizar semestre" é uma ação direta, sem
+  confirmação em duas etapas além da prévia (`GET .../finish-semester-preview`).
+- **30.6**: sem dropdown de `Semester` nem atalho de criação inline, como o texto original
+  assumia — `POST /semesters` não existe mais desde a Etapa 31. O formulário continua mandando
+  `year`/`term` (como sempre mandou); o backend resolve-ou-cria via `semesterService.ensure`
+  antes de gravar a `Class`. Ganhou só o campo **Período** (`Select` 1º–8º).
+- **30.7**: implementado como modo de edição do MESMO `ClassFormDialog` (prop `classItem`
+  opcional), não um diálogo separado — mesmo padrão que `ClassSubjectDialog` já usa
+  (`isEditing = Boolean(...)`). Em edição, os campos Ano/Semestre e Disciplinas iniciais somem;
+  ficam Nome, Cor, Descrição, Período.
+- **30.8**: filtragem por ciclo atual implementada em `classService.getById` (via `toDetail`) e
+  em `classPostService.list` — ambos agora só devolvem `ClassSubject`/`ClassPost` cujo
+  `semesterId` bate com o da turma. Endpoint novo `GET /classes/:id/history`, aberto a qualquer
+  membro ativo (não só o dono) — é histórico coletivo, não gestão.
+- **30.9**: seções por tipo cobrem Provas/Atividades/Eventos (os três valores de `ClassPostKind`)
+  — "Avisos", citado no texto original, já tem seção própria na aba Mural (`ClassAnnouncement`,
+  modelo diferente de `ClassPost`); incluí-lo aqui teria sido redundante. `ClassPostRow` novo
+  computa o destaque de urgência de prova (`≤3 dias`) no cliente a partir da data crua — diferente
+  do padrão do Dashboard (que recebe os dias já calculados pelo servidor, ver `format.ts`), porque
+  `ClassPostListItem` não tem esse campo pré-calculado; aceitável para um destaque visual, não uma
+  regra de negócio.
 
 ## Fora do escopo deste plano
 

@@ -1,17 +1,24 @@
-import type {
-  ClassDetail,
-  ClassHealthSummary,
-  ClassInviteCreated,
-  ClassInviteItem,
-  ClassInvitePreview,
-  ClassMemberItem,
-  ClassRole,
-  ClassSubjectInput,
-  ClassSubjectItem,
-  ClassSummary,
-  CreateClassInput,
-  CreateClassInviteInput,
-  UpdateClassInput,
+import {
+  defaultSemesterName,
+  getCurrentSemesterKey,
+  nextSemesterKey,
+  type ClassDetail,
+  type ClassFinishSemesterPreview,
+  type ClassHealthSummary,
+  type ClassHistory,
+  type ClassHistoryCycle,
+  type ClassInviteCreated,
+  type ClassInviteItem,
+  type ClassInvitePreview,
+  type ClassMemberItem,
+  type ClassPostSummary,
+  type ClassRole,
+  type ClassSubjectInput,
+  type ClassSubjectItem,
+  type ClassSummary,
+  type CreateClassInput,
+  type CreateClassInviteInput,
+  type UpdateClassInput,
 } from '@painel/shared';
 import { env } from '../config/env.js';
 import {
@@ -23,9 +30,10 @@ import {
   type ClassSubjectRow,
   type NewClassSubject,
 } from '../repositories/class.repository.js';
-import { classPostRepository } from '../repositories/class-post.repository.js';
+import { classPostRepository, type ClassPostRow } from '../repositories/class-post.repository.js';
 import { subjectRepository } from '../repositories/subject.repository.js';
-import { ensureMemberSubjectLink, resolveMemberSemester } from './class-subject-linking.service.js';
+import { ensureMemberSubjectLink } from './class-subject-linking.service.js';
+import { semesterService } from './semester.service.js';
 import { AppError } from '../utils/app-error.js';
 import { hashToken, randomToken } from '../utils/crypto.js';
 import { emptyToNull } from '../utils/text.js';
@@ -56,8 +64,9 @@ function toSummary(role: ClassRole, row: ClassListRow): ClassSummary {
   return {
     id: row.id,
     name: row.name,
-    year: row.year,
-    term: row.term,
+    year: row.semester.year,
+    term: row.semester.term,
+    period: row.period,
     color: row.color,
     archivedAt: row.archivedAt?.toISOString() ?? null,
     myRole: role,
@@ -84,8 +93,10 @@ function toDetail(role: ClassRole, row: ClassDetailRow, myLinkedSubjectIds: stri
   return {
     id: row.id,
     name: row.name,
-    year: row.year,
-    term: row.term,
+    year: row.semester.year,
+    term: row.semester.term,
+    period: row.period,
+    semesterId: row.semesterId,
     description: row.description,
     color: row.color,
     archivedAt: row.archivedAt?.toISOString() ?? null,
@@ -93,7 +104,11 @@ function toDetail(role: ClassRole, row: ClassDetailRow, myLinkedSubjectIds: stri
     memberCount: row._count.members,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
-    subjects: row.subjects.map(toSubjectItem),
+    // So o ciclo atual (Etapa 30.8) - o que ja foi "Finalizado" mora na aba
+    // Historico, nunca na visao principal da turma.
+    subjects: row.subjects
+      .filter((subject) => subject.semesterId === row.semesterId)
+      .map(toSubjectItem),
     myLinkedSubjectIds,
   };
 }
@@ -104,6 +119,16 @@ function toMemberItem(row: ClassMemberRow): ClassMemberItem {
     role: row.role,
     joinedAt: row.joinedAt.toISOString(),
     user: row.user,
+  };
+}
+
+function toPostSummary(row: ClassPostRow): ClassPostSummary {
+  return {
+    id: row.id,
+    kind: row.kind,
+    title: row.title,
+    classSubject: row.classSubject,
+    copyCount: row._count.copies,
   };
 }
 
@@ -195,17 +220,32 @@ export const classService = {
    * Cria a turma e o dono como primeiro membro.
    *
    * O dono também é um `ClassMember` (role OWNER) - por isso passa pelo MESMO
-   * `resolveMemberSemester`/`ensureMemberSubjectLink` que um membro comum usa
-   * ao entrar. Sem isso, o dono ficaria sem semestre/disciplinas pessoais
-   * vinculados e nunca receberia cópia das próprias publicações (Etapa 21).
+   * `ensureMemberSubjectLink` que um membro comum usa ao entrar. Sem isso, o
+   * dono ficaria sem disciplinas pessoais vinculadas e nunca receberia cópia
+   * das próprias publicações (Etapa 21).
+   *
+   * O `Semester` canônico da turma (Etapa 30) é resolvido ANTES de criar a
+   * `Class` - `semesterId` é `NOT NULL`, então precisa existir primeiro. É o
+   * mesmo id usado pro `ClassMember` do dono, dispensando a chamada separada
+   * que existia antes desta etapa.
    */
   async create(ownerId: string, input: CreateClassInput): Promise<ClassDetail> {
+    const activeMembership = await classRepository.findActiveMembership(ownerId);
+
+    if (activeMembership) {
+      throw AppError.conflict(
+        'Você já participa de uma turma ativa — saia ou arquive antes de criar outra',
+      );
+    }
+
+    const semester = await semesterService.ensure(ownerId, getCurrentSemesterKey(new Date()));
+
     const row = await classRepository.create(
       ownerId,
       {
         name: input.name,
-        year: input.year,
-        term: input.term,
+        semesterId: semester.id,
+        period: input.period,
         description: emptyToNull(input.description),
         color: input.color,
       },
@@ -213,7 +253,6 @@ export const classService = {
     );
 
     const ownerMember = await classRepository.findMemberRow(row.id, ownerId);
-    const semester = await resolveMemberSemester(ownerId, row.year, row.term);
 
     await classRepository.setMemberSemester(ownerMember!.id, semester.id);
 
@@ -232,14 +271,19 @@ export const classService = {
     return toDetail('OWNER', row, myLinkedSubjectIds);
   },
 
+  /**
+   * Edita nome/cor/descrição/período. `semesterId` fica de fora de propósito
+   * (Etapa 30, Decisão da 30.7) - a única forma sancionada de mudar o
+   * semestre/ciclo da turma é "Finalizar semestre" (`finishSemester`), pra
+   * nunca desalinhar `period` de `semesterId` por uma edição solta.
+   */
   async update(userId: string, classId: string, input: UpdateClassInput): Promise<ClassDetail> {
     const role = await requireMembership(userId, classId);
     requireOwner(role);
 
     const row = await classRepository.update(classId, {
       ...(input.name !== undefined ? { name: input.name } : {}),
-      ...(input.year !== undefined ? { year: input.year } : {}),
-      ...(input.term !== undefined ? { term: input.term } : {}),
+      ...(input.period !== undefined ? { period: input.period } : {}),
       ...(input.description !== undefined ? { description: emptyToNull(input.description) } : {}),
       ...(input.color !== undefined ? { color: input.color } : {}),
     });
@@ -247,6 +291,91 @@ export const classService = {
     const myLinkedSubjectIds = await classRepository.listMyLinkedSubjectIds(classId, userId);
 
     return toDetail(role, row, myLinkedSubjectIds);
+  },
+
+  // --- Finalizar semestre (Etapa 30.5) --------------------------------------------
+
+  /** Prévia: o próximo semestre/período e quanto ficará no Histórico, sem gravar nada. */
+  async finishSemesterPreview(
+    userId: string,
+    classId: string,
+  ): Promise<ClassFinishSemesterPreview> {
+    const role = await requireMembership(userId, classId);
+    requireOwner(role);
+
+    const row = await classRepository.findDetail(classId);
+
+    if (!row) throw AppError.notFound('Turma');
+
+    const next = nextSemesterKey({ year: row.semester.year, term: row.semester.term });
+    // Só o ciclo atual (Etapa 30.8) - senão, depois da 2a "Finalizar semestre"
+    // em diante, o preview soma ciclos que já foram pro Histórico.
+    const [subjectCount, postCount] = await Promise.all([
+      classRepository.countSubjects(classId, row.semesterId),
+      classPostRepository.countByClass(classId, row.semesterId),
+    ]);
+
+    return {
+      currentSemester: { year: row.semester.year, term: row.semester.term },
+      nextSemester: { ...next, name: defaultSemesterName(next) },
+      currentPeriod: row.period,
+      nextPeriod: row.period + 1,
+      subjectCount,
+      postCount,
+    };
+  },
+
+  /**
+   * Avança a turma pro próximo semestre/período.
+   *
+   * Não cria `ClassSubject`/`ClassPost` novos (o ciclo novo começa vazio,
+   * decisão explícita) e não toca em `semesterService.close` de ninguém - as
+   * notas pessoais continuam sendo uma decisão de cada membro, no ritmo dele,
+   * em Histórico. O que já existe (moldes, publicações) permanece marcado com
+   * o `semesterId` antigo - é assim que a aba Histórico da turma separa
+   * "atual" de "ciclos anteriores" (Etapa 30.8).
+   */
+  async finishSemester(userId: string, classId: string): Promise<ClassDetail> {
+    const role = await requireMembership(userId, classId);
+    requireOwner(role);
+    await assertNotArchived(classId);
+
+    const row = await classRepository.findDetail(classId);
+
+    if (!row) throw AppError.notFound('Turma');
+
+    const next = nextSemesterKey({ year: row.semester.year, term: row.semester.term });
+
+    const members = await classRepository.listActiveMembersWithSemester(classId);
+
+    // Resolve o próximo semestre pessoal de cada membro ativo (o dono
+    // incluso, como um deles) em paralelo - cada um mexe num usuário
+    // diferente, sem contenção entre si.
+    const memberSemesters = await Promise.all(
+      members.map(async (member) => ({
+        memberId: member.id,
+        userId: member.userId,
+        semesterId: (await semesterService.ensure(member.userId, next)).id,
+      })),
+    );
+
+    const ownerNext = memberSemesters.find((entry) => entry.userId === userId);
+
+    if (!ownerNext) throw AppError.notFound('Turma');
+
+    // Grava o avanço da turma e de todo mundo numa única transação (Etapa
+    // 30.5) - um erro no meio não pode deixar a turma e os membros
+    // apontando pra ciclos diferentes.
+    const updated = await classRepository.advanceCycle(
+      classId,
+      ownerNext.semesterId,
+      row.period + 1,
+      memberSemesters.map(({ memberId, semesterId }) => ({ memberId, semesterId })),
+    );
+
+    const myLinkedSubjectIds = await classRepository.listMyLinkedSubjectIds(classId, userId);
+
+    return toDetail(role, updated, myLinkedSubjectIds);
   },
 
   async listMembers(userId: string, classId: string): Promise<ClassMemberItem[]> {
@@ -340,12 +469,20 @@ export const classService = {
     const role = await requireMembership(userId, classId);
     requireOwner(role);
 
+    const cycle = await classRepository.findCycle(classId);
+
+    if (!cycle) throw AppError.notFound('Turma');
+
+    // Só o ciclo atual (Etapa 30.8) - senão, toda "Finalizar semestre"
+    // deixaria um falso positivo permanente aqui: disciplinas/publicações de
+    // um ciclo já encerrado nunca vão mesmo receber vínculo/cópia de membros
+    // que entraram depois, e isso é esperado, não um problema a sinalizar.
     const [members, subjects, linkPairs, archivedLinkedSubjects, posts] = await Promise.all([
       classRepository.listActiveMembersWithSemester(classId),
-      classRepository.listSubjectsFull(classId),
+      classRepository.listSubjectsFull(classId, cycle.semesterId),
       classRepository.listActiveLinkPairs(classId),
       classRepository.countArchivedLinkedSubjects(classId),
-      classPostRepository.listByClass(classId),
+      classPostRepository.listByClass(classId, cycle.semesterId),
     ]);
 
     const linkedKeys = new Set(linkPairs.map((pair) => `${pair.classSubjectId}:${pair.userId}`));
@@ -359,6 +496,59 @@ export const classService = {
       .map((post) => ({ id: post.id, title: post.title, copyCount: post._count.copies }));
 
     return { membersWithMissingLinks, archivedLinkedSubjects, postsWithIncompleteFanOut };
+  },
+
+  // --- Histórico da turma (Etapa 30.8) ----------------------------------------------
+
+  /**
+   * Ciclos anteriores da turma - qualquer membro ativo pode ler, não só o
+   * dono (é histórico coletivo, não gestão). Agrupado por `semesterId`, que
+   * junto com `period` (ambos imutáveis em `ClassSubject`/`ClassPost`) é o
+   * que sobrevive a "Finalizar semestre" tirando o ciclo da aba principal.
+   */
+  async getHistory(userId: string, classId: string): Promise<ClassHistory> {
+    await requireMembership(userId, classId);
+
+    const row = await classRepository.findDetail(classId);
+
+    if (!row) throw AppError.notFound('Turma');
+
+    const [subjects, posts] = await Promise.all([
+      classRepository.listSubjectsOutsideSemester(classId, row.semesterId),
+      classPostRepository.listOutsideSemester(classId, row.semesterId),
+    ]);
+
+    const cycles = new Map<string, ClassHistoryCycle>();
+
+    function cycleFor(semesterId: string, semesterName: string, period: number): ClassHistoryCycle {
+      const existing = cycles.get(semesterId);
+
+      if (existing) return existing;
+
+      const created: ClassHistoryCycle = {
+        semesterId,
+        semesterName,
+        period,
+        subjects: [],
+        posts: [],
+      };
+
+      cycles.set(semesterId, created);
+
+      return created;
+    }
+
+    for (const subject of subjects) {
+      cycleFor(subject.semesterId, subject.semester.name, subject.period).subjects.push(
+        toSubjectItem(subject),
+      );
+    }
+
+    for (const post of posts) {
+      cycleFor(post.semesterId, post.semester.name, post.period).posts.push(toPostSummary(post));
+    }
+
+    return { cycles: [...cycles.values()].sort((a, b) => b.period - a.period) };
   },
 
   // --- Disciplinas-molde -------------------------------------------------------
@@ -380,8 +570,12 @@ export const classService = {
     const role = await requireMembership(userId, classId);
     requireOwner(role);
 
+    const cycle = await classRepository.findCycle(classId);
+
+    if (!cycle) throw AppError.notFound('Turma');
+
     const order = await classRepository.countSubjects(classId);
-    const row = await classRepository.addSubject(classId, toSubjectInput(input), order);
+    const row = await classRepository.addSubject(classId, cycle, toSubjectInput(input), order);
 
     if (input.existingSubjectId) {
       const ownerMember = await classRepository.findMemberRow(classId, userId);
@@ -506,14 +700,19 @@ export const classService = {
 
     const membership = await classRepository.findMembership(userId, invite.classId);
     const memberCount = await classRepository.countActiveMembers(invite.classId);
-    const subjectCount = await classRepository.countSubjects(invite.classId);
+    // Só o ciclo atual - é o que quem entrar agora realmente vai receber.
+    const subjectCount = await classRepository.countSubjects(
+      invite.classId,
+      invite.class.semester.id,
+    );
 
     return {
       class: {
         id: invite.class.id,
         name: invite.class.name,
-        year: invite.class.year,
-        term: invite.class.term,
+        year: invite.class.semester.year,
+        term: invite.class.semester.term,
+        period: invite.class.period,
         color: invite.class.color,
       },
       owner: { name: invite.class.owner.name },

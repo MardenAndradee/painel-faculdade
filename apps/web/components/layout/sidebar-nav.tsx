@@ -10,6 +10,7 @@ import {
 } from '@/lib/navigation';
 import { Logo } from '@/components/brand/logo';
 import { useModuleSettings } from '@/hooks/use-module-settings';
+import { useClasses } from '@/hooks/use-classes';
 import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
 
@@ -85,17 +86,32 @@ function NavLink({
  * Sidebar "piscar" vazia e depois preencher. Um item sem `module` (nenhum
  * hoje, mas a Sidebar já nasce pronta pra isso) nunca é escondido.
  */
+/**
+ * "Turmas" leva direto pra turma única do usuário quando há uma (Etapa 30.2)
+ * - desde a Etapa 30.1, no máximo uma participação ativa não-arquivada por
+ * vez, então a listagem intermediária só faz sentido pra quem tem zero.
+ */
+function useClassesNavHref(): string {
+  const { data: classes } = useClasses();
+  const active = classes?.find((item) => item.archivedAt === null);
+
+  return active ? `/turmas/${active.id}` : '/turmas';
+}
+
 function useVisibleSections(): NavSection[] {
   const { data } = useModuleSettings();
+  const classesHref = useClassesNavHref();
 
   return NAV_SECTIONS.map((section) => ({
     ...section,
-    items: section.items.filter((item) => {
-      if (!item.module) return true;
-      if (!data) return true;
+    items: section.items
+      .filter((item) => {
+        if (!item.module) return true;
+        if (!data) return true;
 
-      return data.find((entry) => entry.module === item.module)?.enabled ?? true;
-    }),
+        return data.find((entry) => entry.module === item.module)?.enabled ?? true;
+      })
+      .map((item) => (item.module === 'CLASSES' ? { ...item, href: classesHref } : item)),
   })).filter((section) => section.items.length > 0);
 }
 

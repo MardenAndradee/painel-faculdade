@@ -68,11 +68,11 @@ export function formatRelative(value: string | Date): string {
   return formatDistanceToNowStrict(date, { locale: ptBR, addSuffix: true });
 }
 
-/** Nota formatada com uma casa decimal, ou travessao quando ausente. */
+/** Nota formatada com duas casas decimais, ou travessao quando ausente. */
 export function formatGrade(value: number | null): string {
   if (value === null) return '—';
 
-  return value.toFixed(1).replace('.', ',');
+  return value.toFixed(2).replace('.', ',');
 }
 
 /**

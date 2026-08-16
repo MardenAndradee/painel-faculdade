@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import {
-  createSemesterSchema,
   gradeConfigurationInputSchema,
   propagateGradeTemplateSchema,
   updateSemesterSchema,
@@ -20,12 +19,6 @@ semesterRoutes.use(authenticate);
 semesterRoutes.get('/history', semesterController.history);
 
 semesterRoutes.get('/semesters', semesterController.list);
-
-semesterRoutes.post(
-  '/semesters',
-  validate({ body: createSemesterSchema }),
-  semesterController.create,
-);
 
 semesterRoutes.get(
   '/semesters/:id',

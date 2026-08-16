@@ -1,6 +1,15 @@
 import 'dotenv/config';
 import { PrismaClient } from '../src/generated/prisma/client.js';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { getCurrentSemesterKey } from '@painel/shared';
+import { hashPassword } from '../src/utils/password.js';
+
+/**
+ * Senha do usuario de desenvolvimento - so pra login local, nunca usada em
+ * producao (o seed nunca roda contra o banco de producao). Permite entrar
+ * direto por e-mail/senha sem configurar OAuth do Google no ambiente local.
+ */
+const DEV_PASSWORD = 'dev12345';
 
 /**
  * Seed de desenvolvimento.
@@ -76,14 +85,20 @@ async function main(): Promise<void> {
   // ---------------------------------------------------------------------------
   // Usuario de desenvolvimento
   // ---------------------------------------------------------------------------
+  const passwordHash = await hashPassword(DEV_PASSWORD);
+
   const user = await prisma.user.upsert({
     where: { email: 'estudante@painel.dev' },
-    update: {},
+    // `update` tambem grava a senha (nao so `create`): quem rodou o seed
+    // antes desta senha existir precisa dela preenchida ao rodar de novo,
+    // nao so em bancos criados do zero.
+    update: { passwordHash },
     create: {
       email: 'estudante@painel.dev',
       name: 'Estudante de Desenvolvimento',
       avatarUrl: null,
       theme: 'SYSTEM',
+      passwordHash,
       // Simula um cadastro por Google: e-mail ja verificado, como
       // `userRepository.createFromGoogle` faz de verdade (Etapa 26).
       emailVerifiedAt: new Date(),
@@ -108,8 +123,7 @@ async function main(): Promise<void> {
   // Semestres: um encerrado (alimenta o Historico) e um em andamento
   // ---------------------------------------------------------------------------
   const now = new Date();
-  const year = now.getFullYear();
-  const currentTerm = now.getMonth() < 6 ? 1 : 2;
+  const { year, term: currentTerm } = getCurrentSemesterKey(now);
   const previousTerm = currentTerm === 1 ? 2 : 1;
   const previousYear = currentTerm === 1 ? year - 1 : year;
 
@@ -122,7 +136,6 @@ async function main(): Promise<void> {
       year: previousYear,
       term: previousTerm,
       status: 'FINISHED',
-      isCurrent: false,
       startDate: new Date(previousYear, previousTerm === 1 ? 1 : 7, 1),
       endDate: new Date(previousYear, previousTerm === 1 ? 5 : 11, 30),
     },
@@ -137,7 +150,6 @@ async function main(): Promise<void> {
       year,
       term: currentTerm,
       status: 'ACTIVE',
-      isCurrent: true,
       startDate: new Date(year, currentTerm === 1 ? 1 : 7, 1),
       endDate: new Date(year, currentTerm === 1 ? 5 : 11, 30),
     },
@@ -644,6 +656,7 @@ async function main(): Promise<void> {
 
   console.log(`Sessoes de estudo: ${sessionsData.length}`);
 
+  console.log(`Login local: ${user.email} / ${DEV_PASSWORD}`);
   console.log('Seed concluido.');
 }
 

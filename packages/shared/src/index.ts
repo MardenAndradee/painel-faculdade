@@ -1,5 +1,6 @@
 export * from './enums.js';
 export * from './common.js';
+export * from './semester-period.js';
 export * from './schemas/auth.js';
 export * from './schemas/dashboard.js';
 export * from './schemas/subject.js';

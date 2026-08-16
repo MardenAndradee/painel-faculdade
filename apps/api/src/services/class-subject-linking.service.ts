@@ -1,23 +1,8 @@
 import { classRepository } from '../repositories/class.repository.js';
-import { semesterRepository } from '../repositories/semester.repository.js';
 import { subjectRepository } from '../repositories/subject.repository.js';
 import { gradeConfigurationService } from './grade-configuration.service.js';
 import { semesterService } from './semester.service.js';
 import { matchClassSubjects } from '../utils/class-subject-merge.js';
-
-/**
- * Datas padrao de um semestre criado a partir de uma turma.
- *
- * So um ponto de partida - o membro (ou o dono) pode ajustar depois em
- * Histórico, como qualquer outro semestre. Segue o calendario acadêmico
- * brasileiro mais comum: periodo 1 de fevereiro a julho, periodo 2 de agosto
- * a dezembro.
- */
-function defaultSemesterDates(year: number, term: number): { startDate: Date; endDate: Date } {
-  return term === 1
-    ? { startDate: new Date(year, 1, 1), endDate: new Date(year, 6, 15) }
-    : { startDate: new Date(year, 6, 16), endDate: new Date(year, 11, 20) };
-}
 
 /**
  * Acha o semestre PESSOAL do usuario para este ano/período, criando-o se
@@ -26,34 +11,18 @@ function defaultSemesterDates(year: number, term: number): { startDate: Date; en
  * Usado tanto por quem entra numa turma quanto pelo próprio dono ao criá-la -
  * o dono também é um `ClassMember` (role OWNER) e precisa do mesmo semestre
  * resolvido, ou fica de fora do *fan-out* das suas próprias publicações.
+ *
+ * Delega para `semesterService.ensure` (Etapa 31: a data padrão e o nome de
+ * um semestre novo têm uma única fonte agora, `packages/shared`).
  */
 export async function resolveMemberSemester(
   userId: string,
   year: number,
   term: number,
 ): Promise<{ id: string; name: string }> {
-  const existing = await semesterRepository.findByYearTerm(userId, year, term);
+  const semester = await semesterService.ensure(userId, { year, term });
 
-  if (existing) {
-    const row = await semesterRepository.findById(userId, existing.id);
-
-    return { id: row!.id, name: row!.name };
-  }
-
-  const name = `${year}.${String(term).padStart(2, '0')}`;
-  const { startDate, endDate } = defaultSemesterDates(year, term);
-
-  const created = await semesterService.create(userId, {
-    name,
-    year,
-    term,
-    status: 'ACTIVE',
-    isCurrent: false,
-    startDate,
-    endDate,
-  });
-
-  return { id: created.id, name: created.name };
+  return { id: semester.id, name: semester.name };
 }
 
 export interface ClassSubjectTemplate {

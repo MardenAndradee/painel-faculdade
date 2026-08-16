@@ -1,6 +1,8 @@
 import type {
   ClassDetail,
+  ClassFinishSemesterPreview,
   ClassHealthSummary,
+  ClassHistory,
   ClassInviteCreated,
   ClassInviteItem,
   ClassInvitePreview,
@@ -91,5 +93,17 @@ export const classService = {
 
   health(id: string): Promise<ClassHealthSummary> {
     return httpClient.get<ClassHealthSummary>(`/classes/${id}/health`);
+  },
+
+  finishSemesterPreview(id: string): Promise<ClassFinishSemesterPreview> {
+    return httpClient.get<ClassFinishSemesterPreview>(`/classes/${id}/finish-semester-preview`);
+  },
+
+  finishSemester(id: string): Promise<ClassDetail> {
+    return httpClient.post<ClassDetail>(`/classes/${id}/finish-semester`);
+  },
+
+  getHistory(id: string): Promise<ClassHistory> {
+    return httpClient.get<ClassHistory>(`/classes/${id}/history`);
   },
 };

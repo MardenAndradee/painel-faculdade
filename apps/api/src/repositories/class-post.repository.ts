@@ -21,6 +21,9 @@ const postSelect = {
   updatedAt: true,
   classId: true,
   classSubjectId: true,
+  semesterId: true,
+  period: true,
+  semester: { select: { name: true } },
   classSubject: { select: { id: true, name: true, color: true } },
   createdBy: { select: { id: true, name: true } },
   _count: { select: { copies: true } },
@@ -36,9 +39,13 @@ export interface EntityCopyRow {
 }
 
 export const classPostRepository = {
-  listByClass(classId: string): Promise<ClassPostRow[]> {
+  /**
+   * `semesterId` opcional restringe ao ciclo atual - sem ele, todas as
+   * publicações de todos os ciclos (usado só onde isso é intencional).
+   */
+  listByClass(classId: string, semesterId?: string): Promise<ClassPostRow[]> {
     return prisma.classPost.findMany({
-      where: { classId },
+      where: { classId, ...(semesterId ? { semesterId } : {}) },
       select: postSelect,
       orderBy: { createdAt: 'desc' },
     });
@@ -48,11 +55,29 @@ export const classPostRepository = {
     return prisma.classPost.findFirst({ where: { id, classId }, select: postSelect });
   },
 
-  /** Publicações com data dentro do intervalo, para a Visão geral da turma. */
-  findUpcoming(classId: string, from: Date, to: Date): Promise<ClassPostRow[]> {
+  countByClass(classId: string, semesterId?: string): Promise<number> {
+    return prisma.classPost.count({ where: { classId, ...(semesterId ? { semesterId } : {}) } });
+  },
+
+  /** Publicações de ciclos anteriores (Etapa 30.8) - tudo, exceto o semestre atual da turma. */
+  listOutsideSemester(classId: string, currentSemesterId: string): Promise<ClassPostRow[]> {
+    return prisma.classPost.findMany({
+      where: { classId, semesterId: { not: currentSemesterId } },
+      select: postSelect,
+      orderBy: { createdAt: 'desc' },
+    });
+  },
+
+  /**
+   * Publicações com data dentro do intervalo, para a Visão geral da turma -
+   * sempre restrito ao ciclo atual, senão um post de um ciclo já finalizado
+   * (Etapa 30.5) cuja data caia na janela reaparece como se fosse do ciclo novo.
+   */
+  findUpcoming(classId: string, semesterId: string, from: Date, to: Date): Promise<ClassPostRow[]> {
     return prisma.classPost.findMany({
       where: {
         classId,
+        semesterId,
         OR: [
           { kind: 'EXAM', date: { gte: from, lte: to } },
           { kind: 'ASSIGNMENT', dueDate: { gte: from, lte: to } },

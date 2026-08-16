@@ -152,4 +152,22 @@ export const classController = {
 
     ok(res, await classService.health(user.id, req.params.id as string));
   },
+
+  async finishSemesterPreview(req: Request, res: Response): Promise<void> {
+    const user = getAuthUser(req);
+
+    ok(res, await classService.finishSemesterPreview(user.id, req.params.id as string));
+  },
+
+  async finishSemester(req: Request, res: Response): Promise<void> {
+    const user = getAuthUser(req);
+
+    ok(res, await classService.finishSemester(user.id, req.params.id as string));
+  },
+
+  async getHistory(req: Request, res: Response): Promise<void> {
+    const user = getAuthUser(req);
+
+    ok(res, await classService.getHistory(user.id, req.params.id as string));
+  },
 };

@@ -1,4 +1,7 @@
-# Etapa 31 — Semestre automático
+# Etapa 31 — Semestre automático ✅
+
+> **Status: implementado.** As três sub-etapas abaixo estão concluídas — ver "Nota de
+> implementação" em cada uma para os desvios do texto original.
 
 ## Problema
 
@@ -43,7 +46,7 @@ Efeito prático: é possível (e normal) um semestre estar **"Atual" e "Encerrad
 
 ## Plano por etapas
 
-### Etapa 31.1 — Banco: simplificar `Semester`
+### Etapa 31.1 — Banco: simplificar `Semester` ✅
 
 **Objetivo.** Remover o que deixa de fazer sentido no schema: a flag `isCurrent` gravada e o status `PLANNED`.
 
@@ -57,9 +60,20 @@ Efeito prático: é possível (e normal) um semestre estar **"Atual" e "Encerrad
 
 **Testes.** `getCurrentSemesterKey` testada por unidade nas mesmas bordas já usadas na Etapa 30.4 (31/12, 01/01, 30/06, 01/07), com mutação deliberada pra confirmar que o teste pega regressão.
 
+> **Nota de implementação.** A função pura foi para `packages/shared/src/semester-period.ts`
+> (`getCurrentSemesterKey`, `defaultSemesterName`, `defaultSemesterDates`, `isCurrentSemester`),
+> não em `apps/api/src/utils` — é consumida pelo front (badge "Atual", pré-seleção de semestre) e
+> pelo seed, não só pela API. A regra de corte estava **triplicada e divergente** antes desta
+> etapa (seed, formulário manual removido, `class-subject-linking.service`); agora há uma fonte
+> só. 10 testes por mutação em `semester-period.test.ts`. Migration nova
+> (`20260816120000_semester_automatic`) faz o backfill de `PLANNED → ACTIVE` antes do swap do
+> enum, depois remove `isCurrent` e seu índice — escrita à mão porque este ambiente não tem um
+> Postgres acessível para `prisma migrate dev` gerar/validar; **rodar `npm run db:migrate` contra
+> um banco real antes de confiar cegamente nela**.
+
 ---
 
-### Etapa 31.2 — Backend: bootstrap automático + resolução sob demanda
+### Etapa 31.2 — Backend: bootstrap automático + resolução sob demanda ✅
 
 **Objetivo.** Todo usuário sempre tem um semestre atual válido, sem nunca precisar criar um manualmente.
 
@@ -73,9 +87,20 @@ Efeito prático: é possível (e normal) um semestre estar **"Atual" e "Encerrad
 
 **Testes.** Teste de integração: usuário novo (bootstrap cria o semestre no login), usuário antigo sem semestre nenhum ainda (resolução sob demanda cria na primeira leitura), usuário no meio de uma virada de calendário (o cálculo muda de `(2026,1)` pra `(2026,2)` no dia certo, sem intervenção).
 
+> **Nota de implementação.** `POST /semesters` foi **removida** (não só deixada de fora do
+> frontend) — decisão tomada com o usuário durante o planejamento desta execução: criação vira
+> função interna (`semesterService.ensure(userId, key)`), sem superfície pública, coerente com
+> "o semestre nasce sozinho". `semesterRepository.findCurrent`/`clearCurrentFlag` foram removidos
+> (não só descontinuados). Furo pré-existente corrigido junto: `auth.service.register` (cadastro
+> por e-mail/senha) nunca chamava `ensureUserDefault` — só o fluxo do Google bootstrapava. Os dois
+> fluxos agora chamam o mesmo `bootstrapNewUser(userId)` (modelo de notas + semestre atual, mesmo
+> `.catch` que não derruba o cadastro/login). `resolveMemberSemester` (Turmas,
+> `class-subject-linking.service.ts`) passou a delegar para `semesterService.ensure` — mesma
+> assinatura pública, sem quebrar nada que a Etapa 30 assume.
+
 ---
 
-### Etapa 31.3 — Frontend: remove o formulário manual, ajusta Histórico e diálogo de encerrar
+### Etapa 31.3 — Frontend: remove o formulário manual, ajusta Histórico e diálogo de encerrar ✅
 
 **Objetivo.** Nenhuma tela pede pra preencher um semestre à mão nunca mais.
 
@@ -88,6 +113,17 @@ Efeito prático: é possível (e normal) um semestre estar **"Atual" e "Encerrad
 **Aceite.** Em nenhum lugar do app existe mais um botão "Criar semestre" ou um formulário pedindo essas 5 informações. Toda tela que hoje lê `isCurrent` continua funcionando, sem regressão visual.
 
 **Testes.** Verificação manual: usuário novo cai direto num Histórico já com um semestre atual visível, sem passar por nenhum formulário; criar uma Disciplina já sugere o semestre certo de cara.
+
+> **Nota de implementação.** A badge "Atual" e a pré-seleção de semestre em Disciplina não
+> dependem de campo novo no contrato: o front chama `isCurrentSemester` (mesma função pura do
+> shared) sobre a lista que já carrega — `SemesterListItem`/`HistorySemester` perderam `isCurrent`
+> por completo, uma fonte de verdade só. `semester-form-dialog.tsx` virou edição de nome puro (um
+> campo); `historico/page.tsx` perdeu o botão "Novo semestre" e o CTA "Criar semestre" do estado
+> vazio (que na prática não ocorre mais, já que `list`/`getHistory` sempre garantem o semestre
+> atual antes de responder). Verificação manual completa (usuário novo por Google/senha,
+> Dashboard, sincronização do Classroom, criação de Turma) **não foi executada** neste ambiente —
+> não há Postgres acessível para subir a API. Rodar o roteiro do "Verificação" antes de dar como
+> validado ponta a ponta.
 
 ## Fora do escopo
 

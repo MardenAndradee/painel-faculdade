@@ -1,74 +1,22 @@
 import { z } from 'zod';
-import { parseLocalDate } from '../common.js';
-import { SEMESTER_STATUS, type SemesterStatus, type SubjectStatus } from '../enums.js';
+import type { SemesterStatus, SubjectStatus } from '../enums.js';
 
 /**
  * Contrato de semestres e historico academico.
+ *
+ * Nao ha mais criacao manual (Etapa 31): o Semester nasce sozinho, calculado
+ * pela data de hoje (ver `semester-period.ts`). So o nome pode ser editado
+ * depois - ano/periodo/datas sao a identidade do registro.
  */
 
-const semesterDateSchema = z
-  .union([z.string().min(1, 'Informe a data'), z.date()])
-  .transform((value, ctx) => {
-    const parsed = value instanceof Date ? value : parseLocalDate(value);
-
-    if (Number.isNaN(parsed.getTime())) {
-      ctx.addIssue({ code: 'custom', message: 'Data inválida' });
-      return z.NEVER;
-    }
-
-    return parsed;
-  });
-
-/** Campos do semestre SEM defaults - ver a explicacao em `subject.ts`. */
-const semesterBaseSchema = z.object({
+export const updateSemesterSchema = z.object({
   name: z
     .string({ error: 'Informe o nome do semestre' })
     .trim()
     .min(2, 'O nome precisa de ao menos 2 caracteres')
     .max(40, 'O nome pode ter no máximo 40 caracteres'),
-
-  year: z.coerce
-    .number({ error: 'Informe o ano' })
-    .int('Use um ano válido')
-    .min(2000, 'Ano muito antigo')
-    .max(2100, 'Ano muito distante'),
-
-  /** Periodo dentro do ano: 1 ou 2. */
-  term: z.coerce
-    .number({ error: 'Informe o período' })
-    .int()
-    .min(1, 'O período é 1 ou 2')
-    .max(2, 'O período é 1 ou 2'),
-
-  startDate: semesterDateSchema,
-  endDate: semesterDateSchema,
-
-  status: z.enum(SEMESTER_STATUS),
-
-  /** Semestre exibido por padrao no dashboard. */
-  isCurrent: z
-    .union([z.boolean(), z.string()])
-    .transform((value) => value === true || value === 'true'),
 });
 
-export const createSemesterSchema = semesterBaseSchema
-  .extend({
-    status: z.enum(SEMESTER_STATUS).default('ACTIVE'),
-    isCurrent: z
-      .union([z.boolean(), z.string()])
-      .optional()
-      .transform((value) => value === true || value === 'true'),
-  })
-  .refine((data) => data.endDate >= data.startDate, {
-    message: 'O término precisa ser depois do início',
-    path: ['endDate'],
-  });
-
-export type CreateSemesterInput = z.output<typeof createSemesterSchema>;
-export type SemesterFormValues = z.input<typeof createSemesterSchema>;
-
-/** Edicao: sem defaults, para o PATCH nao sobrescrever o que nao foi enviado. */
-export const updateSemesterSchema = semesterBaseSchema.partial();
 export type UpdateSemesterInput = z.infer<typeof updateSemesterSchema>;
 
 export interface SemesterListItem {
@@ -77,7 +25,6 @@ export interface SemesterListItem {
   year: number;
   term: number;
   status: SemesterStatus;
-  isCurrent: boolean;
   startDate: string;
   endDate: string;
   subjectCount: number;
@@ -114,7 +61,6 @@ export interface HistorySemester {
   year: number;
   term: number;
   status: SemesterStatus;
-  isCurrent: boolean;
   startDate: string;
   endDate: string;
   subjects: HistorySubject[];

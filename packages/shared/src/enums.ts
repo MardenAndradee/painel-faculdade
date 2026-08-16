@@ -6,7 +6,7 @@
  * Qualquer alteracao aqui exige a migration correspondente no schema.
  */
 
-export const SEMESTER_STATUS = ['PLANNED', 'ACTIVE', 'FINISHED'] as const;
+export const SEMESTER_STATUS = ['ACTIVE', 'FINISHED'] as const;
 export type SemesterStatus = (typeof SEMESTER_STATUS)[number];
 
 export const SUBJECT_STATUS = ['IN_PROGRESS', 'APPROVED', 'FAILED', 'WITHDRAWN'] as const;

@@ -1,14 +1,16 @@
-import type {
-  AcademicHistory,
-  CloseSemesterPreview,
-  CreateSemesterInput,
-  HistorySemester,
-  HistorySubject,
-  SemesterListItem,
-  UpdateSemesterInput,
+import {
+  defaultSemesterDates,
+  defaultSemesterName,
+  getCurrentSemesterKey,
+  type AcademicHistory,
+  type CloseSemesterPreview,
+  type HistorySemester,
+  type HistorySubject,
+  type SemesterKey,
+  type SemesterListItem,
+  type UpdateSemesterInput,
 } from '@painel/shared';
 import type { SubjectStatus } from '@painel/shared';
-import { type Prisma } from '../config/prisma.js';
 import {
   semesterRepository,
   type HistorySubjectRow,
@@ -33,7 +35,6 @@ function toListItem(row: SemesterRow): SemesterListItem {
     year: row.year,
     term: row.term,
     status: row.status,
-    isCurrent: row.isCurrent,
     startDate: row.startDate.toISOString(),
     endDate: row.endDate.toISOString(),
     subjectCount: row._count.subjects,
@@ -117,7 +118,16 @@ function resolveFinalStatus(average: number | null, passingGrade: number): Subje
 export const semesterService = {
   // --- CRUD ---------------------------------------------------------------------
 
+  /**
+   * Lista o historico de semestres.
+   *
+   * Garante o atual antes de ler (Decisao #1 da Etapa 31): usuario legado sem
+   * nenhum semestre ainda nao fica com a tela vazia esperando uma criacao
+   * manual que nao existe mais.
+   */
   async list(userId: string): Promise<SemesterListItem[]> {
+    await this.getOrCreateCurrent(userId);
+
     const rows = await semesterRepository.findAll(userId);
 
     return rows.map(toListItem);
@@ -131,26 +141,25 @@ export const semesterService = {
     return toListItem(row);
   },
 
-  async create(userId: string, input: CreateSemesterInput): Promise<SemesterListItem> {
-    const duplicate = await semesterRepository.findByYearTerm(userId, input.year, input.term);
+  /**
+   * Acha o semestre de `(ano, periodo)`, criando-o se ainda nao existir.
+   *
+   * Uso interno - nao ha mais criacao manual pela API (Etapa 31). Chamado
+   * pelo bootstrap de usuario novo, pela resolucao do semestre atual e por
+   * `resolveMemberSemester` (Turmas), que precisa do mesmo "acha-ou-cria" por
+   * `(ano, periodo)` para o semestre PESSOAL de cada membro.
+   */
+  async ensure(userId: string, key: SemesterKey): Promise<SemesterListItem> {
+    const existing = await semesterRepository.findByYearTerm(userId, key.year, key.term);
 
-    if (duplicate) {
-      throw AppError.conflict(`Já existe um semestre ${input.year}.${input.term}`);
-    }
-
-    // Marcar este como atual desmarca o anterior: só pode haver um.
-    if (input.isCurrent) {
-      await semesterRepository.clearCurrentFlag(userId);
-    }
+    if (existing) return this.getById(userId, existing.id);
 
     const data = {
-      name: input.name,
-      year: input.year,
-      term: input.term,
-      status: input.status,
-      isCurrent: input.isCurrent,
-      startDate: input.startDate,
-      endDate: input.endDate,
+      name: defaultSemesterName(key),
+      year: key.year,
+      term: key.term,
+      status: 'ACTIVE' as const,
+      ...defaultSemesterDates(key),
     };
 
     /**
@@ -174,45 +183,19 @@ export const semesterService = {
     return toListItem(row);
   },
 
+  /**
+   * Semestre PESSOAL atual do usuario, calculado pela data de hoje.
+   *
+   * Rede de seguranca "sob demanda" (Decisao #1): chamada em todo caminho que
+   * antes lia a flag `isCurrent`, garante que a resposta nunca vem vazia.
+   */
+  getOrCreateCurrent(userId: string): Promise<SemesterListItem> {
+    return this.ensure(userId, getCurrentSemesterKey(new Date()));
+  },
+
+  /** Edicao: so o nome. Ano/periodo/datas sao a identidade do registro (Decisao #5). */
   async update(userId: string, id: string, input: UpdateSemesterInput): Promise<SemesterListItem> {
-    const current = await semesterRepository.findById(userId, id);
-
-    if (!current) throw AppError.notFound('Semestre');
-
-    const year = input.year ?? current.year;
-    const term = input.term ?? current.term;
-
-    if (input.year !== undefined || input.term !== undefined) {
-      const duplicate = await semesterRepository.findByYearTerm(userId, year, term, id);
-
-      if (duplicate) throw AppError.conflict(`Já existe um semestre ${year}.${term}`);
-    }
-
-    // Validacao cruzada com os valores salvos, quando so uma data e enviada.
-    const startDate = input.startDate ?? current.startDate;
-    const endDate = input.endDate ?? current.endDate;
-
-    if (endDate < startDate) {
-      throw AppError.badRequest('O término precisa ser depois do início', {
-        endDate: ['O término precisa ser depois do início'],
-      });
-    }
-
-    if (input.isCurrent) {
-      await semesterRepository.clearCurrentFlag(userId, id);
-    }
-
-    const data: Prisma.SemesterUncheckedUpdateInput = {
-      ...(input.name !== undefined ? { name: input.name } : {}),
-      ...(input.year !== undefined ? { year: input.year } : {}),
-      ...(input.term !== undefined ? { term: input.term } : {}),
-      ...(input.status !== undefined ? { status: input.status } : {}),
-      ...(input.isCurrent !== undefined ? { isCurrent: input.isCurrent } : {}),
-      ...(input.startDate !== undefined ? { startDate: input.startDate } : {}),
-      ...(input.endDate !== undefined ? { endDate: input.endDate } : {}),
-    };
-
-    const row = await semesterRepository.update(userId, id, data);
+    const row = await semesterRepository.update(userId, id, { name: input.name });
 
     if (!row) throw AppError.notFound('Semestre');
 
@@ -279,10 +262,7 @@ export const semesterService = {
       );
     }
 
-    const updated = await semesterRepository.update(userId, id, {
-      status: 'FINISHED',
-      isCurrent: false,
-    });
+    const updated = await semesterRepository.update(userId, id, { status: 'FINISHED' });
 
     if (!updated) throw AppError.notFound('Semestre');
 
@@ -322,6 +302,8 @@ export const semesterService = {
    * memoria - evita uma consulta por semestre.
    */
   async getHistory(userId: string): Promise<AcademicHistory> {
+    await this.getOrCreateCurrent(userId);
+
     const [semesterRows, subjectRows] = await Promise.all([
       semesterRepository.findAll(userId),
       semesterRepository.findAllSubjects(userId),
@@ -355,7 +337,6 @@ export const semesterService = {
         year: row.year,
         term: row.term,
         status: row.status,
-        isCurrent: row.isCurrent,
         startDate: row.startDate.toISOString(),
         endDate: row.endDate.toISOString(),
         subjects,

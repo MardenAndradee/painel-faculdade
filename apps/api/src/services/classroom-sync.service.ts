@@ -11,10 +11,10 @@ import type {
   ClassroomTeacher,
   ClassroomTimeOfDay,
 } from '../integrations/classroom/classroom.types.js';
-import { semesterRepository } from '../repositories/semester.repository.js';
 import { subjectRepository } from '../repositories/subject.repository.js';
 import { gradeConfigurationService } from './grade-configuration.service.js';
 import { notificationService } from './notification.service.js';
+import { semesterService } from './semester.service.js';
 import { AppError } from '../utils/app-error.js';
 
 /**
@@ -154,12 +154,12 @@ export const classroomSyncService = {
 
     logger.info('Classroom: turmas encontradas', { userId, count: courses.length });
 
-    // Disciplinas importadas entram no semestre atual, quando houver.
-    const semester = await semesterRepository.findCurrent(userId);
+    // Disciplinas importadas entram no semestre atual - nunca fica sem um.
+    const semester = await semesterService.getOrCreateCurrent(userId);
 
     for (const [index, course] of courses.entries()) {
       try {
-        await this.syncCourse(userId, client, course, index, semester?.id ?? null, report);
+        await this.syncCourse(userId, client, course, index, semester.id, report);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'erro desconhecido';
 

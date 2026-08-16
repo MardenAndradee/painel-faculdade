@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { cuidSchema } from '../common.js';
-import type { ClassRole } from '../enums.js';
+import type { ClassPostKind, ClassRole } from '../enums.js';
 
 /**
  * Contrato de turmas (Etapa 20).
@@ -36,6 +36,13 @@ export const classSubjectInputSchema = z.object({
 export type ClassSubjectInput = z.output<typeof classSubjectInputSchema>;
 export type ClassSubjectFormValues = z.input<typeof classSubjectInputSchema>;
 
+/**
+ * Campos SEM defaults (ver a explicação em `subject.ts`/`semester.ts`).
+ * `year`/`term` nunca entram no contrato - nem em criação, nem em edição: o
+ * `Semester` canônico da turma é sempre o semestre atual do dono, resolvido
+ * automaticamente pela data (Etapa 31); trocar depois só acontece via
+ * "Finalizar semestre" (Etapa 30), nunca escolhido por quem cria.
+ */
 const classBaseSchema = z.object({
   name: z
     .string({ error: 'Informe o nome da turma' })
@@ -43,25 +50,20 @@ const classBaseSchema = z.object({
     .min(2, 'O nome precisa de ao menos 2 caracteres')
     .max(120, 'O nome pode ter no máximo 120 caracteres'),
 
-  year: z.coerce
-    .number({ error: 'Informe o ano' })
-    .int('Use um ano válido')
-    .min(2000, 'Ano muito antigo')
-    .max(2100, 'Ano muito distante'),
-
-  /** Metade do ano civil - "semestre" na nomenclatura do curso, não confundir com "período" (acumulado desde o ingresso). */
-  term: z.coerce
-    .number({ error: 'Informe o semestre' })
-    .int()
-    .min(1, 'O semestre é 1 ou 2')
-    .max(2, 'O semestre é 1 ou 2'),
-
   description: z.string().trim().max(1000).optional().or(z.literal('')),
   color: hexColorSchema,
+
+  /** Período do curso (1º a 8º) - cumulativo desde o ingresso, conceito diferente do `term` do Semester (metade do ano civil). */
+  period: z.coerce
+    .number({ error: 'Informe o período' })
+    .int()
+    .min(1, 'O período é de 1º a 8º')
+    .max(8, 'O período é de 1º a 8º'),
 });
 
 export const createClassSchema = classBaseSchema.extend({
   color: hexColorSchema.default(DEFAULT_CLASS_COLOR),
+
   /** Disciplinas iniciais - a turma pode nascer vazia e ganhar depois. */
   subjects: z.array(classSubjectInputSchema).max(40).default([]),
 });
@@ -69,6 +71,7 @@ export const createClassSchema = classBaseSchema.extend({
 export type CreateClassInput = z.output<typeof createClassSchema>;
 export type ClassFormValues = z.input<typeof createClassSchema>;
 
+/** Edição: sem `year`/`term` - só "Finalizar semestre" muda o ciclo da turma. */
 export const updateClassSchema = classBaseSchema.partial();
 export type UpdateClassInput = z.infer<typeof updateClassSchema>;
 
@@ -99,8 +102,11 @@ export type TransferClassOwnerInput = z.infer<typeof transferClassOwnerSchema>;
 export interface ClassSummary {
   id: string;
   name: string;
+  /** Ano/semestre do `Semester` canônico da turma (Etapa 30) - achatado aqui pra não mudar quem só exibe. */
   year: number;
   term: number;
+  /** Período do curso (1º a 8º), diferente de `term`. */
+  period: number;
   color: string;
   archivedAt: string | null;
   myRole: ClassRole;
@@ -138,6 +144,8 @@ export interface ClassDetail {
   name: string;
   year: number;
   term: number;
+  period: number;
+  semesterId: string;
   description: string | null;
   color: string;
   archivedAt: string | null;
@@ -177,6 +185,7 @@ export interface ClassInvitePreview {
     name: string;
     year: number;
     term: number;
+    period: number;
     color: string;
   };
   owner: { name: string };
@@ -214,4 +223,40 @@ export interface ClassHealthSummary {
   archivedLinkedSubjects: number;
   /** Publicações cujo nº de cópias é menor que o de membros ativos. */
   postsWithIncompleteFanOut: Array<{ id: string; title: string; copyCount: number }>;
+}
+
+// --- Finalizar semestre (Etapa 30.5) --------------------------------------------
+
+/** O que "Finalizar semestre" vai gravar - mostrado antes de confirmar, mesmo espírito do `CloseSemesterPreview` pessoal. */
+export interface ClassFinishSemesterPreview {
+  currentSemester: { year: number; term: number };
+  nextSemester: { year: number; term: number; name: string };
+  currentPeriod: number;
+  nextPeriod: number;
+  subjectCount: number;
+  postCount: number;
+}
+
+// --- Histórico da turma (Etapa 30.8) --------------------------------------------
+
+/** Um ciclo anterior da turma, com o que foi publicado nele - somente leitura. */
+export interface ClassHistoryCycle {
+  semesterId: string;
+  semesterName: string;
+  period: number;
+  subjects: ClassSubjectItem[];
+  posts: ClassPostSummary[];
+}
+
+/** Recorte leve de publicação para a listagem de histórico - sem os campos específicos de cada `kind`. */
+export interface ClassPostSummary {
+  id: string;
+  kind: ClassPostKind;
+  title: string;
+  classSubject: { id: string; name: string; color: string } | null;
+  copyCount: number;
+}
+
+export interface ClassHistory {
+  cycles: ClassHistoryCycle[];
 }
