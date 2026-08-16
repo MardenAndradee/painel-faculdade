@@ -140,8 +140,8 @@ export function ExamItem({ exam, onEdit, onDelete, onStudyPlan }: ExamItemProps)
         </div>
       </div>
 
-      <div className="mt-4 flex items-center justify-between gap-3 border-t pt-3.5">
-        <div className="flex items-center gap-5">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-3.5">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
           <div>
             <p className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
               Data
