@@ -37,10 +37,11 @@ export type ClassSubjectInput = z.output<typeof classSubjectInputSchema>;
 export type ClassSubjectFormValues = z.input<typeof classSubjectInputSchema>;
 
 /**
- * Campos SEM defaults (ver a explicação em `subject.ts`/`semester.ts`) -
- * `year`/`term` NÃO entram aqui: só existem na criação (resolvem o `Semester`
- * canônico da turma); trocar depois só acontece via "Finalizar semestre"
- * (Etapa 30), nunca por PATCH direto.
+ * Campos SEM defaults (ver a explicação em `subject.ts`/`semester.ts`).
+ * `year`/`term` nunca entram no contrato - nem em criação, nem em edição: o
+ * `Semester` canônico da turma é sempre o semestre atual do dono, resolvido
+ * automaticamente pela data (Etapa 31); trocar depois só acontece via
+ * "Finalizar semestre" (Etapa 30), nunca escolhido por quem cria.
  */
 const classBaseSchema = z.object({
   name: z
@@ -62,19 +63,6 @@ const classBaseSchema = z.object({
 
 export const createClassSchema = classBaseSchema.extend({
   color: hexColorSchema.default(DEFAULT_CLASS_COLOR),
-
-  year: z.coerce
-    .number({ error: 'Informe o ano' })
-    .int('Use um ano válido')
-    .min(2000, 'Ano muito antigo')
-    .max(2100, 'Ano muito distante'),
-
-  /** Metade do ano civil - resolve (ou cria) o `Semester` pessoal do dono. */
-  term: z.coerce
-    .number({ error: 'Informe o semestre' })
-    .int()
-    .min(1, 'O semestre é 1 ou 2')
-    .max(2, 'O semestre é 1 ou 2'),
 
   /** Disciplinas iniciais - a turma pode nascer vazia e ganhar depois. */
   subjects: z.array(classSubjectInputSchema).max(40).default([]),

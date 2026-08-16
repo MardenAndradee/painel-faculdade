@@ -1,4 +1,5 @@
 import {
+  getCurrentSemesterKey,
   nextSemesterKey,
   type ClassDetail,
   type ClassFinishSemesterPreview,
@@ -236,7 +237,7 @@ export const classService = {
       );
     }
 
-    const semester = await semesterService.ensure(ownerId, { year: input.year, term: input.term });
+    const semester = await semesterService.ensure(ownerId, getCurrentSemesterKey(new Date()));
 
     const row = await classRepository.create(
       ownerId,

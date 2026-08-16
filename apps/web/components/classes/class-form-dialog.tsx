@@ -44,12 +44,9 @@ interface ClassFormDialogProps {
 }
 
 const DEFAULT_COLOR = '#4f7cff';
-const currentYear = new Date().getFullYear();
 
 const CREATE_DEFAULTS: ClassFormValues = {
   name: '',
-  year: currentYear,
-  term: 1,
   period: 1,
   description: '',
   color: DEFAULT_COLOR,
@@ -61,9 +58,10 @@ const COURSE_PERIODS = Array.from({ length: 8 }, (_, index) => index + 1);
 /**
  * Criação e edição de turma.
  *
- * Só a criação pede Ano/Semestre e disciplinas iniciais - eles resolvem (ou
- * criam) o `Semester` canônico da turma (Etapa 30), e trocar isso depois só
- * acontece via "Finalizar semestre", nunca por aqui. Em edição, ficam Nome,
+ * O `Semester` canônico da turma nunca é escolhido aqui - a criação sempre
+ * resolve (ou cria) o semestre atual do dono automaticamente pela data
+ * (Etapa 31); trocar isso depois só acontece via "Finalizar semestre"
+ * (Etapa 30). Só a criação pede disciplinas iniciais. Em edição, ficam Nome,
  * Cor, Descrição e Período - o mesmo padrão de `ClassSubjectDialog`
  * (`isEditing = Boolean(...)`).
  *
@@ -105,8 +103,6 @@ export function ClassFormDialog({ open, onOpenChange, classItem }: ClassFormDial
     if (classItem) {
       reset({
         name: classItem.name,
-        year: classItem.year,
-        term: classItem.term,
         period: classItem.period,
         description: classItem.description ?? '',
         color: classItem.color,
@@ -179,39 +175,6 @@ export function ClassFormDialog({ open, onOpenChange, classItem }: ClassFormDial
               />
             )}
           </FormField>
-
-          {!isEditing && (
-            <div className="grid grid-cols-2 gap-4">
-              <FormField label="Ano" error={errors.year?.message} required>
-                {(field) => (
-                  <Input {...field} type="number" {...register('year')} placeholder="2026" />
-                )}
-              </FormField>
-
-              <FormField label="Semestre" error={errors.term?.message} required>
-                {(field) => (
-                  <Controller
-                    control={control}
-                    name="term"
-                    render={({ field: controlled }) => (
-                      <Select
-                        value={String(controlled.value ?? 1)}
-                        onValueChange={(value) => controlled.onChange(Number(value))}
-                      >
-                        <SelectTrigger id={field.id}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="1">1º semestre</SelectItem>
-                          <SelectItem value="2">2º semestre</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    )}
-                  />
-                )}
-              </FormField>
-            </div>
-          )}
 
           <FormField
             label="Período"
