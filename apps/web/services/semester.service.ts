@@ -1,7 +1,6 @@
 import type {
   AcademicHistory,
   CloseSemesterPreview,
-  CreateSemesterInput,
   SemesterListItem,
   UpdateSemesterInput,
 } from '@painel/shared';
@@ -16,10 +15,7 @@ export const semesterService = {
     return httpClient.get<SemesterListItem[]>('/semesters');
   },
 
-  create(data: CreateSemesterInput): Promise<SemesterListItem> {
-    return httpClient.post<SemesterListItem>('/semesters', data);
-  },
-
+  /** So o nome pode ser editado (Etapa 31) - ano/periodo/datas sao a identidade do registro. */
   update(id: string, data: UpdateSemesterInput): Promise<SemesterListItem> {
     return httpClient.patch<SemesterListItem>(`/semesters/${id}`, data);
   },

@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import type { CreateSemesterInput, UpdateSemesterInput } from '@painel/shared';
+import type { UpdateSemesterInput } from '@painel/shared';
 import { semesterService } from '@/services/semester.service';
 import { subjectKeys } from './use-subjects';
 import { gradeKeys } from './use-grades';
@@ -57,19 +57,6 @@ function useInvalidateAll() {
       queryClient.invalidateQueries({ queryKey: dashboardKeys.summary }),
     ]);
   };
-}
-
-export function useCreateSemester() {
-  const invalidate = useInvalidateAll();
-
-  return useMutation({
-    mutationFn: (data: CreateSemesterInput) => semesterService.create(data),
-    onSuccess: async (semester) => {
-      await invalidate();
-      toast.success(`Semestre ${semester.name} criado`);
-    },
-    onError: (error) => toast.error(errorMessage(error, 'Não foi possível criar o semestre')),
-  });
 }
 
 export function useUpdateSemester() {

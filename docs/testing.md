@@ -5,7 +5,7 @@ npm test          # execução única
 npm run test:watch
 ```
 
-**153 testes**, sobre as regras puras — repetição espaçada, gerador de cronograma, cálculo de notas, decisão de vínculo de login e os contratos Zod. São elas que concentram a lógica de negócio e, na prática, foi nelas que os bugs apareceram.
+**200 testes**, sobre as regras puras — repetição espaçada, gerador de cronograma, cálculo de notas, decisão de vínculo de login, identidade de semestre e os contratos Zod. São elas que concentram a lógica de negócio e, na prática, foi nelas que os bugs apareceram.
 
 ### O que os testes protegem
 
@@ -23,6 +23,7 @@ Cada bloco existe por causa de um bug real que aconteceu durante o desenvolvimen
 | `notification-rules.test.ts` — dia de calendário | comparar prazos por 24 horas corridas fazia a atividade que vence hoje às 9h aparecer como atrasada às 14h |
 | `notification-rules.test.ts` — escalonamento | estados diferentes precisam gerar conteúdo diferente (senão o texto não atualiza) e o mesmo estado precisa gerar conteúdo idêntico (senão a notificação dispensada volta ao sino) |
 | `google-link-resolution.test.ts` — vínculo automático (R1) | um auto-link ingênuo entre Google e uma conta por senha permitiria sequestrar um e-mail ocupado por terceiro antes da vítima real chegar — a decisão que evita isso é pura e testada à parte da chamada real ao Google |
+| `semester-period.test.ts` — corte de calendário | a regra "mês < junho → 1º semestre" estava triplicada e divergente entre seed, formulário manual (removido na Etapa 31) e a resolução de semestre de Turma — uma delas podia divergir silenciosamente sem que nada acusasse |
 
 > **Ao rodar verificações manuais em sequência, atenção ao rate limit.** A API
 > permite 300 requisições por 15 minutos por IP (`RATE_LIMIT_MAX`). Um roteiro

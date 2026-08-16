@@ -8,15 +8,14 @@ import {
   ArchiveRestore,
   AlertTriangle,
   ArrowLeft,
-  CalendarDays,
-  ClipboardList,
   Crown,
   FileStack,
   FileText,
+  FlagTriangleRight,
   GraduationCap,
   HardDrive,
+  History,
   Link2,
-  ListChecks,
   LogOut,
   Megaphone,
   Pencil,
@@ -31,16 +30,16 @@ import {
   Users,
 } from 'lucide-react';
 import {
-  CLASS_POST_KIND_LABELS,
   CLASS_ROLE_LABELS,
   type ClassAnnouncementItem,
   type ClassMaterialItem,
-  type ClassPostListItem,
+  type ClassPostKind,
   type ClassSubjectItem,
 } from '@painel/shared';
 import {
   useArchiveClass,
   useClass,
+  useClassHistory,
   useClassMembers,
   useLeaveClass,
   useRemoveClassSubject,
@@ -63,8 +62,10 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { EmptyState } from '@/components/empty-state';
 import { ClassInviteDialog } from '@/components/classes/class-invite-dialog';
+import { ClassFormDialog } from '@/components/classes/class-form-dialog';
 import { ClassSubjectDialog } from '@/components/classes/class-subject-dialog';
 import { ClassPostFormDialog } from '@/components/classes/class-post-form-dialog';
+import { ClassPostRow } from '@/components/classes/class-post-row';
 import { ClassAnnouncementDialog } from '@/components/classes/class-announcement-dialog';
 import { ClassNoteDialog } from '@/components/classes/class-note-dialog';
 import { ClassMaterialUploadDropzone } from '@/components/classes/class-material-upload-dropzone';
@@ -72,6 +73,7 @@ import { ClassMaterialLinkDialog } from '@/components/classes/class-material-lin
 import { ClassMaterialCard } from '@/components/classes/class-material-card';
 import { ClassTransferOwnerDialog } from '@/components/classes/class-transfer-owner-dialog';
 import { ClassHealthPanel } from '@/components/classes/class-health-panel';
+import { FinishSemesterDialog } from '@/components/classes/finish-semester-dialog';
 import {
   AlertDialog,
   AlertDialogContent,
@@ -80,24 +82,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import {
-  formatBytes,
-  formatDate,
-  formatDateTime,
-  formatRelative,
-  subjectInitials,
-} from '@/lib/format';
+import { formatBytes, formatDate, formatRelative, subjectInitials } from '@/lib/format';
 
-const CLASS_POST_KIND_ICONS = {
-  ASSIGNMENT: ListChecks,
-  EXAM: ClipboardList,
-  EVENT: CalendarDays,
-} as const;
-
-/** Data de referência de uma publicação, qualquer que seja o `kind`. */
-function classPostWhen(post: ClassPostListItem): string | null {
-  return post.date ?? post.dueDate ?? post.startsAt ?? null;
-}
+const POST_KIND_SECTIONS: Array<{ kind: ClassPostKind; label: string }> = [
+  { kind: 'EXAM', label: 'Provas' },
+  { kind: 'ASSIGNMENT', label: 'Atividades' },
+  { kind: 'EVENT', label: 'Eventos' },
+];
 
 export default function ClassDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -112,6 +103,7 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
   const { data: notes } = useClassNotes(id);
   const { data: materials } = useClassMaterials(id);
   const { data: materialSummary } = useClassMaterialSummary(id);
+  const { data: history } = useClassHistory(id);
   const leaveClass = useLeaveClass();
   const removeSubject = useRemoveClassSubject();
   const removePost = useRemoveClassPost(id);
@@ -137,6 +129,8 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
   const [removingMaterial, setRemovingMaterial] = useState<ClassMaterialItem | null>(null);
   const [transferOpen, setTransferOpen] = useState(false);
   const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [finishSemesterOpen, setFinishSemesterOpen] = useState(false);
 
   const pinnedAnnouncements = (announcements ?? []).filter((item) => item.pinned);
 
@@ -240,6 +234,7 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
               <Badge variant="outline">
                 {classItem.year}.{String(classItem.term).padStart(2, '0')}
               </Badge>
+              <Badge variant="outline">{classItem.period}º período</Badge>
               {isOwner && <Badge variant="outline">{CLASS_ROLE_LABELS.OWNER}</Badge>}
               {isArchived && <Badge variant="secondary">Arquivada</Badge>}
             </div>
@@ -252,9 +247,22 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
           </div>
         </div>
 
-        <div className="flex shrink-0 gap-2">
+        <div className="flex shrink-0 flex-wrap gap-2">
           {isOwner ? (
             <>
+              <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>
+                <Pencil className="size-4" aria-hidden />
+                <span className="hidden sm:inline">Editar</span>
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={isArchived}
+                onClick={() => setFinishSemesterOpen(true)}
+              >
+                <FlagTriangleRight className="size-4" aria-hidden />
+                <span className="hidden sm:inline">Finalizar semestre</span>
+              </Button>
               <Button
                 size="sm"
                 variant="outline"
@@ -322,6 +330,10 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
             <Crown aria-hidden />
             <span className="hidden sm:inline">Membros</span>
           </TabsTrigger>
+          <TabsTrigger value="historico" aria-label="Histórico">
+            <History aria-hidden />
+            <span className="hidden sm:inline">Histórico</span>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="visao-geral" className="mt-4 space-y-6">
@@ -357,31 +369,13 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
                   </p>
                 </Card>
               ) : (
-                <div className="space-y-2">
-                  {upcomingPosts.map((post) => {
-                    const Icon = CLASS_POST_KIND_ICONS[post.kind];
-                    const when = classPostWhen(post);
-
-                    return (
-                      <Card key={post.id} className="flex items-center gap-3 p-3">
-                        <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium">{post.title}</p>
-                          {post.classSubject && (
-                            <p className="text-xs text-muted-foreground">
-                              {post.classSubject.name}
-                            </p>
-                          )}
-                        </div>
-                        {when && (
-                          <span className="shrink-0 text-xs text-muted-foreground">
-                            {formatDateTime(when)}
-                          </span>
-                        )}
-                      </Card>
-                    );
-                  })}
-                </div>
+                <Card className="p-1">
+                  <ul className="divide-y">
+                    {upcomingPosts.map((post) => (
+                      <ClassPostRow key={post.id} post={post} />
+                    ))}
+                  </ul>
+                </Card>
               )}
             </div>
 
@@ -438,34 +432,33 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
                 />
               </Card>
             ) : (
-              <div className="space-y-2">
-                {posts.map((post) => {
-                  const Icon = CLASS_POST_KIND_ICONS[post.kind];
-                  const when = classPostWhen(post);
+              <div className="space-y-4">
+                {POST_KIND_SECTIONS.map(({ kind, label }) => {
+                  const items = posts.filter((post) => post.kind === kind);
+
+                  if (items.length === 0) return null;
 
                   return (
-                    <Card key={post.id} className="flex items-center gap-3 p-3">
-                      <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">{post.title}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {CLASS_POST_KIND_LABELS[post.kind]}
-                          {post.classSubject ? ` · ${post.classSubject.name}` : ''}
-                          {when ? ` · ${formatDateTime(when)}` : ''} · {post.copyCount} cópia(s)
-                        </p>
-                      </div>
-                      {isOwner && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-7 shrink-0 text-muted-foreground"
-                          onClick={() => void removePost.mutateAsync(post.id)}
-                          aria-label={`Excluir ${post.title}`}
-                        >
-                          <Trash2 className="size-3.5" aria-hidden />
-                        </Button>
-                      )}
-                    </Card>
+                    <div key={kind}>
+                      <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+                        {label} · {items.length}
+                      </p>
+                      <Card className="p-1">
+                        <ul className="divide-y">
+                          {items.map((post) => (
+                            <ClassPostRow
+                              key={post.id}
+                              post={post}
+                              onRemove={
+                                isOwner
+                                  ? (target) => void removePost.mutateAsync(target.id)
+                                  : undefined
+                              }
+                            />
+                          ))}
+                        </ul>
+                      </Card>
+                    </div>
                   );
                 })}
               </div>
@@ -860,9 +853,85 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
             </div>
           )}
         </TabsContent>
+
+        <TabsContent value="historico" className="mt-4 space-y-6">
+          {!history ? (
+            <div className="space-y-2">
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-24 w-full" />
+            </div>
+          ) : history.cycles.length === 0 ? (
+            <Card>
+              <EmptyState
+                icon={History}
+                title="Nenhum ciclo anterior"
+                description="Quando o dono finalizar um semestre, o conteúdo do ciclo atual aparece aqui - somente leitura."
+              />
+            </Card>
+          ) : (
+            <div className="space-y-6">
+              {history.cycles.map((cycle) => (
+                <div key={cycle.semesterId}>
+                  <div className="mb-2 flex items-center gap-2">
+                    <p className="text-sm font-semibold">{cycle.semesterName}</p>
+                    <Badge variant="outline">{cycle.period}º período</Badge>
+                  </div>
+
+                  {cycle.subjects.length > 0 && (
+                    <div className="mb-3 grid gap-2 sm:grid-cols-2">
+                      {cycle.subjects.map((subject) => (
+                        <Card key={subject.id} className="flex items-center gap-2.5 p-3">
+                          <span
+                            className="flex size-7 shrink-0 items-center justify-center rounded-md text-[10px] font-semibold"
+                            style={{ backgroundColor: `${subject.color}1f`, color: subject.color }}
+                            aria-hidden
+                          >
+                            {subjectInitials(subject.name, subject.code)}
+                          </span>
+                          <p className="truncate text-sm">{subject.name}</p>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+
+                  {cycle.posts.length > 0 && (
+                    <Card className="p-1">
+                      <ul className="divide-y">
+                        {cycle.posts.map((post) => (
+                          <li key={post.id} className="flex items-center gap-3 px-2 py-2 text-sm">
+                            <span
+                              className="h-6 w-1 shrink-0 rounded-full"
+                              style={{
+                                backgroundColor:
+                                  post.classSubject?.color ?? 'var(--muted-foreground)',
+                              }}
+                              aria-hidden
+                            />
+                            <span className="min-w-0 flex-1 truncate">{post.title}</span>
+                            <span className="shrink-0 text-xs text-muted-foreground">
+                              {post.copyCount} {post.copyCount === 1 ? 'cópia' : 'cópias'}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </Card>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </TabsContent>
       </Tabs>
 
       <ClassInviteDialog open={inviteOpen} onOpenChange={setInviteOpen} classId={classItem.id} />
+
+      <ClassFormDialog open={editOpen} onOpenChange={setEditOpen} classItem={classItem} />
+
+      <FinishSemesterDialog
+        classId={classItem.id}
+        open={finishSemesterOpen}
+        onOpenChange={setFinishSemesterOpen}
+      />
 
       <ClassSubjectDialog
         open={subjectDialogOpen}

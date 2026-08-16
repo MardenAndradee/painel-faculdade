@@ -1,5 +1,4 @@
 import { prisma, type Prisma } from '../config/prisma.js';
-import type { Semester } from '../generated/prisma/client.js';
 
 /** Acesso a dados de semestres. */
 
@@ -9,7 +8,6 @@ const listSelect = {
   year: true,
   term: true,
   status: true,
-  isCurrent: true,
   startDate: true,
   endDate: true,
   createdAt: true,
@@ -38,23 +36,6 @@ const historySubjectSelect = {
 export type HistorySubjectRow = Prisma.SubjectGetPayload<{ select: typeof historySubjectSelect }>;
 
 export const semesterRepository = {
-  /**
-   * Semestre exibido por padrao.
-   *
-   * Prefere o marcado como atual; sem marcacao, cai no mais recente ACTIVE,
-   * para que o dashboard nunca fique sem contexto.
-   */
-  async findCurrent(userId: string): Promise<Semester | null> {
-    const flagged = await prisma.semester.findFirst({ where: { userId, isCurrent: true } });
-
-    if (flagged) return flagged;
-
-    return prisma.semester.findFirst({
-      where: { userId, status: 'ACTIVE' },
-      orderBy: [{ year: 'desc' }, { term: 'desc' }],
-    });
-  },
-
   /** Do mais recente para o mais antigo, como o historico e lido. */
   findAll(userId: string): Promise<SemesterRow[]> {
     return prisma.semester.findMany({
@@ -149,14 +130,6 @@ export const semesterRepository = {
     const result = await prisma.semester.deleteMany({ where: { id, userId } });
 
     return result.count > 0;
-  },
-
-  /** Apenas um semestre pode ser o atual. */
-  async clearCurrentFlag(userId: string, exceptId?: string): Promise<void> {
-    await prisma.semester.updateMany({
-      where: { userId, isCurrent: true, ...(exceptId ? { id: { not: exceptId } } : {}) },
-      data: { isCurrent: false },
-    });
   },
 
   /** Disciplinas de um semestre, com notas, para montar o historico. */

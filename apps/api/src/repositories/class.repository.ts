@@ -3,11 +3,16 @@ import type { ClassMemberStatus, ClassRole } from '@painel/shared';
 
 /** Acesso a dados de turmas (Etapa 20). */
 
+/** Semestre canonico da turma, achatado nas respostas (Etapa 30). */
+const classSemesterSelect = {
+  select: { id: true, name: true, year: true, term: true },
+} satisfies { select: Prisma.SemesterSelect };
+
 const classListSelect = {
   id: true,
   name: true,
-  year: true,
-  term: true,
+  period: true,
+  semester: classSemesterSelect,
   color: true,
   archivedAt: true,
   createdAt: true,
@@ -24,6 +29,7 @@ const classSubjectSelect = {
   teacherName: true,
   credits: true,
   order: true,
+  semesterId: true,
   _count: { select: { links: true } },
 } satisfies Prisma.ClassSubjectSelect;
 
@@ -32,8 +38,9 @@ export type ClassSubjectRow = Prisma.ClassSubjectGetPayload<{ select: typeof cla
 const classDetailSelect = {
   id: true,
   name: true,
-  year: true,
-  term: true,
+  period: true,
+  semesterId: true,
+  semester: classSemesterSelect,
   description: true,
   color: true,
   archivedAt: true,
@@ -97,6 +104,28 @@ export const classRepository = {
     return prisma.class.findUnique({ where: { id: classId }, select: classDetailSelect });
   },
 
+  /** O ciclo atual da turma - usado ao criar disciplina-molde/publicação nova (Etapa 30), que herdam os dois. */
+  findCycle(classId: string): Promise<{ semesterId: string; period: number } | null> {
+    return prisma.class.findUnique({
+      where: { id: classId },
+      select: { semesterId: true, period: true },
+    });
+  },
+
+  /**
+   * Turma ativa (não-arquivada) em que o usuário já participa, se houver -
+   * base do limite de uma turma ativa por vez (Etapa 30.1). Checagem de
+   * aplicação, não constraint de banco: a exceção "turma arquivada não conta"
+   * depende de `Class.archivedAt`, coluna de outra tabela, que um índice
+   * parcial do Postgres não alcança.
+   */
+  findActiveMembership(userId: string): Promise<{ classId: string } | null> {
+    return prisma.classMember.findFirst({
+      where: { userId, status: 'ACTIVE', class: { archivedAt: null } },
+      select: { classId: true },
+    });
+  },
+
   /** Só o nome - usado para compor a mensagem de notificação do Mural. */
   async findClassName(classId: string): Promise<string | null> {
     const row = await prisma.class.findUnique({ where: { id: classId }, select: { name: true } });
@@ -107,19 +136,37 @@ export const classRepository = {
   /**
    * Cria a turma, o dono como primeiro membro e as disciplinas iniciais numa
    * unica transacao - mesmo padrao de `subjectRepository.createWithGradeConfiguration`.
+   *
+   * `semesterId` ja vem resolvido (Etapa 30: `class.service.create` chama
+   * `semesterService.ensure` antes) - o mesmo id e gravado na `Class`, no
+   * `ClassMember` do dono (via `setMemberSemester` logo em seguida) e em cada
+   * `ClassSubject` criado aqui.
    */
   create(
     ownerId: string,
-    data: { name: string; year: number; term: number; description: string | null; color: string },
+    data: {
+      name: string;
+      semesterId: string;
+      period: number;
+      description: string | null;
+      color: string;
+    },
     subjects: NewClassSubject[],
   ): Promise<ClassDetailRow> {
     return prisma.$transaction(async (tx) => {
       const created = await tx.class.create({
         data: {
           ...data,
-          owner: { connect: { id: ownerId } },
+          ownerId,
           members: { create: { userId: ownerId, role: 'OWNER' } },
-          subjects: { create: subjects.map((subject, index) => ({ ...subject, order: index })) },
+          subjects: {
+            create: subjects.map((subject, index) => ({
+              ...subject,
+              order: index,
+              semesterId: data.semesterId,
+              period: data.period,
+            })),
+          },
         },
         select: { id: true },
       });
@@ -132,6 +179,31 @@ export const classRepository = {
     await prisma.class.update({ where: { id: classId }, data });
 
     return prisma.class.findUniqueOrThrow({ where: { id: classId }, select: classDetailSelect });
+  },
+
+  /** Disciplinas-molde de ciclos anteriores (Etapa 30.8) - tudo, exceto o semestre atual da turma. */
+  listSubjectsOutsideSemester(
+    classId: string,
+    currentSemesterId: string,
+  ): Promise<
+    Array<
+      ClassSubjectRow & {
+        semesterId: string;
+        period: number;
+        semester: { id: string; name: string };
+      }
+    >
+  > {
+    return prisma.classSubject.findMany({
+      where: { classId, semesterId: { not: currentSemesterId } },
+      select: {
+        ...classSubjectSelect,
+        semesterId: true,
+        period: true,
+        semester: { select: { id: true, name: true } },
+      },
+      orderBy: { order: 'asc' },
+    });
   },
 
   listMembers(classId: string): Promise<ClassMemberRow[]> {
@@ -166,11 +238,12 @@ export const classRepository = {
 
   async addSubject(
     classId: string,
+    cycle: { semesterId: string; period: number },
     data: NewClassSubject,
     order: number,
   ): Promise<ClassSubjectRow> {
     const created = await prisma.classSubject.create({
-      data: { ...data, classId, order },
+      data: { ...data, classId, ...cycle, order },
       select: { id: true },
     });
 
@@ -249,8 +322,8 @@ export const classRepository = {
         class: {
           id: string;
           name: string;
-          year: number;
-          term: number;
+          period: number;
+          semester: { id: string; year: number; term: number };
           color: string;
           archivedAt: Date | null;
           ownerId: string;
@@ -268,8 +341,8 @@ export const classRepository = {
           select: {
             id: true,
             name: true,
-            year: true,
-            term: true,
+            period: true,
+            semester: { select: { id: true, year: true, term: true } },
             color: true,
             archivedAt: true,
             ownerId: true,

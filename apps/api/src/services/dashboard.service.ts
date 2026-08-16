@@ -11,7 +11,7 @@ import {
 import { examRepository, type ExamDashboardRow } from '../repositories/exam.repository.js';
 import { subjectRepository } from '../repositories/subject.repository.js';
 import { studySessionRepository } from '../repositories/study-session.repository.js';
-import { semesterRepository } from '../repositories/semester.repository.js';
+import { semesterService } from './semester.service.js';
 import { calendarService } from './calendar.service.js';
 import {
   calculateOverallAverage,
@@ -107,7 +107,7 @@ export const dashboardService = {
       assignmentRepository.countByStatus(userId, todayEnd, weekEnd),
       examRepository.countUpcoming(userId),
       studySessionRepository.sumMinutes(userId, new Date(now.getTime() - 30 * MS_PER_DAY), now),
-      semesterRepository.findCurrent(userId),
+      semesterService.getOrCreateCurrent(userId),
     ]);
 
     // A agenda vem do calendar.service: manter a agregacao em dois lugares
@@ -143,7 +143,7 @@ export const dashboardService = {
       overdueAssignments: overdueRows.map((row) => toDashboardAssignment(row, now)),
       upcomingExams: examRows.map((row) => toDashboardExam(row, now)),
       calendar,
-      currentSemester: semester ? { id: semester.id, name: semester.name } : null,
+      currentSemester: { id: semester.id, name: semester.name },
     };
   },
 };

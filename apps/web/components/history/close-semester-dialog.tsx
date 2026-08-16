@@ -51,7 +51,8 @@ export function CloseSemesterDialog({ semester, onOpenChange }: CloseSemesterDia
           <AlertDialogDescription asChild>
             <div>
               <p>
-                As médias serão <strong className="text-foreground">congeladas</strong>. Editar uma
+                Isso só <strong className="text-foreground">congela suas notas</strong> — você já
+                está automaticamente no semestre seguinte, calculado pelo calendário. Editar uma
                 nota depois disso não altera mais o histórico deste período.
               </p>
 

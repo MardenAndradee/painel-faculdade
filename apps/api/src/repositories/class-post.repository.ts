@@ -21,6 +21,9 @@ const postSelect = {
   updatedAt: true,
   classId: true,
   classSubjectId: true,
+  semesterId: true,
+  period: true,
+  semester: { select: { name: true } },
   classSubject: { select: { id: true, name: true, color: true } },
   createdBy: { select: { id: true, name: true } },
   _count: { select: { copies: true } },
@@ -46,6 +49,19 @@ export const classPostRepository = {
 
   findById(classId: string, id: string): Promise<ClassPostRow | null> {
     return prisma.classPost.findFirst({ where: { id, classId }, select: postSelect });
+  },
+
+  countByClass(classId: string): Promise<number> {
+    return prisma.classPost.count({ where: { classId } });
+  },
+
+  /** Publicações de ciclos anteriores (Etapa 30.8) - tudo, exceto o semestre atual da turma. */
+  listOutsideSemester(classId: string, currentSemesterId: string): Promise<ClassPostRow[]> {
+    return prisma.classPost.findMany({
+      where: { classId, semesterId: { not: currentSemesterId } },
+      select: postSelect,
+      orderBy: { createdAt: 'desc' },
+    });
   },
 
   /** Publicações com data dentro do intervalo, para a Visão geral da turma. */

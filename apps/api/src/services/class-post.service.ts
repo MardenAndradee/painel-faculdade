@@ -94,10 +94,17 @@ async function assertClassSubjectBelongs(
 }
 
 export const classPostService = {
+  /** Só o ciclo atual (Etapa 30.8) - publicações de semestres já finalizados vivem na aba Histórico da turma. */
   async list(userId: string, classId: string): Promise<ClassPostListItem[]> {
     await requireMembership(userId, classId);
 
-    return (await classPostRepository.listByClass(classId)).map(toListItem);
+    const cycle = await classRepository.findCycle(classId);
+
+    if (!cycle) throw AppError.notFound('Turma');
+
+    return (await classPostRepository.listByClass(classId))
+      .filter((post) => post.semesterId === cycle.semesterId)
+      .map(toListItem);
   },
 
   async getById(userId: string, classId: string, postId: string): Promise<ClassPostListItem> {
@@ -133,11 +140,16 @@ export const classPostService = {
 
     await assertClassSubjectBelongs(classId, classSubjectId);
 
+    const cycle = await classRepository.findCycle(classId);
+
+    if (!cycle) throw AppError.notFound('Turma');
+
     const row = await classPostRepository.create(classId, userId, {
       kind: input.kind,
       title: input.title,
       description: emptyToNull(input.description),
       classSubjectId,
+      ...cycle,
       date: input.kind === 'EXAM' ? input.date : null,
       durationMinutes: input.kind === 'EXAM' ? (input.durationMinutes ?? null) : null,
       room: input.kind === 'EXAM' ? emptyToNull(input.room) : null,

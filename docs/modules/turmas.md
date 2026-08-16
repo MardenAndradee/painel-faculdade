@@ -1,7 +1,12 @@
-# Turmas (planejado)
+# Turmas
 
-> **Status: plano aprovado, implementação não iniciada.** Nada abaixo existe no
-> código ainda. Nenhuma migração foi criada.
+> **Status: implementado**, salvo a Etapa 25 (envio de e-mail, ainda só planejada — ver
+> `docs/roadmap.md`). A hierarquia de Semestre/Período descrita neste documento (`Class`
+> referenciando um `Semester` de verdade, `period` 1-8, "Finalizar semestre", aba Histórico da
+> turma, limite de uma turma ativa por usuário) foi adicionada depois, na Etapa 30 do roadmap
+> global — plano completo e decisões em `docs/planning/semestre-turma.md`. O texto abaixo já
+> descreve o estado atual, pós-Etapa 30; a numeração "Etapa 20-26" usada no restante deste
+> documento é interna deste módulo, não a numeração do roadmap global.
 
 Uma turma é um **grupo de pessoas de um período**, não de uma disciplina:
 "7º Período — 2026.2" reúne Redes, Banco de Dados, IA, Compiladores e TCC.
@@ -66,21 +71,45 @@ todo o código (`classroom-sync.service`, `hasClassroomAccess`,
 ### Modelagem
 
 ```
-User ──< ClassMember >── Class ──< ClassSubject
+User ──< ClassMember >── Class ──semesterId──> Semester (do DONO)
+                           │        │
+                           │        └── period (1-8, cumulativo no curso)
+                           │
+                           Class ──< ClassSubject (semesterId, period herdados, imutáveis)
                            │            │
                            │            └──< ClassSubjectLink >── Subject (do membro)
                            ├──< ClassInvite
                            ├──< ClassAnnouncement
                            ├──< ClassNote
                            ├──< ClassMaterial
-                           └──< ClassPost ──< ClassPostCopy >── Assignment/Exam/CalendarEvent
+                           └──< ClassPost (semesterId, period herdados, imutáveis)
+                                    └──< ClassPostCopy >── Assignment/Exam/CalendarEvent
 ```
 
-**Turma ↔ Semestre.** A turma carrega `year` + `term` como escalares; cada
-membro guarda **o semestre dele** em `ClassMember.semesterId`. Ao entrar, o
-sistema procura o `Semester` do usuário com aquele ano/período e **cria** se
-não existir — reaproveitando `semesterService.create`, que desde a Etapa 18 já
-nasce com o modelo de notas pessoal.
+**Turma ↔ Semestre (Etapa 30).** `Class` referencia um `Semester` de verdade — sempre o
+`Semester` PESSOAL do **dono** (`Class.semesterId`, FK `onDelete: Restrict`: um semestre "em uso"
+por uma turma ativa não pode sumir por baixo dela). Cada membro continua guardando **o semestre
+dele** em `ClassMember.semesterId` (isso não mudou desde a Etapa 20) — ao entrar ou ao criar a
+turma, o sistema acha-ou-cria o `Semester` do usuário para aquele ano/período via
+`semesterService.ensure` (chamado `.create` até a Etapa 31; o comportamento é o mesmo, só o nome
+mudou porque a Etapa 31 tirou a criação manual de semestre do app inteiro).
+
+`Class.period` é um contador **separado** de `Semester.term`: `term` é a metade do ano civil
+(1 ou 2), `period` é o progresso cumulativo no curso (1º a 8º). Os dois avançam juntos, sempre
++1, só através da ação **"Finalizar semestre"** (`POST /classes/:id/finish-semester`, só o
+dono) — nunca por edição direta (`PATCH /classes/:id` aceita `period`, mas não `semesterId`).
+Finalizar não apaga nada: `ClassSubject`/`ClassPost` do ciclo que terminou mantêm o `semesterId`/
+`period` antigos (são gravados no momento da criação e nunca mudam depois) e saem da aba principal
+da turma para a aba **Histórico** (`GET /classes/:id/history`, aberta a qualquer membro ativo,
+não só o dono) — mesmo espírito de "excluir disciplina arquiva por padrão": nada some, só muda de
+lugar. O ciclo novo começa sem disciplinas nem publicações; não há cópia automática do anterior
+(decisão explícita).
+
+**Uma turma ativa por vez.** Desde a Etapa 30, um usuário (dono ou membro) só pode ter uma
+participação `ACTIVE` em turmas não-arquivadas simultaneamente — `class.service.create` e
+`class-membership.service.join` recusam com `409` caso contrário. Turma arquivada não conta pro
+limite (`Class.archivedAt IS NOT NULL` libera); por depender de coluna de outra tabela, isso é
+checagem de aplicação, não um índice único de banco (mesmo padrão do teto de 100 membros).
 
 **Turma ↔ Disciplinas.** Aqui a duplicação é inevitável e correta: a
 disciplina carrega dado privado (configuração de notas, notas lançadas,
@@ -124,9 +153,10 @@ da interface.
 - **"Semestre", não "Período"** no formulário de criação da turma — o campo é
   1 ou 2 (metade do ano civil) e dirige a mesma lógica de datas do `Semester`
   pessoal (Etapa 18); "período" no vocabulário do curso é cumulativo
-  (8º período = 4 anos), um conceito diferente que não é rastreado como campo
-  — continua expressável no nome livre da turma (ex.: "8º Período — Sistemas
-  de Informação", como já estava no mockup original desta seção).
+  (8º período = 4 anos), um conceito diferente. *Atualização Etapa 30:* o
+  período do curso passou a ser rastreado de verdade, em `Class.period` — ver
+  "Turma ↔ Semestre" acima. Continua sendo um campo próprio, não mais só
+  expressável no nome livre da turma como este parágrafo dizia originalmente.
 - **Atividade e prova da turma perderam o campo de hora**, ficando só data —
   alinhado com as telas pessoais equivalentes, que já eram só data; a
   inconsistência era exclusiva do fluxo de publicação da turma. Evento
@@ -195,6 +225,8 @@ interface para um caso que ainda não existe; adicionar depois é aditivo
 | Excluir material | qualquer | só o próprio |
 | Arquivar/desarquivar a turma (ver Etapa 24 — substitui excluir) | ✅ | — |
 | Transferir propriedade (Etapa 24) | ✅ | — |
+| Finalizar semestre (Etapa 30) | ✅ | — |
+| Ver aba Histórico (Etapa 30) | ✅ | ✅ |
 | Sair da turma | (transfere antes, ou arquiva) | ✅ |
 
 Um middleware `classGuard` resolve a associação **antes** de qualquer handler:
@@ -262,15 +294,18 @@ migração aditiva. É mais um argumento a favor da cópia.
 
 ### Layout
 
-Cinco abas, e não oito. "Turmas" entra na seção Geral da sidebar.
+Cinco abas, e não oito — mais uma sexta, **Histórico**, adicionada na Etapa 30 pra guardar os
+ciclos que "Finalizar semestre" já encerrou. "Turmas" entra na seção Geral da sidebar; desde a
+Etapa 30.2, o link já leva direto pra visão geral da turma quando o usuário tem uma (no máximo
+uma ativa por vez), sem passar pela listagem.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
 │  ▌ 7º Período — 2026.2          Sistemas de Informação  │
-│    6 disciplinas · 24 membros              [Convidar ▾] │
-├─────────────────────────────────────────────────────────┤
-│  Visão geral │ Mural │ Disciplinas │ Materiais │ Membros │
-└─────────────────────────────────────────────────────────┘
+│    6 disciplinas · 24 membros    [Editar] [Finalizar semestre] [Convidar ▾] │
+├───────────────────────────────────────────────────────────────────┤
+│  Visão geral │ Mural │ Disciplinas │ Materiais │ Membros │ Histórico │
+└───────────────────────────────────────────────────────────────────┘
 
 ┌── Próximos 7 dias ──────────┐  ┌── Avisos fixados ──────┐
 │ 🔴 Prova N1 — Redes   sex   │  │ 📌 Prova de Redes      │
@@ -295,9 +330,11 @@ desperdiçada.
 **Convidar** abre um popover com código, link e QR juntos: três formas do mesmo
 convite, não três funcionalidades.
 
-Como uma pessoa pode estar em **várias turmas no mesmo semestre** ("7º Período"
-+ "Grupo de TCC"), as listagens de Atividades e Provas ganham um filtro por
-turma.
+*Atualização Etapa 30:* o parágrafo original previa uma pessoa em várias turmas no mesmo
+semestre ("7º Período" + "Grupo de TCC") como cenário normal, com filtro por turma nas listagens
+de Atividades/Provas para acomodar isso. Isso não é mais possível — desde a Etapa 30, um usuário
+tem no máximo **uma** turma ativa por vez (turma arquivada não conta). O filtro por turma nessas
+listagens continua existindo na API (`?classId=`), mas o cenário que o motivou deixou de existir.
 
 ### Plano por etapas
 
@@ -642,6 +679,6 @@ amostra.
 | Descoberta de turma | **Só por convite.** Sem busca pública |
 | Ao sair da turma | **Mantém tudo** — as cópias viram itens pessoais, `classPostId` zerado. A nota lançada é do aluno |
 | Quem pode publicar | **Dono publica tudo; membro publica materiais** |
-| Várias turmas no mesmo semestre | **Sim** — o modelo suporta; as listagens ganham filtro por turma |
+| Várias turmas ativas ao mesmo tempo | **Não, desde a Etapa 30.** Revisto: no máximo uma participação `ACTIVE` em turma não-arquivada por usuário; o filtro `?classId=` continua na API, mas o cenário de múltiplas turmas simultâneas que o motivou não existe mais |
 | E-mail | **Planejado** — Resend, síncrono, dígest diário de prazos via Vercel Cron (Etapa 25) |
 

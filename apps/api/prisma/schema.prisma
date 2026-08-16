@@ -44,7 +44,6 @@ enum ThemePreference {
 }
 
 enum SemesterStatus {
-  PLANNED
   ACTIVE
   FINISHED
 }
@@ -406,9 +405,6 @@ model Semester {
   startDate DateTime
   endDate   DateTime
 
-  /// Semestre exibido por padrao no dashboard.
-  isCurrent Boolean @default(false)
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -425,8 +421,12 @@ model Semester {
   /// membro, nunca compartilhado.
   classMembers ClassMember[]
 
+  /// Turmas cujo semestre canonico (do DONO) e este registro (Etapa 30).
+  classesAsCanonical Class[]
+  classSubjects      ClassSubject[]
+  classPosts         ClassPost[]
+
   @@unique([userId, year, term])
-  @@index([userId, isCurrent])
   @@map("semesters")
 }
 
@@ -1030,10 +1030,19 @@ model PushSubscription {
 model Class {
   id   String @id @default(cuid())
   name String
-  /// Ano/periodo canonicos da turma. Cada membro traduz isso para O SEU
-  /// Semester ao entrar (`ClassMember.semesterId`).
-  year Int
-  term Int
+
+  /// Semestre canonico da turma - sempre o Semester PESSOAL do dono (Etapa 30).
+  /// Cada membro ainda traduz isso para O SEU Semester ao entrar
+  /// (`ClassMember.semesterId`); so muda via "Finalizar semestre", nunca por
+  /// edicao direta - onDelete Restrict porque um semestre "em uso" por uma
+  /// turma ativa nao pode sumir por baixo dela.
+  semesterId String
+  semester   Semester @relation(fields: [semesterId], references: [id], onDelete: Restrict)
+
+  /// Periodo do curso (1-8, cumulativo desde o ingresso) - conceito diferente
+  /// de `Semester.term` (metade do ano civil). Avanca +1 junto com o
+  /// `semesterId` a cada "Finalizar semestre", nunca com gap.
+  period Int
 
   description String? @db.Text
   color       String  @default("#4f7cff")
@@ -1054,6 +1063,7 @@ model Class {
   materials     ClassMaterial[]
 
   @@index([ownerId])
+  @@index([semesterId])
   @@map("classes")
 }
 
@@ -1134,10 +1144,23 @@ model ClassSubject {
   classId String
   class   Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
 
+  /// Ciclo (Etapa 30) a que este molde pertence - herdado de `Class.semesterId`
+  /// no momento da criacao, e IMUTAVEL depois: um molde criado num ciclo
+  /// continua marcado com ele mesmo apos "Finalizar semestre" avancar a turma,
+  /// e e assim que a aba Historico separa "atual" de "ciclos anteriores".
+  semesterId String
+  semester   Semester @relation(fields: [semesterId], references: [id], onDelete: Restrict)
+
+  /// Periodo do curso (herdado de `Class.period` no momento da criacao,
+  /// tambem imutavel) - sem isso a aba Historico nao saberia a que periodo um
+  /// ciclo antigo pertencia, so o Semester (ano/metade) nao basta.
+  period Int
+
   links ClassSubjectLink[]
   posts ClassPost[]
 
   @@index([classId])
+  @@index([semesterId])
   @@map("class_subjects")
 }
 
@@ -1208,6 +1231,15 @@ model ClassPost {
   classSubjectId String?
   classSubject   ClassSubject? @relation(fields: [classSubjectId], references: [id], onDelete: SetNull)
 
+  /// Ciclo (Etapa 30) em que esta publicação foi feita - mesma imutabilidade
+  /// de `ClassSubject.semesterId`, mesmo motivo (Historico da turma).
+  semesterId String
+  semester   Semester @relation(fields: [semesterId], references: [id], onDelete: Restrict)
+
+  /// Periodo do curso no momento da publicacao - mesma imutabilidade e motivo
+  /// de `ClassSubject.period`.
+  period Int
+
   createdById String
   createdBy   User   @relation(fields: [createdById], references: [id], onDelete: Cascade)
 
@@ -1220,6 +1252,7 @@ model ClassPost {
 
   @@index([classId])
   @@index([classSubjectId])
+  @@index([semesterId])
   @@map("class_posts")
 }
 

@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { semesterService } from '../services/semester.service.js';
 import { getAuthUser } from '../middlewares/authenticate.js';
-import { created, noContent, ok } from '../utils/http-response.js';
+import { noContent, ok } from '../utils/http-response.js';
 
 /** Camada HTTP de semestres e historico. */
 export const semesterController = {
@@ -22,12 +22,6 @@ export const semesterController = {
     const user = getAuthUser(req);
 
     ok(res, await semesterService.getById(user.id, req.params.id as string));
-  },
-
-  async create(req: Request, res: Response): Promise<void> {
-    const user = getAuthUser(req);
-
-    created(res, await semesterService.create(user.id, req.body));
   },
 
   async update(req: Request, res: Response): Promise<void> {

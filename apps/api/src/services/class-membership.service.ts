@@ -42,9 +42,24 @@ export const classMembershipService = {
           `Esta turma já atingiu o limite de ${classService.maxMembersPerClass} membros`,
         );
       }
+
+      // Limite de uma turma ativa por vez (Etapa 30.1) - só checa em entrada
+      // nova; reativar uma turma que já era sua (LEFT -> ACTIVE de novo) não
+      // conta como "entrar em outra".
+      const activeMembership = await classRepository.findActiveMembership(userId);
+
+      if (activeMembership) {
+        throw AppError.conflict(
+          'Você já participa de uma turma ativa — saia ou arquive antes de entrar em outra',
+        );
+      }
     }
 
-    const semester = await resolveMemberSemester(userId, invite.class.year, invite.class.term);
+    const semester = await resolveMemberSemester(
+      userId,
+      invite.class.semester.year,
+      invite.class.semester.term,
+    );
 
     const member = existingMembership
       ? await classRepository.reactivateMember(existingMembership.id, semester.id)

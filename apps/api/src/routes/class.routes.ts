@@ -122,6 +122,29 @@ classRoutes.get(
   classController.health,
 );
 
+// --- Finalizar semestre (Etapa 30.5) --------------------------------------------
+
+classRoutes.get(
+  '/classes/:id/finish-semester-preview',
+  validate({ params: classIdParamSchema }),
+  classGuard,
+  classController.finishSemesterPreview,
+);
+
+classRoutes.post(
+  '/classes/:id/finish-semester',
+  validate({ params: classIdParamSchema }),
+  classGuard,
+  classController.finishSemester,
+);
+
+classRoutes.get(
+  '/classes/:id/history',
+  validate({ params: classIdParamSchema }),
+  classGuard,
+  classController.getHistory,
+);
+
 // --- Disciplinas-molde -------------------------------------------------------------
 
 classRoutes.post(

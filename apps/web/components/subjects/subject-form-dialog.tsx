@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { ListChecks, Loader2, Plus } from 'lucide-react';
 import {
   createSubjectSchema,
+  isCurrentSemester,
   SUBJECT_STATUS,
   SUBJECT_STATUS_LABELS,
   type CreateSubjectInput,
@@ -105,17 +106,24 @@ export function SubjectFormDialog({ open, onOpenChange, subject }: SubjectFormDi
       });
       setTeacherMode(subject.teacher?.id ?? NO_TEACHER);
     } else {
+      // O semestre atual já vem pré-selecionado (Etapa 31) - toda disciplina
+      // nova provavelmente é do período em andamento, e "Sem semestre" como
+      // ponto de partida só confundia.
+      const current = semesters.find((semester) =>
+        isCurrentSemester({ year: semester.year, term: semester.term }, new Date()),
+      );
+
       reset({
         name: '',
         code: '',
         description: '',
         color: DEFAULT_COLOR,
-        semesterId: null,
+        semesterId: current?.id ?? null,
         status: 'IN_PROGRESS',
       });
       setTeacherMode(NO_TEACHER);
     }
-  }, [open, subject, reset]);
+  }, [open, subject, semesters, reset]);
 
   // Configurar o modelo de notas do semestre faz mais sentido aqui do que no
   // Histórico: é justamente ao escolher o semestre de uma disciplina nova que
