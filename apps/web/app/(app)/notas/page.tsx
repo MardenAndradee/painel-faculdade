@@ -118,7 +118,7 @@ export default function GradesPage() {
 
       {isLoading ? (
         <div className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {Array.from({ length: 4 }, (_, index) => (
               <Skeleton key={index} className="h-20 rounded-xl" />
             ))}
@@ -152,7 +152,7 @@ export default function GradesPage() {
       ) : (
         <>
           {/* Resumo geral */}
-          <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
             <div className="flex items-center gap-4 rounded-2xl border bg-card px-[18px] py-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-accent/40">
               <GradeProgressRing
                 progress={(data.overallAverage ?? 0) / 10}
@@ -212,7 +212,7 @@ export default function GradesPage() {
           </div>
 
           {/* Boletim por disciplina */}
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {data.subjects.map((summary) => (
               <SubjectGradeSummaryCard
                 key={summary.subject.id}
