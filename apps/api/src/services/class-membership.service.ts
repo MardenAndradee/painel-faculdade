@@ -34,23 +34,25 @@ export const classMembershipService = {
       throw AppError.conflict('Você já é membro desta turma');
     }
 
+    // Limite de uma turma ativa por vez (Etapa 30.1) - roda tanto numa entrada
+    // nova quanto numa reativação (LEFT -> ACTIVE de novo): o que importa é o
+    // RESULTADO (o usuário fica ACTIVE aqui), não como ele chegou até esse
+    // estado. Reativar sem essa checagem deixaria alguém com duas turmas
+    // ativas se ele tiver entrado em outra enquanto estava LEFT desta.
+    const activeMembership = await classRepository.findActiveMembership(userId);
+
+    if (activeMembership) {
+      throw AppError.conflict(
+        'Você já participa de uma turma ativa — saia ou arquive antes de entrar em outra',
+      );
+    }
+
     if (!existingMembership) {
       const memberCount = await classRepository.countActiveMembers(classId);
 
       if (memberCount >= classService.maxMembersPerClass) {
         throw AppError.conflict(
           `Esta turma já atingiu o limite de ${classService.maxMembersPerClass} membros`,
-        );
-      }
-
-      // Limite de uma turma ativa por vez (Etapa 30.1) - só checa em entrada
-      // nova; reativar uma turma que já era sua (LEFT -> ACTIVE de novo) não
-      // conta como "entrar em outra".
-      const activeMembership = await classRepository.findActiveMembership(userId);
-
-      if (activeMembership) {
-        throw AppError.conflict(
-          'Você já participa de uma turma ativa — saia ou arquive antes de entrar em outra',
         );
       }
     }
@@ -65,7 +67,9 @@ export const classMembershipService = {
       ? await classRepository.reactivateMember(existingMembership.id, semester.id)
       : await classRepository.createMember(classId, userId, semester.id);
 
-    const classSubjects = await classRepository.listSubjectsFull(classId);
+    // Só o ciclo atual (Etapa 30.8) - quem entra agora não deve ganhar
+    // vínculo/molde de disciplinas de um ciclo que a turma já finalizou.
+    const classSubjects = await classRepository.listSubjectsFull(classId, invite.class.semester.id);
 
     let subjectsLinked = 0;
     let subjectsCreated = 0;

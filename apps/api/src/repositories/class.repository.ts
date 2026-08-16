@@ -181,6 +181,31 @@ export const classRepository = {
     return prisma.class.findUniqueOrThrow({ where: { id: classId }, select: classDetailSelect });
   },
 
+  /**
+   * "Finalizar semestre" (Etapa 30.5): avança o semestre/período da turma E
+   * o semestre pessoal de cada membro ativo numa única transação - sem isso,
+   * um erro no meio do caminho deixaria a turma e alguns membros apontando
+   * pro ciclo antigo enquanto outros já foram pro novo.
+   */
+  async advanceCycle(
+    classId: string,
+    ownerSemesterId: string,
+    period: number,
+    memberSemesters: Array<{ memberId: string; semesterId: string }>,
+  ): Promise<ClassDetailRow> {
+    await prisma.$transaction([
+      ...memberSemesters.map(({ memberId, semesterId }) =>
+        prisma.classMember.update({ where: { id: memberId }, data: { semesterId } }),
+      ),
+      prisma.class.update({
+        where: { id: classId },
+        data: { semester: { connect: { id: ownerSemesterId } }, period },
+      }),
+    ]);
+
+    return prisma.class.findUniqueOrThrow({ where: { id: classId }, select: classDetailSelect });
+  },
+
   /** Disciplinas-molde de ciclos anteriores (Etapa 30.8) - tudo, exceto o semestre atual da turma. */
   listSubjectsOutsideSemester(
     classId: string,
@@ -214,12 +239,25 @@ export const classRepository = {
     });
   },
 
-  countSubjects(classId: string): Promise<number> {
-    return prisma.classSubject.count({ where: { classId } });
+  /**
+   * `semesterId` opcional restringe ao ciclo atual. Sem ele, conta todos os
+   * ciclos - usado só pra numerar `order` de uma disciplina nova (Etapa
+   * 30.6), onde um contador crescente sem "buracos" visíveis é o bastante.
+   */
+  countSubjects(classId: string, semesterId?: string): Promise<number> {
+    return prisma.classSubject.count({ where: { classId, ...(semesterId ? { semesterId } : {}) } });
   },
 
-  /** Disciplinas-molde no formato que o casamento (`class-subject-merge`) e a criação de cópia consomem. */
-  listSubjectsFull(classId: string): Promise<
+  /**
+   * Disciplinas-molde no formato que o casamento (`class-subject-merge`) e a
+   * criação de cópia consomem. `semesterId` opcional restringe ao ciclo
+   * atual - sem ele, disciplinas de todos os ciclos (usado só onde isso é
+   * intencional, como o Histórico).
+   */
+  listSubjectsFull(
+    classId: string,
+    semesterId?: string,
+  ): Promise<
     Array<{
       id: string;
       name: string;
@@ -230,7 +268,7 @@ export const classRepository = {
     }>
   > {
     return prisma.classSubject.findMany({
-      where: { classId },
+      where: { classId, ...(semesterId ? { semesterId } : {}) },
       select: { id: true, name: true, code: true, color: true, teacherName: true, credits: true },
       orderBy: { order: 'asc' },
     });

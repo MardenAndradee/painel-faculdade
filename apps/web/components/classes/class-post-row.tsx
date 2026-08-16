@@ -3,11 +3,24 @@
 import { MapPin, Trash2 } from 'lucide-react';
 import type { ClassPostListItem } from '@painel/shared';
 import { Button } from '@/components/ui/button';
-import { formatDate } from '@/lib/format';
+import { formatDate, formatDateTime } from '@/lib/format';
 
-/** Data de referência de uma publicação, qualquer que seja o `kind`. */
-function classPostWhen(post: ClassPostListItem): string | null {
-  return post.date ?? post.dueDate ?? post.startsAt ?? null;
+/**
+ * Data de referência formatada, qualquer que seja o `kind`. Prova/Atividade
+ * são só data (decisão da Etapa 30); Evento com horário marcado (não
+ * `allDay`) mostra a hora também - sem isso um evento às 19h aparecia como
+ * se fosse o dia inteiro.
+ */
+function formatPostWhen(post: ClassPostListItem): string | null {
+  if (post.kind === 'EVENT') {
+    if (!post.startsAt) return null;
+
+    return post.allDay ? formatDate(post.startsAt) : formatDateTime(post.startsAt);
+  }
+
+  const value = post.date ?? post.dueDate;
+
+  return value ? formatDate(value) : null;
 }
 
 /** Dias até a data - só para o destaque visual, não para nenhuma regra de negócio. */
@@ -32,7 +45,7 @@ export function ClassPostRow({
   post: ClassPostListItem;
   onRemove?: (post: ClassPostListItem) => void;
 }) {
-  const when = classPostWhen(post);
+  const when = formatPostWhen(post);
   const isImminentExam = post.kind === 'EXAM' && post.date !== null && daysUntil(post.date) <= 3;
 
   return (
@@ -52,7 +65,7 @@ export function ClassPostRow({
           {when && (
             <>
               <span aria-hidden>·</span>
-              <span>{formatDate(when)}</span>
+              <span>{when}</span>
             </>
           )}
 

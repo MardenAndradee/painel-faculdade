@@ -2,12 +2,13 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import type {
-  ClassSubjectInput,
-  CreateClassInput,
-  CreateClassInviteInput,
-  TransferClassOwnerInput,
-  UpdateClassInput,
+import {
+  defaultSemesterName,
+  type ClassSubjectInput,
+  type CreateClassInput,
+  type CreateClassInviteInput,
+  type TransferClassOwnerInput,
+  type UpdateClassInput,
 } from '@painel/shared';
 import { classService } from '@/services/class.service';
 import { subjectKeys } from './use-subjects';
@@ -175,12 +176,9 @@ export function useFinishSemester() {
         invalidateFanOut(),
         queryClient.invalidateQueries({ queryKey: classKeys.history(updated.id) }),
       ]);
-      toast.success(
-        `Turma avançada para ${updated.year}.${String(updated.term).padStart(2, '0')}`,
-        {
-          description: `Agora no ${updated.period}º período. O ciclo anterior foi para o Histórico.`,
-        },
-      );
+      toast.success(`Turma avançada para ${defaultSemesterName(updated)}`, {
+        description: `Agora no ${updated.period}º período. O ciclo anterior foi para o Histórico.`,
+      });
     },
     onError: (error) => {
       toast.error(errorMessage(error, 'Não foi possível finalizar o semestre'));

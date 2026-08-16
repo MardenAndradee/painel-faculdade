@@ -2,12 +2,11 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useFieldArray, useForm, Controller, type Resolver } from 'react-hook-form';
+import { useFieldArray, useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Library, Loader2, Plus, Trash2 } from 'lucide-react';
 import {
   createClassSchema,
-  updateClassSchema,
   SUBJECT_COLORS,
   type ClassDetail,
   type ClassFormValues,
@@ -84,14 +83,11 @@ export function ClassFormDialog({ open, onOpenChange, classItem }: ClassFormDial
     reset,
     formState: { errors, isSubmitting },
   } = useForm<ClassFormValues, unknown, CreateClassInput>({
-    // Em edição, o resolver valida um subconjunto dos campos (sem year/term/
-    // subjects) - o cast é seguro porque `onSubmit` só lê os campos que cada
-    // modo realmente usa, nunca os dois ao mesmo tempo.
-    resolver: zodResolver(isEditing ? updateClassSchema : createClassSchema) as unknown as Resolver<
-      ClassFormValues,
-      unknown,
-      CreateClassInput
-    >,
+    // Mesmo schema nos dois modos: `createClassSchema` valida exatamente os
+    // campos que o `reset()` de edição também preenche (name/period/
+    // description/color/subjects), então não precisa de um resolver por modo
+    // nem de cast de tipo pra reconciliar os dois.
+    resolver: zodResolver(createClassSchema),
     defaultValues: CREATE_DEFAULTS,
   });
 

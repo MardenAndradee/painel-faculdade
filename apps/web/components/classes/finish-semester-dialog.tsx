@@ -1,6 +1,7 @@
 'use client';
 
 import { ArrowRight, Loader2 } from 'lucide-react';
+import { defaultSemesterName } from '@painel/shared';
 import { useFinishSemester, useFinishSemesterPreview } from '@/hooks/use-classes';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -50,8 +51,8 @@ export function FinishSemesterDialog({ classId, open, onOpenChange }: FinishSeme
                 <>
                   <div className="flex items-center justify-center gap-2 rounded-lg border bg-muted/40 py-3 text-sm">
                     <span className="font-medium text-foreground">
-                      {preview.currentSemester.year}.{preview.currentSemester.term} ·{' '}
-                      {preview.currentPeriod}º período
+                      {defaultSemesterName(preview.currentSemester)} · {preview.currentPeriod}º
+                      período
                     </span>
                     <ArrowRight className="size-4 shrink-0" aria-hidden />
                     <span className="font-medium text-foreground">

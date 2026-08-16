@@ -1,4 +1,5 @@
 import {
+  defaultSemesterName,
   getCurrentSemesterKey,
   nextSemesterKey,
   type ClassDetail,
@@ -307,14 +308,16 @@ export const classService = {
     if (!row) throw AppError.notFound('Turma');
 
     const next = nextSemesterKey({ year: row.semester.year, term: row.semester.term });
+    // Só o ciclo atual (Etapa 30.8) - senão, depois da 2a "Finalizar semestre"
+    // em diante, o preview soma ciclos que já foram pro Histórico.
     const [subjectCount, postCount] = await Promise.all([
-      classRepository.countSubjects(classId),
-      classPostRepository.countByClass(classId),
+      classRepository.countSubjects(classId, row.semesterId),
+      classPostRepository.countByClass(classId, row.semesterId),
     ]);
 
     return {
       currentSemester: { year: row.semester.year, term: row.semester.term },
-      nextSemester: { ...next, name: `${next.year}.${next.term}` },
+      nextSemester: { ...next, name: defaultSemesterName(next) },
       currentPeriod: row.period,
       nextPeriod: row.period + 1,
       subjectCount,
@@ -335,6 +338,7 @@ export const classService = {
   async finishSemester(userId: string, classId: string): Promise<ClassDetail> {
     const role = await requireMembership(userId, classId);
     requireOwner(role);
+    await assertNotArchived(classId);
 
     const row = await classRepository.findDetail(classId);
 
@@ -342,20 +346,32 @@ export const classService = {
 
     const next = nextSemesterKey({ year: row.semester.year, term: row.semester.term });
 
-    const ownerNextSemester = await semesterService.ensure(userId, next);
-
     const members = await classRepository.listActiveMembersWithSemester(classId);
 
-    for (const member of members) {
-      const memberNextSemester = await semesterService.ensure(member.userId, next);
+    // Resolve o próximo semestre pessoal de cada membro ativo (o dono
+    // incluso, como um deles) em paralelo - cada um mexe num usuário
+    // diferente, sem contenção entre si.
+    const memberSemesters = await Promise.all(
+      members.map(async (member) => ({
+        memberId: member.id,
+        userId: member.userId,
+        semesterId: (await semesterService.ensure(member.userId, next)).id,
+      })),
+    );
 
-      await classRepository.setMemberSemester(member.id, memberNextSemester.id);
-    }
+    const ownerNext = memberSemesters.find((entry) => entry.userId === userId);
 
-    const updated = await classRepository.update(classId, {
-      semester: { connect: { id: ownerNextSemester.id } },
-      period: row.period + 1,
-    });
+    if (!ownerNext) throw AppError.notFound('Turma');
+
+    // Grava o avanço da turma e de todo mundo numa única transação (Etapa
+    // 30.5) - um erro no meio não pode deixar a turma e os membros
+    // apontando pra ciclos diferentes.
+    const updated = await classRepository.advanceCycle(
+      classId,
+      ownerNext.semesterId,
+      row.period + 1,
+      memberSemesters.map(({ memberId, semesterId }) => ({ memberId, semesterId })),
+    );
 
     const myLinkedSubjectIds = await classRepository.listMyLinkedSubjectIds(classId, userId);
 
@@ -453,12 +469,20 @@ export const classService = {
     const role = await requireMembership(userId, classId);
     requireOwner(role);
 
+    const cycle = await classRepository.findCycle(classId);
+
+    if (!cycle) throw AppError.notFound('Turma');
+
+    // Só o ciclo atual (Etapa 30.8) - senão, toda "Finalizar semestre"
+    // deixaria um falso positivo permanente aqui: disciplinas/publicações de
+    // um ciclo já encerrado nunca vão mesmo receber vínculo/cópia de membros
+    // que entraram depois, e isso é esperado, não um problema a sinalizar.
     const [members, subjects, linkPairs, archivedLinkedSubjects, posts] = await Promise.all([
       classRepository.listActiveMembersWithSemester(classId),
-      classRepository.listSubjectsFull(classId),
+      classRepository.listSubjectsFull(classId, cycle.semesterId),
       classRepository.listActiveLinkPairs(classId),
       classRepository.countArchivedLinkedSubjects(classId),
-      classPostRepository.listByClass(classId),
+      classPostRepository.listByClass(classId, cycle.semesterId),
     ]);
 
     const linkedKeys = new Set(linkPairs.map((pair) => `${pair.classSubjectId}:${pair.userId}`));
@@ -676,7 +700,11 @@ export const classService = {
 
     const membership = await classRepository.findMembership(userId, invite.classId);
     const memberCount = await classRepository.countActiveMembers(invite.classId);
-    const subjectCount = await classRepository.countSubjects(invite.classId);
+    // Só o ciclo atual - é o que quem entrar agora realmente vai receber.
+    const subjectCount = await classRepository.countSubjects(
+      invite.classId,
+      invite.class.semester.id,
+    );
 
     return {
       class: {

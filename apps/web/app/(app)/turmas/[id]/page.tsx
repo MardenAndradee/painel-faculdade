@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import {
   CLASS_ROLE_LABELS,
+  defaultSemesterName,
   type ClassAnnouncementItem,
   type ClassMaterialItem,
   type ClassPostKind,
@@ -231,9 +232,7 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">{classItem.name}</h1>
-              <Badge variant="outline">
-                {classItem.year}.{String(classItem.term).padStart(2, '0')}
-              </Badge>
+              <Badge variant="outline">{defaultSemesterName(classItem)}</Badge>
               <Badge variant="outline">{classItem.period}º período</Badge>
               {isOwner && <Badge variant="outline">{CLASS_ROLE_LABELS.OWNER}</Badge>}
               {isArchived && <Badge variant="secondary">Arquivada</Badge>}
