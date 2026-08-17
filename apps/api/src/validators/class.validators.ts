@@ -35,11 +35,6 @@ export const classAnnouncementIdParamSchema = z.object({
   announcementId: z.string().min(1, 'Identificador obrigatório'),
 });
 
-export const classNoteIdParamSchema = z.object({
-  id: z.string().min(1, 'Identificador obrigatório'),
-  noteId: z.string().min(1, 'Identificador obrigatório'),
-});
-
 export const classMaterialIdParamSchema = z.object({
   id: z.string().min(1, 'Identificador obrigatório'),
   materialId: z.string().min(1, 'Identificador obrigatório'),

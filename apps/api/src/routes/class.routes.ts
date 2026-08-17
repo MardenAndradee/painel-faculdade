@@ -4,12 +4,10 @@ import {
   createClassAnnouncementSchema,
   createClassInviteSchema,
   createClassMaterialLinkSchema,
-  createClassNoteSchema,
   createClassPostSchema,
   createClassSchema,
   transferClassOwnerSchema,
   updateClassAnnouncementSchema,
-  updateClassNoteSchema,
   updateClassPostSchema,
   updateClassSchema,
   uploadClassMaterialSchema,
@@ -17,7 +15,6 @@ import {
 import { classController } from '../controllers/class.controller.js';
 import { classPostController } from '../controllers/class-post.controller.js';
 import { classAnnouncementController } from '../controllers/class-announcement.controller.js';
-import { classNoteController } from '../controllers/class-note.controller.js';
 import { classMaterialController } from '../controllers/class-material.controller.js';
 import { authenticate } from '../middlewares/authenticate.js';
 import { classGuard } from '../middlewares/class-guard.js';
@@ -30,7 +27,6 @@ import {
   classInviteIdParamSchema,
   classInviteTokenParamSchema,
   classMaterialIdParamSchema,
-  classNoteIdParamSchema,
   classPostIdParamSchema,
   classSubjectIdParamSchema,
   updateClassSubjectSchema,
@@ -265,43 +261,6 @@ classRoutes.delete(
   validate({ params: classAnnouncementIdParamSchema }),
   classGuard,
   classAnnouncementController.remove,
-);
-
-// --- Mural: anotações (Etapa 22) ------------------------------------------------------
-
-classRoutes.get(
-  '/classes/:id/notes',
-  validate({ params: classIdParamSchema }),
-  classGuard,
-  classNoteController.list,
-);
-
-classRoutes.post(
-  '/classes/:id/notes',
-  validate({ params: classIdParamSchema, body: createClassNoteSchema }),
-  classGuard,
-  classNoteController.create,
-);
-
-classRoutes.get(
-  '/classes/:id/notes/:noteId',
-  validate({ params: classNoteIdParamSchema }),
-  classGuard,
-  classNoteController.getById,
-);
-
-classRoutes.patch(
-  '/classes/:id/notes/:noteId',
-  validate({ params: classNoteIdParamSchema, body: updateClassNoteSchema }),
-  classGuard,
-  classNoteController.update,
-);
-
-classRoutes.delete(
-  '/classes/:id/notes/:noteId',
-  validate({ params: classNoteIdParamSchema }),
-  classGuard,
-  classNoteController.remove,
 );
 
 // --- Materiais (Etapa 23) --------------------------------------------------------------

@@ -53,9 +53,8 @@ function ToolbarButton({
 
 /**
  * Anotações do Plano de Estudos (Etapa 6) - reaproveita o mesmo Tiptap de
- * `NoteEditor`/`ClassNoteDialog`, sem editor novo. Um blob só por plano (como
- * o `ClassNote`), sem título e sem pastas: é anotação de UMA prova, não um
- * acervo pra organizar.
+ * `NoteEditor`, sem editor novo. Um blob só por plano, sem título e sem
+ * pastas: é anotação de UMA prova, não um acervo pra organizar.
  */
 export function NotesCard({ examPrepId, notes }: NotesCardProps) {
   const updateNotes = useUpdateExamPrepNotes(examPrepId);

@@ -10,7 +10,6 @@ import {
   ArrowLeft,
   Crown,
   FileStack,
-  FileText,
   FlagTriangleRight,
   GraduationCap,
   HardDrive,
@@ -48,7 +47,6 @@ import {
 } from '@/hooks/use-classes';
 import { useClassPosts, useRemoveClassPost, useUpcomingClassPosts } from '@/hooks/use-class-posts';
 import { useClassAnnouncements, useRemoveClassAnnouncement } from '@/hooks/use-class-announcements';
-import { useClassNotes, useRemoveClassNote } from '@/hooks/use-class-notes';
 import {
   useClassMaterials,
   useClassMaterialSummary,
@@ -68,7 +66,6 @@ import { ClassSubjectDialog } from '@/components/classes/class-subject-dialog';
 import { ClassPostFormDialog } from '@/components/classes/class-post-form-dialog';
 import { ClassPostRow } from '@/components/classes/class-post-row';
 import { ClassAnnouncementDialog } from '@/components/classes/class-announcement-dialog';
-import { ClassNoteDialog } from '@/components/classes/class-note-dialog';
 import { ClassMaterialUploadDropzone } from '@/components/classes/class-material-upload-dropzone';
 import { ClassMaterialLinkDialog } from '@/components/classes/class-material-link-dialog';
 import { ClassMaterialCard } from '@/components/classes/class-material-card';
@@ -101,7 +98,6 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
   const { data: upcomingPosts } = useUpcomingClassPosts(id);
   const { data: posts } = useClassPosts(id);
   const { data: announcements } = useClassAnnouncements(id);
-  const { data: notes } = useClassNotes(id);
   const { data: materials } = useClassMaterials(id);
   const { data: materialSummary } = useClassMaterialSummary(id);
   const { data: history } = useClassHistory(id);
@@ -109,7 +105,6 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
   const removeSubject = useRemoveClassSubject();
   const removePost = useRemoveClassPost(id);
   const removeAnnouncement = useRemoveClassAnnouncement(id);
-  const removeNote = useRemoveClassNote(id);
   const removeMaterial = useRemoveClassMaterial(id);
   const archiveClass = useArchiveClass();
   const unarchiveClass = useUnarchiveClass();
@@ -124,8 +119,6 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
   const [editingAnnouncement, setEditingAnnouncement] = useState<ClassAnnouncementItem | null>(
     null,
   );
-  const [noteDialogOpen, setNoteDialogOpen] = useState(false);
-  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [materialLinkOpen, setMaterialLinkOpen] = useState(false);
   const [removingMaterial, setRemovingMaterial] = useState<ClassMaterialItem | null>(null);
   const [transferOpen, setTransferOpen] = useState(false);
@@ -192,16 +185,6 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
   const openEditAnnouncement = (announcement: ClassAnnouncementItem): void => {
     setEditingAnnouncement(announcement);
     setAnnouncementDialogOpen(true);
-  };
-
-  const openAddNote = (): void => {
-    setEditingNoteId(null);
-    setNoteDialogOpen(true);
-  };
-
-  const openEditNote = (noteId: string): void => {
-    setEditingNoteId(noteId);
-    setNoteDialogOpen(true);
   };
 
   const handleLeave = async (): Promise<void> => {
@@ -548,78 +531,6 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
               </div>
             )}
           </div>
-
-          <div>
-            <div className="mb-2 flex items-center justify-between">
-              <p className="text-sm font-medium">Anotações</p>
-              {isOwner && !isArchived && (
-                <Button size="sm" variant="outline" onClick={openAddNote}>
-                  <Plus className="size-4" aria-hidden />
-                  Nova anotação
-                </Button>
-              )}
-            </div>
-
-            {!notes ? (
-              <div className="space-y-2">
-                <Skeleton className="h-12 w-full" />
-                <Skeleton className="h-12 w-full" />
-              </div>
-            ) : notes.length === 0 ? (
-              <Card>
-                <EmptyState
-                  icon={FileText}
-                  title="Nenhuma anotação ainda"
-                  description={
-                    isOwner
-                      ? 'Crie uma anotação duradoura, visível para todo mundo na turma.'
-                      : 'O dono ainda não criou nenhuma anotação.'
-                  }
-                  action={
-                    isOwner &&
-                    !isArchived && (
-                      <Button variant="accent" size="sm" onClick={openAddNote}>
-                        <Plus className="size-4" aria-hidden />
-                        Nova anotação
-                      </Button>
-                    )
-                  }
-                />
-              </Card>
-            ) : (
-              <div className="space-y-2">
-                {notes.map((note) => (
-                  <Card
-                    key={note.id}
-                    className="flex cursor-pointer items-center gap-3 p-3 transition-colors hover:bg-accent/40"
-                    onClick={() => (isOwner ? openEditNote(note.id) : undefined)}
-                  >
-                    <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{note.title}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {note.createdBy.name} · atualizado {formatRelative(note.updatedAt)}
-                      </p>
-                    </div>
-                    {isOwner && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-7 shrink-0 text-muted-foreground"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void removeNote.mutateAsync(note.id);
-                        }}
-                        aria-label={`Excluir ${note.title}`}
-                      >
-                        <Trash2 className="size-3.5" aria-hidden />
-                      </Button>
-                    )}
-                  </Card>
-                ))}
-              </div>
-            )}
-          </div>
         </TabsContent>
 
         <TabsContent value="disciplinas" className="mt-4 space-y-4">
@@ -951,13 +862,6 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
         onOpenChange={setAnnouncementDialogOpen}
         classId={classItem.id}
         announcement={editingAnnouncement}
-      />
-
-      <ClassNoteDialog
-        open={noteDialogOpen}
-        onOpenChange={setNoteDialogOpen}
-        classId={classItem.id}
-        noteId={editingNoteId}
       />
 
       <ClassMaterialLinkDialog

@@ -284,10 +284,9 @@ model User {
   createdClassPosts ClassPost[]
   classPostCopies   ClassPostCopy[]
 
-  /// Mural da turma (Etapa 22): avisos e anotações que este usuário publicou
-  /// como dono. Sem *fan-out* - ver "O que é compartilhado de verdade" no README.
+  /// Mural da turma (Etapa 22): avisos que este usuário publicou como dono.
+  /// Sem *fan-out* - ver "O que é compartilhado de verdade" no README.
   createdClassAnnouncements ClassAnnouncement[]
-  createdClassNotes         ClassNote[]
 
   /// Materiais da turma que este usuário enviou (Etapa 23) - qualquer membro
   /// publica, não só o dono.
@@ -1059,7 +1058,6 @@ model Class {
   subjects      ClassSubject[]
   posts         ClassPost[]
   announcements ClassAnnouncement[]
-  notes         ClassNote[]
   materials     ClassMaterial[]
 
   @@index([ownerId])
@@ -1309,28 +1307,6 @@ model ClassAnnouncement {
 
   @@index([classId, pinned, createdAt])
   @@map("class_announcements")
-}
-
-/// Anotação duradoura do mural da turma (Etapa 22). Mesmo formato de `Note`
-/// (documento Tiptap/ProseMirror), mas com UM autor só - o dono - nada
-/// colaborativo: não há travamento de edição concorrente porque não existe
-/// edição concorrente.
-model ClassNote {
-  id      String @id @default(cuid())
-  title   String
-  content Json   @default("{\"type\":\"doc\",\"content\":[]}")
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  classId String
-  class   Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
-
-  createdById String
-  createdBy   User   @relation(fields: [createdById], references: [id], onDelete: Cascade)
-
-  @@index([classId])
-  @@map("class_notes")
 }
 
 /// Material da turma (Etapa 23): linha única, sem *fan-out* - duplicar um PDF

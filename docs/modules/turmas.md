@@ -79,7 +79,6 @@ User ──< ClassMember >── Class ──semesterId──> Semester (do DONO
                            │            └──< ClassSubjectLink >── Subject (do membro)
                            ├──< ClassInvite
                            ├──< ClassAnnouncement
-                           ├──< ClassNote
                            ├──< ClassMaterial
                            └──< ClassPost (semesterId, period herdados, imutáveis)
                                     └──< ClassPostCopy >── Assignment/Exam/CalendarEvent
@@ -197,9 +196,9 @@ o dado dele sem que o sistema precise travar campo nenhum.
 **As notas continuam privadas por construção**, não por regra lembrada: a
 `Grade` pendura na `Subject` do membro, e a API da turma nunca expõe nota.
 
-**O que é compartilhado de verdade** (sem cópia): avisos, anotações,
-materiais, membros e convites. São superfícies novas, sem estado por usuário,
-e não conflitam com nada.
+**O que é compartilhado de verdade** (sem cópia): avisos, materiais, membros
+e convites. São superfícies novas, sem estado por usuário, e não conflitam
+com nada.
 
 **Materiais não sofrem *fan-out*** — duplicar 40 vezes um PDF de 8 MB no R2 é
 desperdício direto de dinheiro. `ClassMaterial` é linha única, reaproveitando o
@@ -219,7 +218,7 @@ interface para um caso que ainda não existe; adicionar depois é aditivo
 | Editar a turma, adicionar/remover disciplinas | ✅ | — |
 | Convidar, remover membros, revogar convite | ✅ | — |
 | Publicar atividade, prova, evento | ✅ | — |
-| Publicar aviso e anotação | ✅ | — |
+| Publicar aviso | ✅ | — |
 | **Publicar material** | ✅ | ✅ |
 | Excluir material | qualquer | só o próprio |
 | Arquivar/desarquivar a turma (ver Etapa 24 — substitui excluir) | ✅ | — |
@@ -281,7 +280,6 @@ migração aditiva. É mais um argumento a favor da cópia.
 | Transferência de OWNER | **IMPORTANTE** | representante muda todo semestre |
 | Notificações da turma | **IMPORTANTE** | quase de graça (acima) |
 | QR Code | **IMPORTANTE** | frontend puro |
-| Anotações da turma | **IMPORTANTE** | Tiptap já existente, **um autor** — nada colaborativo |
 | Fixar aviso | **IMPORTANTE** | um booleano |
 | Comentários em avisos | **FUTURO** | vira moderação, denúncia, notificação — projeto próprio |
 | Feed | **FUTURO** | ou tabela de eventos, ou união cara de 5 tabelas; a Visão geral entrega 80% |
@@ -322,9 +320,10 @@ provas que precisam concordar — exatamente o bug de médias divergentes que a
 Etapa 17 existiu para consertar. A Visão geral mostra o recorte próximo; o
 resto é o módulo normal, filtrável por turma.
 
-**"Mural" reúne avisos e anotações** — são a mesma coisa em dois formatos
-(efêmero e duradouro), e duas abas para dois tipos de texto é navegação
-desperdiçada.
+**"Mural" hoje é só avisos.** Nasceu planejado para reunir avisos e
+anotações (efêmero e duradouro, a mesma ideia em dois formatos), mas
+anotações não chegou a ser usada e foi removida — ver a nota na Etapa 22
+abaixo.
 
 **Convidar** abre um popover com código, link e QR juntos: três formas do mesmo
 convite, não três funcionalidades.
@@ -444,6 +443,12 @@ contra o banco e o servidor HTTP rodando, cobrindo os três pontos do Aceite
 mais o padrão de permissão das anotações e o 404 (nunca 403) para
 não-membro: 22 asserções, todas passando.
 
+> **Nota de remoção (pós-Etapa 31).** Anotações (`ClassNote`) não chegou a
+> ser usada na prática e foi removida por completo — modelo, rotas,
+> serviço, tela. `ClassAnnouncement` (Avisos) não foi tocado; o Mural
+> continua existindo, só que com uma seção a menos. Nenhum dado real
+> existia na tabela no momento da remoção.
+
 #### Etapa 23 — Materiais compartilhados ✅
 
 **Banco.** `ClassMaterial`. Sem *fan-out* — blob único, dono é a turma (`classId`),
@@ -490,8 +495,8 @@ contra o banco e o servidor HTTP rodando: 16 asserções, incluindo o
   `Class.ownerId`. Não pode transferir para si mesmo nem para não-membro.
 - `classService.archive`/`unarchive`: alterna `Class.archivedAt` (o campo já
   existia desde a Etapa 20). Turma arquivada bloqueia convite, entrada e
-  publicação nova (post, aviso, anotação, material) via `assertNotArchived`
-  nos quatro services de publicação; leitura, download e sair continuam
+  publicação nova (post, aviso, material) via `assertNotArchived` nos
+  services de publicação; leitura, download e sair continuam
   liberados. Substitui "excluir a turma" da tabela de papéis — mesmo espírito
   de "excluir disciplina arquiva por padrão", sem dado nenhum apagado, e é
   também a saída de um dono sozinho na turma (sem outro membro para
