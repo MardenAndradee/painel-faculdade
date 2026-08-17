@@ -28,6 +28,7 @@ import { AppError } from '../utils/app-error.js';
 import { hashToken, randomToken } from '../utils/crypto.js';
 import { hashPassword, verifyPassword } from '../utils/password.js';
 import { isAccountLocked, resolveGoogleLogin } from '../utils/google-link-resolution.js';
+import { isWithinReuseGrace } from '../utils/refresh-token-grace.js';
 import {
   durationToSeconds,
   signAccessToken,
@@ -64,6 +65,15 @@ const PASSWORD_LOCK_DURATION_MS = 15 * 60 * 1000;
 const VERIFY_EMAIL_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 /** Curto de proposito: token de redefinicao de senha e sensivel (R6). */
 const RESET_PASSWORD_TOKEN_TTL_MS = 60 * 60 * 1000;
+
+/**
+ * Janela de tolerancia na deteccao de reuso do refresh token (Etapa 33).
+ * Ver docs/planning/refresh-token-grace-period.md para o racional - curta o
+ * bastante pra nao abrir brecha real de seguranca, longa o bastante pra
+ * cobrir uma renovacao legitima que se perdeu (rede instavel, app suspenso
+ * no meio do caminho).
+ */
+const REFRESH_TOKEN_REUSE_GRACE_MS = 30 * 1000;
 
 /** Converte a entidade do banco no formato publico, sem campos sensiveis. */
 function toAuthUser(user: User): AuthUser {
@@ -629,11 +639,20 @@ export const authService = {
    * Rotaciona a sessao: valida o refresh token, revoga o atual e emite um novo par.
    *
    * Reapresentar um token ja revogado indica roubo - nesse caso todas as
-   * sessoes do usuario sao derrubadas, forcando novo login.
+   * sessoes do usuario sao derrubadas, forcando novo login. Excecao: dentro
+   * da janela de tolerancia (Etapa 33) logo apos a revogacao original, e
+   * mais provavel ser um retry da propria rotacao legitima (resposta
+   * perdida, app suspenso no meio) do que um ataque de verdade - nesse
+   * caso emite sessao nova sem revogar o registro de novo (revogar de novo
+   * reiniciaria `revokedAt` e estenderia a janela indefinidamente).
+   *
+   * `now` e injetavel pra testar a borda exata da janela sem mexer no
+   * relogio da maquina - mesmo padrao de `notificationService.generatePending`.
    */
   async refreshSession(
     token: string,
     context: SessionContext,
+    now = new Date(),
   ): Promise<{ session: AuthSession; refreshToken: string }> {
     const payload = verifyRefreshToken(token);
     const record = await refreshTokenRepository.findByHash(hashToken(token));
@@ -643,6 +662,20 @@ export const authService = {
     }
 
     if (record.revokedAt) {
+      if (isWithinReuseGrace(record.revokedAt, now, REFRESH_TOKEN_REUSE_GRACE_MS)) {
+        logger.info('Reuso de refresh token dentro da janela de tolerancia - tratado como retry', {
+          userId: record.userId,
+        });
+
+        const user = await userRepository.findById(record.userId);
+
+        if (!user) {
+          throw AppError.unauthorized('Usuario nao encontrado');
+        }
+
+        return issueSession(user, context);
+      }
+
       logger.warn('Reuso de refresh token detectado', { userId: record.userId });
       await refreshTokenRepository.revokeAllForUser(record.userId);
 

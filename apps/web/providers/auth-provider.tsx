@@ -43,6 +43,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const renewalTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /**
+   * Instante (epoch ms) em que a renovacao agendada deveria disparar -
+   * usado pelo listener de `visibilitychange` abaixo (Etapa 33.2) pra saber
+   * se o `setTimeout` ficou pausado e atrasou.
+   */
+  const renewalDueAt = useRef<number | null>(null);
+
+  /**
    * Referencia a rotina de renovacao.
    *
    * O agendamento e a rotina se chamam mutuamente; o ref quebra esse ciclo sem
@@ -55,6 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       clearTimeout(renewalTimer.current);
       renewalTimer.current = null;
     }
+    renewalDueAt.current = null;
   }, []);
 
   const scheduleRenewal = useCallback(
@@ -63,6 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Renova 1 minuto antes de expirar (nunca menos que 10 segundos).
       const delay = Math.max((expiresIn - 60) * 1000, 10_000);
+      renewalDueAt.current = Date.now() + delay;
 
       renewalTimer.current = setTimeout(() => {
         void restoreSessionRef.current();
@@ -103,6 +112,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return clearRenewalTimer;
   }, [clearRenewalTimer]);
+
+  /**
+   * Etapa 33.2 - complementa a janela de tolerancia do backend (Etapa 33.1)
+   * reduzindo a FREQUENCIA da corrida, nao so tornando-a inofensiva quando
+   * acontece. Um `setTimeout` fica pausado com o app em segundo plano e
+   * dispara tarde, logo apos voltar ao primeiro plano - justamente a janela
+   * em que uma renovacao comecando bem na hora de o app ser suspenso de
+   * novo tem mais chance de se perder no meio do caminho. Ao voltar a ficar
+   * visivel, se a renovacao agendada ja deveria ter rodado, dispara na
+   * hora em vez de esperar o timer atrasado.
+   */
+  useEffect(() => {
+    const onVisibilityChange = (): void => {
+      if (document.visibilityState !== 'visible') return;
+      if (renewalDueAt.current === null) return;
+      if (Date.now() < renewalDueAt.current) return;
+
+      void restoreSessionRef.current();
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, []);
 
   const logout = useCallback(async (): Promise<void> => {
     clearRenewalTimer();

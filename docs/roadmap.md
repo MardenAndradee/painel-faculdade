@@ -34,6 +34,6 @@
 | 30 | Semestre como hierarquia central: Turma passa a referenciar Semestre de verdade, Período do curso (1-8), ação "Finalizar semestre" e limite de uma turma ativa por aluno (ver [documentação](modules/turmas.md)) | ✅ |
 | 31 | Semestre automático: elimina o cadastro manual de semestre, sempre calculado pela data atual (ver [documentação](modules/historico.md)) | ✅ |
 | 32 | Turma: vira semestre/período automaticamente pelo calendário, removendo a ação manual "Finalizar semestre" (mesmo princípio da Etapa 31, aplicado à turma) (ver [planejamento](planning/turma-semestre-automatico.md)) | 🚧 planejado |
-| 33 | Janela de tolerância na rotação do refresh token: evita que uma corrida legítima (retry de rede, app suspenso em segundo plano) derrube a sessão de outros aparelhos (ver [planejamento](planning/refresh-token-grace-period.md)) | 🚧 planejado |
+| 33 | Janela de tolerância na rotação do refresh token: evita que uma corrida legítima (retry de rede, app suspenso em segundo plano) derrube a sessão de outros aparelhos (ver [documentação](modules/autenticacao.md)) | ✅ |
 
 Contribuições: veja [CONTRIBUTING.md](CONTRIBUTING.md).
