@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ListChecks, Loader2, Plus } from 'lucide-react';
+import { Loader2, Plus } from 'lucide-react';
 import {
   createSubjectSchema,
   isCurrentSemester,
@@ -20,7 +20,6 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { FormField } from '@/components/ui/form-field';
 import { ColorPicker } from './color-picker';
-import { GradeTemplateDialog } from '@/components/grades/grade-template-dialog';
 import {
   Dialog,
   DialogContent,
@@ -66,7 +65,6 @@ export function SubjectFormDialog({ open, onOpenChange, subject }: SubjectFormDi
   const updateSubject = useUpdateSubject();
 
   const [teacherMode, setTeacherMode] = useState<string>(NO_TEACHER);
-  const [templateOpen, setTemplateOpen] = useState(false);
 
   // Tres generics: valores do formulario (entrada), contexto e valores
   // transformados (saida do Zod, com os defaults ja aplicados).
@@ -75,7 +73,6 @@ export function SubjectFormDialog({ open, onOpenChange, subject }: SubjectFormDi
     handleSubmit,
     control,
     reset,
-    watch,
     formState: { errors, isSubmitting },
   } = useForm<SubjectFormValues, unknown, CreateSubjectInput>({
     resolver: zodResolver(createSubjectSchema),
@@ -124,12 +121,6 @@ export function SubjectFormDialog({ open, onOpenChange, subject }: SubjectFormDi
       setTeacherMode(NO_TEACHER);
     }
   }, [open, subject, semesters, reset]);
-
-  // Configurar o modelo de notas do semestre faz mais sentido aqui do que no
-  // Histórico: é justamente ao escolher o semestre de uma disciplina nova que
-  // a pergunta "que componentes essa disciplina já devia trazer?" aparece.
-  const selectedSemesterId = watch('semesterId');
-  const selectedSemester = semesters.find((semester) => semester.id === selectedSemesterId);
 
   const onSubmit = handleSubmit(async (values) => {
     // Traduz o modo escolhido no Select para os campos que a API espera.
@@ -208,17 +199,6 @@ export function SubjectFormDialog({ open, onOpenChange, subject }: SubjectFormDi
                 )}
               </FormField>
             </div>
-
-            {selectedSemester && (
-              <button
-                type="button"
-                onClick={() => setTemplateOpen(true)}
-                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-              >
-                <ListChecks className="size-3.5" aria-hidden />
-                Configurar modelo de notas de {selectedSemester.name}
-              </button>
-            )}
 
             <FormField label="Professor" error={errors.newTeacherName?.message}>
               {(field) => (
@@ -324,18 +304,6 @@ export function SubjectFormDialog({ open, onOpenChange, subject }: SubjectFormDi
           </form>
         </DialogContent>
       </Dialog>
-
-      {selectedSemester && (
-        <GradeTemplateDialog
-          open={templateOpen}
-          onOpenChange={setTemplateOpen}
-          target={{
-            type: 'semester',
-            semesterId: selectedSemester.id,
-            semesterName: selectedSemester.name,
-          }}
-        />
-      )}
     </>
   );
 }

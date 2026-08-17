@@ -33,7 +33,6 @@ import { ExamList } from '@/components/exams/exam-list';
 import { SubjectGradesCard } from '@/components/grades/subject-grades-card';
 import { GradeFormDialog } from '@/components/grades/grade-form-dialog';
 import { GradeQuickEntryDialog } from '@/components/grades/grade-quick-entry-dialog';
-import { GradeConfigurationDialog } from '@/components/grades/grade-configuration-dialog';
 import { GradeSimulationDialog } from '@/components/grades/grade-simulation-dialog';
 import { NotesPanel } from '@/components/notes/notes-panel';
 import { AttachmentList } from '@/components/materials/attachment-list';
@@ -64,7 +63,6 @@ export default function SubjectDetailPage({ params }: { params: Promise<{ id: st
   const [linkOpen, setLinkOpen] = useState(false);
   const [gradeFormOpen, setGradeFormOpen] = useState(false);
   const [editingGrade, setEditingGrade] = useState<GradeListItem | null>(null);
-  const [gradeConfigOpen, setGradeConfigOpen] = useState(false);
   const [gradeSimOpen, setGradeSimOpen] = useState(false);
   const [gradeQuickEntryOpen, setGradeQuickEntryOpen] = useState(false);
 
@@ -307,7 +305,6 @@ export default function SubjectDetailPage({ params }: { params: Promise<{ id: st
                 setEditingGrade(grade);
                 setGradeFormOpen(true);
               }}
-              onConfigure={() => setGradeConfigOpen(true)}
               onSimulate={() => setGradeSimOpen(true)}
             />
           ) : (
@@ -410,13 +407,6 @@ export default function SubjectDetailPage({ params }: { params: Promise<{ id: st
         onOpenChange={setGradeFormOpen}
         grade={editingGrade}
         defaultSubjectId={subject.id}
-      />
-
-      <GradeConfigurationDialog
-        open={gradeConfigOpen}
-        onOpenChange={setGradeConfigOpen}
-        subjectId={subject.id}
-        subjectName={subject.name}
       />
 
       <GradeSimulationDialog

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Calculator, Pencil, Plus, Settings } from 'lucide-react';
+import { Calculator, Pencil, Plus } from 'lucide-react';
 import {
   SUBJECT_GRADE_STATUS_LABELS,
   type GradeListItem,
@@ -15,7 +15,6 @@ interface SubjectGradeSummaryCardProps {
   summary: SubjectGradeSummary;
   onAddGrade: (subjectId: string) => void;
   onEditGrade: (grade: GradeListItem) => void;
-  onConfigure: (subjectId: string) => void;
   onSimulate: (subjectId: string) => void;
 }
 
@@ -44,13 +43,12 @@ function footerLabel(summary: SubjectGradeSummary): string {
  * Mais compacto que `SubjectGradesCard` (usado no boletim completo da
  * disciplina): mostra os componentes como uma grade de mini-cards, não uma
  * lista editável - editar/excluir uma nota específica continua na tela da
- * disciplina, aqui é só visão geral + atalho para lançar e configurar.
+ * disciplina, aqui é só visão geral + atalho para lançar e simular.
  */
 export function SubjectGradeSummaryCard({
   summary,
   onAddGrade,
   onEditGrade,
-  onConfigure,
   onSimulate,
 }: SubjectGradeSummaryCardProps) {
   const { subject, average, grades, pendingComponents, status } = summary;
@@ -160,18 +158,6 @@ export function SubjectGradeSummaryCard({
             aria-label={`Simular notas de ${subject.name}`}
           >
             <Calculator className="size-4" aria-hidden />
-          </Button>
-
-          {/* Configurar continua acessível pela tela da disciplina - some só
-              aqui no mobile, onde o espaço é mais disputado. */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="hidden size-7 text-muted-foreground sm:inline-flex"
-            onClick={() => onConfigure(subject.id)}
-            aria-label={`Configurar notas de ${subject.name}`}
-          >
-            <Settings className="size-4" aria-hidden />
           </Button>
 
           <Button

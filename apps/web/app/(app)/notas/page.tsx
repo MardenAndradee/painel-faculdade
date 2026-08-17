@@ -13,7 +13,6 @@ import { GradeProgressRing } from '@/components/grades/grade-progress-ring';
 import { SubjectGradeSummaryCard } from '@/components/grades/subject-grade-summary-card';
 import { GradeFormDialog } from '@/components/grades/grade-form-dialog';
 import { GradeQuickEntryDialog } from '@/components/grades/grade-quick-entry-dialog';
-import { GradeConfigurationDialog } from '@/components/grades/grade-configuration-dialog';
 import { GradeSimulationDialog } from '@/components/grades/grade-simulation-dialog';
 import { formatGrade } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -31,7 +30,6 @@ export default function GradesPage() {
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<GradeListItem | null>(null);
-  const [configuringSubjectId, setConfiguringSubjectId] = useState<string | null>(null);
   const [simulatingSubjectId, setSimulatingSubjectId] = useState<string | null>(null);
   const [quickEntrySubjectId, setQuickEntrySubjectId] = useState<string | null>(null);
 
@@ -44,11 +42,6 @@ export default function GradesPage() {
     setEditing(grade);
     setFormOpen(true);
   };
-
-  const configuringSubject = useMemo(
-    () => data?.subjects.find((summary) => summary.subject.id === configuringSubjectId)?.subject,
-    [data, configuringSubjectId],
-  );
 
   const simulatingSubject = useMemo(
     () => data?.subjects.find((summary) => summary.subject.id === simulatingSubjectId)?.subject,
@@ -219,7 +212,6 @@ export default function GradesPage() {
                 summary={summary}
                 onAddGrade={setQuickEntrySubjectId}
                 onEditGrade={openEdit}
-                onConfigure={setConfiguringSubjectId}
                 onSimulate={setSimulatingSubjectId}
               />
             ))}
@@ -228,15 +220,6 @@ export default function GradesPage() {
       )}
 
       <GradeFormDialog open={formOpen} onOpenChange={setFormOpen} grade={editing} />
-
-      {configuringSubject && (
-        <GradeConfigurationDialog
-          open={Boolean(configuringSubjectId)}
-          onOpenChange={(open) => !open && setConfiguringSubjectId(null)}
-          subjectId={configuringSubject.id}
-          subjectName={configuringSubject.name}
-        />
-      )}
 
       {simulatingSubject && (
         <GradeSimulationDialog

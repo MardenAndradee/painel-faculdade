@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Calculator, EllipsisVertical, Pencil, Plus, Settings, Target, Trash2 } from 'lucide-react';
+import { Calculator, EllipsisVertical, Pencil, Plus, Target, Trash2 } from 'lucide-react';
 import type { GradeListItem, SubjectGradeSummary } from '@painel/shared';
 import { SUBJECT_GRADE_STATUS_LABELS } from '@painel/shared';
 import { useDeleteGrade } from '@/hooks/use-grades';
@@ -30,7 +30,6 @@ interface SubjectGradesCardProps {
   summary: SubjectGradeSummary;
   onAddGrade: (subjectId: string) => void;
   onEditGrade: (grade: GradeListItem) => void;
-  onConfigure: (subjectId: string) => void;
   onSimulate: (subjectId: string) => void;
 }
 
@@ -56,7 +55,6 @@ export function SubjectGradesCard({
   summary,
   onAddGrade,
   onEditGrade,
-  onConfigure,
   onSimulate,
 }: SubjectGradesCardProps) {
   const [deleting, setDeleting] = useState<GradeListItem | null>(null);
@@ -111,16 +109,6 @@ export function SubjectGradesCard({
             aria-label={`Simular notas de ${subject.name}`}
           >
             <Calculator className="size-4" aria-hidden />
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-7"
-            onClick={() => onConfigure(subject.id)}
-            aria-label={`Configurar notas de ${subject.name}`}
-          >
-            <Settings className="size-4" aria-hidden />
           </Button>
 
           <Button
