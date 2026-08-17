@@ -39,7 +39,7 @@ de desenvolvimento. Nada foi perdido na mudança — só reorganizado.
 
 ### Planejamento (features aprovadas ou em análise, ainda não implementadas)
 
-- [planning/pwa.md](planning/pwa.md) — instalação no celular, Service Worker, cache, offline e Push Notifications (Etapa 28.1 já implementada, resto planejado)
+Nenhum plano solto em `planning/` no momento — o único item pendente do roadmap (Etapa 25, envio de e-mail) está detalhado inteiro dentro de [modules/turmas.md](modules/turmas.md), por estar acoplado à publicação de avisos e ao convite por e-mail daquele módulo.
 
 ## Convenção
 

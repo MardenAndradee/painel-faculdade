@@ -38,7 +38,7 @@ packages/shared/src/     # enums, schemas Zod, tipos — consumidos por api E we
 ```
 
 - **Entry points:** `apps/api/src/server.ts` (app montada em `apps/api/src/app.ts`) · `apps/web/app/`
-- **Onde ficam as specs/docs:** `docs/INDEX.md` é o hub → `architecture.md`, `setup.md`, `testing.md`, `deploy.md`, `code-standards.md`, `roadmap.md`, `planning/pwa.md`, e um `docs/modules/<nome>.md` por módulo de produto (autenticação, turmas, notas, flashcards, google-calendar, google-classroom, etc.). **Leia o módulo relevante antes de mexer numa feature.**
+- **Onde ficam as specs/docs:** `docs/INDEX.md` é o hub → `architecture.md`, `setup.md`, `testing.md`, `deploy.md`, `code-standards.md`, `roadmap.md`, e um `docs/modules/<nome>.md` por módulo de produto (autenticação, turmas, notas, flashcards, google-calendar, google-classroom, pwa, etc.). **Leia o módulo relevante antes de mexer numa feature.**
 
 ## Convenções deste repo
 

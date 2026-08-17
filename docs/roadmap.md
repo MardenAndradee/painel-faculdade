@@ -31,7 +31,7 @@
 | 27 | Plano de Estudos: espaço de preparação por prova, com flashcards, materiais e cronograma integrados (ver [documentação](modules/plano-de-estudos.md)) | ✅ |
 | 28 | PWA: instalação no celular, Service Worker, offline básico, navegação inferior mobile e Push Notifications (ver [documentação](modules/pwa.md)) | ✅ |
 | 29 | Módulos configuráveis: Configurações, ativar/desativar módulos sem perder dados, simplificação de Sidebar e Dashboard (ver [documentação](modules/modulos-configuraveis.md)) | ✅ |
-| 30 | Semestre como hierarquia central: Turma passa a referenciar Semestre de verdade, Período do curso (1-8), ação "Finalizar semestre" e limite de uma turma ativa por aluno (ver [planejamento](planning/semestre-turma.md)) | ✅ |
-| 31 | Semestre automático: elimina o cadastro manual de semestre, sempre calculado pela data atual (ver [planejamento](planning/semestre-automatico.md)) | ✅ |
+| 30 | Semestre como hierarquia central: Turma passa a referenciar Semestre de verdade, Período do curso (1-8), ação "Finalizar semestre" e limite de uma turma ativa por aluno (ver [documentação](modules/turmas.md)) | ✅ |
+| 31 | Semestre automático: elimina o cadastro manual de semestre, sempre calculado pela data atual (ver [documentação](modules/historico.md)) | ✅ |
 
 Contribuições: veja [CONTRIBUTING.md](CONTRIBUTING.md).

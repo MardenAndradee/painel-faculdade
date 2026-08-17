@@ -1,12 +1,11 @@
 # Turmas
 
-> **Status: implementado**, salvo a Etapa 25 (envio de e-mail, ainda só planejada — ver
-> `docs/roadmap.md`). A hierarquia de Semestre/Período descrita neste documento (`Class`
+> **Status: implementado**, salvo a Etapa 25 (envio de e-mail, ainda só planejada — ver a seção
+> própria mais abaixo). A hierarquia de Semestre/Período descrita neste documento (`Class`
 > referenciando um `Semester` de verdade, `period` 1-8, "Finalizar semestre", aba Histórico da
 > turma, limite de uma turma ativa por usuário) foi adicionada depois, na Etapa 30 do roadmap
-> global — plano completo e decisões em `docs/planning/semestre-turma.md`. O texto abaixo já
-> descreve o estado atual, pós-Etapa 30; a numeração "Etapa 20-26" usada no restante deste
-> documento é interna deste módulo, não a numeração do roadmap global.
+> global. O texto abaixo já descreve o estado atual, pós-Etapa 30; a numeração "Etapa 20-26"
+> usada no restante deste documento é interna deste módulo, não a numeração do roadmap global.
 
 Uma turma é um **grupo de pessoas de um período**, não de uma disciplina:
 "7º Período — 2026.2" reúne Redes, Banco de Dados, IA, Compiladores e TCC.
