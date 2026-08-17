@@ -55,10 +55,6 @@ export const classPostRepository = {
     return prisma.classPost.findFirst({ where: { id, classId }, select: postSelect });
   },
 
-  countByClass(classId: string, semesterId?: string): Promise<number> {
-    return prisma.classPost.count({ where: { classId, ...(semesterId ? { semesterId } : {}) } });
-  },
-
   /** Publicações de ciclos anteriores (Etapa 30.8) - tudo, exceto o semestre atual da turma. */
   listOutsideSemester(classId: string, currentSemesterId: string): Promise<ClassPostRow[]> {
     return prisma.classPost.findMany({

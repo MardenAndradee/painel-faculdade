@@ -2,10 +2,12 @@
 
 > **Status: implementado**, salvo a Etapa 25 (envio de e-mail, ainda só planejada — ver a seção
 > própria mais abaixo). A hierarquia de Semestre/Período descrita neste documento (`Class`
-> referenciando um `Semester` de verdade, `period` 1-8, "Finalizar semestre", aba Histórico da
-> turma, limite de uma turma ativa por usuário) foi adicionada depois, na Etapa 30 do roadmap
-> global. O texto abaixo já descreve o estado atual, pós-Etapa 30; a numeração "Etapa 20-26"
-> usada no restante deste documento é interna deste módulo, não a numeração do roadmap global.
+> referenciando um `Semester` de verdade, `period` 1-8, aba Histórico da turma, limite de uma
+> turma ativa por usuário) foi adicionada depois, na Etapa 30 do roadmap global. A virada de
+> ciclo, inicialmente uma ação manual do dono ("Finalizar semestre"), passou a ser automática na
+> Etapa 32 — ver "Virada automática do ciclo" mais abaixo. O texto abaixo já descreve o estado
+> atual, pós-Etapa 32; a numeração "Etapa 20-26" usada no restante deste documento é interna
+> deste módulo, não a numeração do roadmap global.
 
 Uma turma é um **grupo de pessoas de um período**, não de uma disciplina:
 "7º Período — 2026.2" reúne Redes, Banco de Dados, IA, Compiladores e TCC.
@@ -94,14 +96,49 @@ mudou porque a Etapa 31 tirou a criação manual de semestre do app inteiro).
 
 `Class.period` é um contador **separado** de `Semester.term`: `term` é a metade do ano civil
 (1 ou 2), `period` é o progresso cumulativo no curso (1º a 8º). Os dois avançam juntos, sempre
-+1, só através da ação **"Finalizar semestre"** (`POST /classes/:id/finish-semester`, só o
-dono) — nunca por edição direta (`PATCH /classes/:id` aceita `period`, mas não `semesterId`).
-Finalizar não apaga nada: `ClassSubject`/`ClassPost` do ciclo que terminou mantêm o `semesterId`/
-`period` antigos (são gravados no momento da criação e nunca mudam depois) e saem da aba principal
-da turma para a aba **Histórico** (`GET /classes/:id/history`, aberta a qualquer membro ativo,
-não só o dono) — mesmo espírito de "excluir disciplina arquiva por padrão": nada some, só muda de
-lugar. O ciclo novo começa sem disciplinas nem publicações; não há cópia automática do anterior
-(decisão explícita).
+pelo delta certo (nunca por edição direta — `PATCH /classes/:id` aceita `period`, mas não
+`semesterId`), via **virada automática** (Etapa 32, ver seção própria abaixo). Virar não apaga
+nada: `ClassSubject`/`ClassPost` do ciclo que terminou mantêm o `semesterId`/`period` antigos (são
+gravados no momento da criação e nunca mudam depois) e saem da aba principal da turma para a aba
+**Histórico** (`GET /classes/:id/history`, aberta a qualquer membro ativo, não só o dono) — mesmo
+espírito de "excluir disciplina arquiva por padrão": nada some, só muda de lugar. O ciclo novo
+começa sem disciplinas nem publicações; não há cópia automática do anterior (decisão explícita).
+
+### Virada automática do ciclo (Etapa 32)
+
+Até a Etapa 30, a virada de ciclo era uma ação manual do dono ("Finalizar semestre",
+`POST /classes/:id/finish-semester`) — sem nenhuma validação contra o calendário: o dono podia
+finalizar em qualquer dia do ano, inclusive várias vezes seguidas, adiantando a turma inteira (e
+o semestre pessoal de cada membro ativo) em relação ao calendário real, sem nenhum aviso. A Etapa
+32 fecha essa brecha aplicando à Turma a mesma decisão que a Etapa 31 já tinha aplicado ao
+semestre pessoal: a virada deixa de ser algo que alguém pode esquecer ou disparar fora de hora, e
+passa a ser um fato do calendário.
+
+`classService.ensureCurrentCycle(classId)` compara o `(year, term)` do semestre atual da turma
+com `getCurrentSemesterKey(hoje)` (mesma função do semestre pessoal). Quando bate, não faz nada —
+o caso comum, uma leitura barata. Quando a turma ficou pra trás, calcula `termsBetween` (pode ser
+mais de um semestre, se a turma ficou parada vários períodos) e pula **direto** pro semestre
+certo, somando o delta inteiro no `period` de uma vez — nunca gera ciclos intermediários
+quase-vazios no Histórico.
+
+É chamada em todo ponto de entrada que lê o estado da turma, não só a tela principal:
+
+| Ponto | Por quê |
+| --- | --- |
+| `classGuard` (middleware) | Cobre toda rota `/classes/:id/...` numa linha só |
+| `classMembershipService.join` | Entrada por convite é por token, não passa pelo `classGuard` |
+| `classService.previewInvite` | A prévia do convite (antes de aceitar) precisa refletir o ciclo real |
+| `classService.list` | Mostra o period/semestre certo mesmo sem visitar o detalhe (no máximo 1 turma por usuário) |
+
+O efeito colateral (mover conteúdo pra Histórico) pode ser disparado pela leitura de **qualquer**
+membro ativo agora, não só do dono — aceitável, porque deixou de ser uma decisão de alguém: é um
+fato do calendário. **Corrida entre requisições simultâneas:** o `update` final é condicional
+(`classRepository.advanceCycle`, um `updateMany` filtrado por `WHERE semesterId = <antigo>`) —
+quem chegar primeiro avança; o segundo vê `count: 0`, não duplica.
+
+Transparência sem ação manual (Etapa 32.3): a tela da turma mostra, só pro dono, um texto pequeno
+e discreto ("Próxima virada automática: 01/07/2026 · 8º período" — `GET /classes/:id/next-cycle`)
+para não parecer que "sumiu" o controle, mas sem nenhum botão ou convite pra interagir.
 
 **Uma turma ativa por vez.** Desde a Etapa 30, um usuário (dono ou membro) só pode ter uma
 participação `ACTIVE` em turmas não-arquivadas simultaneamente — `class.service.create` e
@@ -223,7 +260,7 @@ interface para um caso que ainda não existe; adicionar depois é aditivo
 | Excluir material | qualquer | só o próprio |
 | Arquivar/desarquivar a turma (ver Etapa 24 — substitui excluir) | ✅ | — |
 | Transferir propriedade (Etapa 24) | ✅ | — |
-| Finalizar semestre (Etapa 30) | ✅ | — |
+| Ver "Próxima virada automática" (Etapa 32.3) | ✅ | — |
 | Ver aba Histórico (Etapa 30) | ✅ | ✅ |
 | Sair da turma | (transfere antes, ou arquiva) | ✅ |
 
@@ -292,14 +329,14 @@ migração aditiva. É mais um argumento a favor da cópia.
 ### Layout
 
 Cinco abas, e não oito — mais uma sexta, **Histórico**, adicionada na Etapa 30 pra guardar os
-ciclos que "Finalizar semestre" já encerrou. "Turmas" entra na seção Geral da sidebar; desde a
-Etapa 30.2, o link já leva direto pra visão geral da turma quando o usuário tem uma (no máximo
-uma ativa por vez), sem passar pela listagem.
+ciclos que a virada automática (Etapa 32) já encerrou. "Turmas" entra na seção Geral da sidebar;
+desde a Etapa 30.2, o link já leva direto pra visão geral da turma quando o usuário tem uma (no
+máximo uma ativa por vez), sem passar pela listagem.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
 │  ▌ 7º Período — 2026.2          Sistemas de Informação  │
-│    6 disciplinas · 24 membros    [Editar] [Finalizar semestre] [Convidar ▾] │
+│    6 disciplinas · 24 membros              [Editar] [Convidar ▾] │
 ├───────────────────────────────────────────────────────────────────┤
 │  Visão geral │ Mural │ Disciplinas │ Materiais │ Membros │ Histórico │
 └───────────────────────────────────────────────────────────────────┘

@@ -2,13 +2,12 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import {
-  defaultSemesterName,
-  type ClassSubjectInput,
-  type CreateClassInput,
-  type CreateClassInviteInput,
-  type TransferClassOwnerInput,
-  type UpdateClassInput,
+import type {
+  ClassSubjectInput,
+  CreateClassInput,
+  CreateClassInviteInput,
+  TransferClassOwnerInput,
+  UpdateClassInput,
 } from '@painel/shared';
 import { classService } from '@/services/class.service';
 import { subjectKeys } from './use-subjects';
@@ -32,7 +31,7 @@ export const classKeys = {
   invites: (id: string) => ['classes', 'invites', id] as const,
   invitePreview: (token: string) => ['classes', 'invite-preview', token] as const,
   health: (id: string) => ['classes', 'health', id] as const,
-  finishSemesterPreview: (id: string) => ['classes', 'finish-semester-preview', id] as const,
+  nextCycle: (id: string) => ['classes', 'next-cycle', id] as const,
   history: (id: string) => ['classes', 'history', id] as const,
 };
 
@@ -85,13 +84,15 @@ export function useClassHealth(id: string) {
   });
 }
 
-/** Prévia do "Finalizar semestre" (Etapa 30.5) - carrega só quando o diálogo abre. */
-export function useFinishSemesterPreview(id: string, enabled: boolean) {
+/**
+ * Transparência da próxima virada automática (Etapa 32.3) - só o dono
+ * enxerga (a rota já garante isso); texto discreto na tela da turma.
+ */
+export function useClassNextCycle(id: string, enabled: boolean) {
   return useQuery({
-    queryKey: classKeys.finishSemesterPreview(id),
-    queryFn: () => classService.finishSemesterPreview(id),
+    queryKey: classKeys.nextCycle(id),
+    queryFn: () => classService.nextCycle(id),
     enabled: enabled && Boolean(id),
-    staleTime: 0,
   });
 }
 
@@ -153,35 +154,6 @@ export function useUpdateClass() {
     },
     onError: (error) => {
       toast.error(errorMessage(error, 'Não foi possível salvar as alterações'));
-    },
-  });
-}
-
-/**
- * Avança a turma pro próximo semestre/período (Etapa 30.5).
- *
- * Mexe no `semesterId` pessoal de cada membro ativo (mesmo *fan-out* de
- * `useJoinClass`) - por isso usa `useInvalidateFanOut`, não só as chaves de
- * turma. Invalida também o Histórico: o ciclo que acabou de terminar passa a
- * aparecer lá.
- */
-export function useFinishSemester() {
-  const invalidateFanOut = useInvalidateFanOut();
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (id: string) => classService.finishSemester(id),
-    onSuccess: async (updated) => {
-      await Promise.all([
-        invalidateFanOut(),
-        queryClient.invalidateQueries({ queryKey: classKeys.history(updated.id) }),
-      ]);
-      toast.success(`Turma avançada para ${defaultSemesterName(updated)}`, {
-        description: `Agora no ${updated.period}º período. O ciclo anterior foi para o Histórico.`,
-      });
-    },
-    onError: (error) => {
-      toast.error(errorMessage(error, 'Não foi possível finalizar o semestre'));
     },
   });
 }

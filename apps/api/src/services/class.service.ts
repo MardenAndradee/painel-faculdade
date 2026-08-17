@@ -1,9 +1,9 @@
 import {
-  defaultSemesterName,
   getCurrentSemesterKey,
   nextSemesterKey,
+  semesterStartDate,
+  termsBetween,
   type ClassDetail,
-  type ClassFinishSemesterPreview,
   type ClassHealthSummary,
   type ClassHistory,
   type ClassHistoryCycle,
@@ -11,6 +11,7 @@ import {
   type ClassInviteItem,
   type ClassInvitePreview,
   type ClassMemberItem,
+  type ClassNextCycle,
   type ClassPostSummary,
   type ClassRole,
   type ClassSubjectInput,
@@ -168,6 +169,64 @@ async function assertNotArchived(classId: string): Promise<void> {
 }
 
 /**
+ * Vira o ciclo da turma sozinha quando o calendário já passou do semestre
+ * atual (Etapa 32) - substitui a antiga ação manual "Finalizar semestre"
+ * (Etapa 30.5, removida): a virada deixou de ser algo que o dono precisa
+ * lembrar de disparar (ou pode disparar fora de hora, adiantando a turma
+ * sem nenhuma validação contra o calendário), e passou a ser um fato,
+ * resolvido sozinho na primeira leitura que precisar dele - mesmo
+ * princípio já usado no semestre pessoal (Etapa 31) e no bootstrap de
+ * usuário novo.
+ *
+ * Chamada em todo ponto de entrada que lê o estado da turma - `classGuard`
+ * (cobre a rota `/classes/:id/...`), `classMembershipService.join` e
+ * `previewInvite` (entrada por convite não passa pelo `classGuard`) e
+ * `list` (mostra o period/semestre certo mesmo sem visitar o detalhe).
+ *
+ * Sem efeito quando a turma já está em dia (o caso comum) - só 1 leitura
+ * (`findCycle`), nenhuma escrita.
+ */
+async function ensureCurrentCycle(classId: string, now = new Date()): Promise<void> {
+  const cycle = await classRepository.findCycle(classId);
+
+  if (!cycle) return;
+
+  const currentKey = { year: cycle.semester.year, term: cycle.semester.term };
+  const targetKey = getCurrentSemesterKey(now);
+  const elapsedTerms = termsBetween(currentKey, targetKey);
+
+  if (elapsedTerms <= 0) return;
+
+  const members = await classRepository.listActiveMembersWithSemester(classId);
+
+  // Resolve o semestre-alvo de cada membro ativo (o dono incluso, como um
+  // deles) em paralelo - cada um mexe num usuário diferente, sem contenção
+  // entre si.
+  const memberSemesters = await Promise.all(
+    members.map(async (member) => ({
+      memberId: member.id,
+      userId: member.userId,
+      semesterId: (await semesterService.ensure(member.userId, targetKey)).id,
+    })),
+  );
+
+  const ownerNext = memberSemesters.find((entry) => entry.userId === cycle.ownerId);
+
+  // Dono sem ClassMember ativo não deveria acontecer (ele é membro desde a
+  // criação) - sem ele não há pra onde apontar `Class.semesterId`, então
+  // não há nada seguro a avançar.
+  if (!ownerNext) return;
+
+  await classRepository.advanceCycle(
+    classId,
+    cycle.semesterId,
+    ownerNext.semesterId,
+    cycle.period + elapsedTerms,
+    memberSemesters.map(({ memberId, semesterId }) => ({ memberId, semesterId })),
+  );
+}
+
+/**
  * Vincula direto por id em vez de casar por nome: o dono escolheu uma das
  * PRÓPRIAS disciplinas já existentes na hora de montar o molde, então não há
  * erro de digitação possível - só confere que a disciplina é mesmo dele e que
@@ -196,14 +255,27 @@ async function linkExistingSubject(
 }
 
 export const classService = {
+  /**
+   * No máximo uma turma por linha (limite de 1 turma ativa por usuário,
+   * Etapa 30.1) - mas ainda precisa estar em dia com o calendário (Etapa
+   * 32) antes de virar `ClassSummary`, senão o period/semestre mostrado
+   * aqui ficaria um passo atrás do que a tela de detalhe mostraria.
+   */
   async list(userId: string): Promise<ClassSummary[]> {
     const rows = await classRepository.findMyMemberships(userId);
 
-    return rows.map((row) => toSummary(row.role, row.class));
+    await Promise.all(rows.map((row) => ensureCurrentCycle(row.class.id)));
+
+    const refreshed = rows.length > 0 ? await classRepository.findMyMemberships(userId) : rows;
+
+    return refreshed.map((row) => toSummary(row.role, row.class));
   },
 
   /** Usado pelo `classGuard` - lanca 404 quando nao ha vinculo ativo. */
   assertMembership: requireMembership,
+
+  /** Usado pelo `classGuard` e por quem mais precisar garantir o ciclo em dia antes de ler a turma (Etapa 32). */
+  ensureCurrentCycle,
 
   async getById(userId: string, classId: string): Promise<ClassDetail> {
     const role = await requireMembership(userId, classId);
@@ -274,8 +346,9 @@ export const classService = {
   /**
    * Edita nome/cor/descrição/período. `semesterId` fica de fora de propósito
    * (Etapa 30, Decisão da 30.7) - a única forma sancionada de mudar o
-   * semestre/ciclo da turma é "Finalizar semestre" (`finishSemester`), pra
-   * nunca desalinhar `period` de `semesterId` por uma edição solta.
+   * semestre/ciclo da turma é a virada automática (`ensureCurrentCycle`,
+   * Etapa 32), pra nunca desalinhar `period` de `semesterId` por uma edição
+   * solta.
    */
   async update(userId: string, classId: string, input: UpdateClassInput): Promise<ClassDetail> {
     const role = await requireMembership(userId, classId);
@@ -293,89 +366,30 @@ export const classService = {
     return toDetail(role, row, myLinkedSubjectIds);
   },
 
-  // --- Finalizar semestre (Etapa 30.5) --------------------------------------------
-
-  /** Prévia: o próximo semestre/período e quanto ficará no Histórico, sem gravar nada. */
-  async finishSemesterPreview(
-    userId: string,
-    classId: string,
-  ): Promise<ClassFinishSemesterPreview> {
-    const role = await requireMembership(userId, classId);
-    requireOwner(role);
-
-    const row = await classRepository.findDetail(classId);
-
-    if (!row) throw AppError.notFound('Turma');
-
-    const next = nextSemesterKey({ year: row.semester.year, term: row.semester.term });
-    // Só o ciclo atual (Etapa 30.8) - senão, depois da 2a "Finalizar semestre"
-    // em diante, o preview soma ciclos que já foram pro Histórico.
-    const [subjectCount, postCount] = await Promise.all([
-      classRepository.countSubjects(classId, row.semesterId),
-      classPostRepository.countByClass(classId, row.semesterId),
-    ]);
-
-    return {
-      currentSemester: { year: row.semester.year, term: row.semester.term },
-      nextSemester: { ...next, name: defaultSemesterName(next) },
-      currentPeriod: row.period,
-      nextPeriod: row.period + 1,
-      subjectCount,
-      postCount,
-    };
-  },
+  // --- Virada automática (Etapa 32) -------------------------------------------------
 
   /**
-   * Avança a turma pro próximo semestre/período.
-   *
-   * Não cria `ClassSubject`/`ClassPost` novos (o ciclo novo começa vazio,
-   * decisão explícita) e não toca em `semesterService.close` de ninguém - as
-   * notas pessoais continuam sendo uma decisão de cada membro, no ritmo dele,
-   * em Histórico. O que já existe (moldes, publicações) permanece marcado com
-   * o `semesterId` antigo - é assim que a aba Histórico da turma separa
-   * "atual" de "ciclos anteriores" (Etapa 30.8).
+   * Transparência da próxima virada automática (Etapa 32.3) - leitura só
+   * pro dono, texto discreto na tela da turma. Garante o ciclo em dia
+   * primeiro pra "próximo período" nunca ficar um passo atrás do que a
+   * tela principal já mostra.
    */
-  async finishSemester(userId: string, classId: string): Promise<ClassDetail> {
+  async nextCycle(userId: string, classId: string): Promise<ClassNextCycle> {
     const role = await requireMembership(userId, classId);
     requireOwner(role);
-    await assertNotArchived(classId);
 
-    const row = await classRepository.findDetail(classId);
+    await ensureCurrentCycle(classId);
 
-    if (!row) throw AppError.notFound('Turma');
+    const cycle = await classRepository.findCycle(classId);
 
-    const next = nextSemesterKey({ year: row.semester.year, term: row.semester.term });
+    if (!cycle) throw AppError.notFound('Turma');
 
-    const members = await classRepository.listActiveMembersWithSemester(classId);
+    const next = nextSemesterKey({ year: cycle.semester.year, term: cycle.semester.term });
 
-    // Resolve o próximo semestre pessoal de cada membro ativo (o dono
-    // incluso, como um deles) em paralelo - cada um mexe num usuário
-    // diferente, sem contenção entre si.
-    const memberSemesters = await Promise.all(
-      members.map(async (member) => ({
-        memberId: member.id,
-        userId: member.userId,
-        semesterId: (await semesterService.ensure(member.userId, next)).id,
-      })),
-    );
-
-    const ownerNext = memberSemesters.find((entry) => entry.userId === userId);
-
-    if (!ownerNext) throw AppError.notFound('Turma');
-
-    // Grava o avanço da turma e de todo mundo numa única transação (Etapa
-    // 30.5) - um erro no meio não pode deixar a turma e os membros
-    // apontando pra ciclos diferentes.
-    const updated = await classRepository.advanceCycle(
-      classId,
-      ownerNext.semesterId,
-      row.period + 1,
-      memberSemesters.map(({ memberId, semesterId }) => ({ memberId, semesterId })),
-    );
-
-    const myLinkedSubjectIds = await classRepository.listMyLinkedSubjectIds(classId, userId);
-
-    return toDetail(role, updated, myLinkedSubjectIds);
+    return {
+      nextCutoverDate: semesterStartDate(next).toISOString(),
+      nextPeriod: cycle.period + 1,
+    };
   },
 
   async listMembers(userId: string, classId: string): Promise<ClassMemberItem[]> {
@@ -698,21 +712,26 @@ export const classService = {
   async previewInvite(userId: string, token: string): Promise<ClassInvitePreview> {
     const invite = await this.resolveValidInvite(token);
 
+    // Virada automática (Etapa 32) antes de tudo - a prévia precisa
+    // refletir o ciclo real, não um que ficou pra trás do calendário.
+    await ensureCurrentCycle(invite.classId);
+
+    const cycle = await classRepository.findCycle(invite.classId);
+
+    if (!cycle) throw AppError.notFound('Turma');
+
     const membership = await classRepository.findMembership(userId, invite.classId);
     const memberCount = await classRepository.countActiveMembers(invite.classId);
     // Só o ciclo atual - é o que quem entrar agora realmente vai receber.
-    const subjectCount = await classRepository.countSubjects(
-      invite.classId,
-      invite.class.semester.id,
-    );
+    const subjectCount = await classRepository.countSubjects(invite.classId, cycle.semesterId);
 
     return {
       class: {
         id: invite.class.id,
         name: invite.class.name,
-        year: invite.class.semester.year,
-        term: invite.class.semester.term,
-        period: invite.class.period,
+        year: cycle.semester.year,
+        term: cycle.semester.term,
+        period: cycle.period,
         color: invite.class.color,
       },
       owner: { name: invite.class.owner.name },

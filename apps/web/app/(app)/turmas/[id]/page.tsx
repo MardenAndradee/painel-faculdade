@@ -10,7 +10,6 @@ import {
   ArrowLeft,
   Crown,
   FileStack,
-  FlagTriangleRight,
   GraduationCap,
   HardDrive,
   History,
@@ -41,6 +40,7 @@ import {
   useClass,
   useClassHistory,
   useClassMembers,
+  useClassNextCycle,
   useLeaveClass,
   useRemoveClassSubject,
   useUnarchiveClass,
@@ -71,7 +71,6 @@ import { ClassMaterialLinkDialog } from '@/components/classes/class-material-lin
 import { ClassMaterialCard } from '@/components/classes/class-material-card';
 import { ClassTransferOwnerDialog } from '@/components/classes/class-transfer-owner-dialog';
 import { ClassHealthPanel } from '@/components/classes/class-health-panel';
-import { FinishSemesterDialog } from '@/components/classes/finish-semester-dialog';
 import {
   AlertDialog,
   AlertDialogContent,
@@ -101,6 +100,9 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
   const { data: materials } = useClassMaterials(id);
   const { data: materialSummary } = useClassMaterialSummary(id);
   const { data: history } = useClassHistory(id);
+  // Etapa 32.3 - só o dono; a rota mesmo garante isso, `enabled` só evita a
+  // chamada indo em vão pra quem não é.
+  const { data: nextCycle } = useClassNextCycle(id, classItem?.myRole === 'OWNER');
   const leaveClass = useLeaveClass();
   const removeSubject = useRemoveClassSubject();
   const removePost = useRemoveClassPost(id);
@@ -124,7 +126,6 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
   const [transferOpen, setTransferOpen] = useState(false);
   const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [finishSemesterOpen, setFinishSemesterOpen] = useState(false);
 
   const pinnedAnnouncements = (announcements ?? []).filter((item) => item.pinned);
 
@@ -221,6 +222,15 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
               {isArchived && <Badge variant="secondary">Arquivada</Badge>}
             </div>
 
+            {/* Etapa 32.3 - informação de bastidor, nunca um convite pra
+                interagir: sem ícone, sem borda, sem Badge/Tooltip chamativo. */}
+            {isOwner && nextCycle && !isArchived && (
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Próxima virada automática: {formatDate(nextCycle.nextCutoverDate)} ·{' '}
+                {nextCycle.nextPeriod}º período
+              </p>
+            )}
+
             {classItem.description && (
               <p className="mt-1.5 max-w-xl text-sm text-muted-foreground">
                 {classItem.description}
@@ -235,15 +245,6 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
               <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>
                 <Pencil className="size-4" aria-hidden />
                 <span className="hidden sm:inline">Editar</span>
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={isArchived}
-                onClick={() => setFinishSemesterOpen(true)}
-              >
-                <FlagTriangleRight className="size-4" aria-hidden />
-                <span className="hidden sm:inline">Finalizar semestre</span>
               </Button>
               <Button
                 size="sm"
@@ -836,12 +837,6 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
       <ClassInviteDialog open={inviteOpen} onOpenChange={setInviteOpen} classId={classItem.id} />
 
       <ClassFormDialog open={editOpen} onOpenChange={setEditOpen} classItem={classItem} />
-
-      <FinishSemesterDialog
-        classId={classItem.id}
-        open={finishSemesterOpen}
-        onOpenChange={setFinishSemesterOpen}
-      />
 
       <ClassSubjectDialog
         open={subjectDialogOpen}

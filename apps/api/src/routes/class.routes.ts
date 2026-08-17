@@ -118,20 +118,13 @@ classRoutes.get(
   classController.health,
 );
 
-// --- Finalizar semestre (Etapa 30.5) --------------------------------------------
+// --- Virada automática (Etapa 32) -------------------------------------------------
 
 classRoutes.get(
-  '/classes/:id/finish-semester-preview',
+  '/classes/:id/next-cycle',
   validate({ params: classIdParamSchema }),
   classGuard,
-  classController.finishSemesterPreview,
-);
-
-classRoutes.post(
-  '/classes/:id/finish-semester',
-  validate({ params: classIdParamSchema }),
-  classGuard,
-  classController.finishSemester,
+  classController.nextCycle,
 );
 
 classRoutes.get(

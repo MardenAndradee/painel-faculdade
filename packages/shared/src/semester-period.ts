@@ -50,3 +50,28 @@ export function isCurrentSemester(key: SemesterKey, now: Date): boolean {
 export function nextSemesterKey({ year, term }: SemesterKey): SemesterKey {
   return term === 1 ? { year, term: 2 } : { year: year + 1, term: 1 };
 }
+
+/**
+ * Quantos "meios de ano" separam `from` de `to` - usado pela virada
+ * automatica da Turma (Etapa 32) pra saber de quanto o `period` avanca
+ * quando a turma ficou parada por mais de um semestre. Positivo quando `to`
+ * e posterior a `from`; so faz sentido chamar nesse sentido (quem chama ja
+ * garante isso antes).
+ */
+export function termsBetween(from: SemesterKey, to: SemesterKey): number {
+  return (to.year - from.year) * 2 + (to.term - from.term);
+}
+
+/**
+ * Data de corte (inicio) de um semestre - a mesma fronteira que
+ * `getCurrentSemesterKey` usa pra decidir "que semestre e hoje" (mes < 6 =
+ * 1o periodo), so que no sentido inverso. Usada pela Etapa 32.3 pra mostrar
+ * quando a proxima virada automatica acontece.
+ *
+ * Diferente de `defaultSemesterDates`, que e so um palpite cosmetico de
+ * inicio/fim pro registro de `Semester` (fev/jul) e nao participa de
+ * nenhuma decisao - esta funcao E a fronteira de verdade.
+ */
+export function semesterStartDate({ year, term }: SemesterKey): Date {
+  return term === 1 ? new Date(year, 0, 1) : new Date(year, 6, 1);
+}
