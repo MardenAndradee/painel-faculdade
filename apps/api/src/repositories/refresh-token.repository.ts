@@ -45,24 +45,30 @@ export const refreshTokenRepository = {
   },
 
   /**
-   * Revoga todas as sessoes do usuario.
+   * Revoga (apaga) todas as sessoes do usuario.
    *
    * Acionado quando um refresh token ja usado reaparece (sinal de token
-   * roubado) e quando a senha muda (Etapa 26 - trocar ou redefinir a senha
-   * precisa encerrar qualquer sessao que nao seja a de quem fez a troca,
-   * senao um invasor com sessao ativa sobrevive a proprio motivo de a
-   * pessoa ter trocado a senha). `exceptTokenHash` preserva a sessao
-   * ATUAL nesse segundo caso - a pessoa trocando a propria senha nao
-   * deveria ser deslogada do dispositivo que ela esta usando.
+   * roubado), quando a senha muda ou e redefinida (Etapa 26 - nenhuma
+   * sessao de invasor pode sobreviver ao motivo de a pessoa ter trocado a
+   * senha) e ao sair de todos os dispositivos. `exceptTokenHash` preserva
+   * a sessao ATUAL no caso de troca de senha - a pessoa trocando a propria
+   * senha nao deveria ser deslogada do dispositivo que ela esta usando.
+   *
+   * APAGA em vez de so marcar `revokedAt` (diferenca proposital de `revoke`,
+   * usado na rotacao normal) - a janela de tolerancia de reuso (Etapa 33)
+   * perdoa um token revogado ha pouco tempo, e as linhas daqui SEMPRE
+   * representam um incidente de seguranca de verdade, nunca uma rotacao de
+   * rotina. Se apenas marcassemos `revokedAt`, uma sessao comprometida que
+   * tentasse renovar nos 30s seguintes a essa revogacao em massa seria
+   * perdoada pela mesma janela, anulando a propria revogacao.
    */
   async revokeAllForUser(userId: string, exceptTokenHash?: string): Promise<number> {
-    const result = await prisma.refreshToken.updateMany({
+    const result = await prisma.refreshToken.deleteMany({
       where: {
         userId,
         revokedAt: null,
         ...(exceptTokenHash ? { tokenHash: { not: exceptTokenHash } } : {}),
       },
-      data: { revokedAt: new Date() },
     });
 
     return result.count;
