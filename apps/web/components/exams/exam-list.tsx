@@ -75,7 +75,7 @@ export function ExamList({
 
   if (isLoading) {
     return (
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {Array.from({ length: 4 }, (_, index) => (
           <div key={index} className="rounded-2xl border bg-card p-5">
             <div className="flex items-start justify-between gap-4">
@@ -160,7 +160,10 @@ export function ExamList({
         </Card>
       ) : (
         <ul
-          className={cn('grid gap-4 transition-opacity sm:grid-cols-2', isFetching && 'opacity-60')}
+          className={cn(
+            'grid grid-cols-1 gap-4 transition-opacity sm:grid-cols-2',
+            isFetching && 'opacity-60',
+          )}
         >
           {exams.map((exam) => (
             <ExamItem
