@@ -225,16 +225,18 @@ export interface ClassHealthSummary {
   postsWithIncompleteFanOut: Array<{ id: string; title: string; copyCount: number }>;
 }
 
-// --- Finalizar semestre (Etapa 30.5) --------------------------------------------
+// --- Virada automática (Etapa 32) -------------------------------------------------
 
-/** O que "Finalizar semestre" vai gravar - mostrado antes de confirmar, mesmo espírito do `CloseSemesterPreview` pessoal. */
-export interface ClassFinishSemesterPreview {
-  currentSemester: { year: number; term: number };
-  nextSemester: { year: number; term: number; name: string };
-  currentPeriod: number;
+/**
+ * Transparência da próxima virada automática - leitura só para o dono, texto
+ * discreto na tela da turma (Etapa 32.3). A virada em si não tem ação
+ * manual: acontece sozinha, na primeira leitura que a alcançar depois da
+ * data de corte (`ensureCurrentCycle`).
+ */
+export interface ClassNextCycle {
+  /** Data de corte (01/01 ou 01/07, a que vier primeiro) - mesma fronteira de `getCurrentSemesterKey`. */
+  nextCutoverDate: string;
   nextPeriod: number;
-  subjectCount: number;
-  postCount: number;
 }
 
 // --- Histórico da turma (Etapa 30.8) --------------------------------------------

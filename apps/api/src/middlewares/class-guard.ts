@@ -16,6 +16,9 @@ export async function classGuard(req: Request, _res: Response, next: NextFunctio
     const classId = req.params.id as string;
 
     req.classRole = await classService.assertMembership(user.id, classId);
+    // Virada automática (Etapa 32) - garante o ciclo em dia com o
+    // calendário antes de qualquer rota de turma seguir adiante.
+    await classService.ensureCurrentCycle(classId);
 
     next();
   } catch (error) {

@@ -5,6 +5,8 @@ import {
   getCurrentSemesterKey,
   isCurrentSemester,
   nextSemesterKey,
+  semesterStartDate,
+  termsBetween,
 } from './semester-period.js';
 
 /**
@@ -78,5 +80,45 @@ describe('nextSemesterKey', () => {
 
   it('avanca do 2o periodo para o 1o do ano seguinte', () => {
     expect(nextSemesterKey({ year: 2026, term: 2 })).toEqual({ year: 2027, term: 1 });
+  });
+});
+
+describe('termsBetween', () => {
+  it('mesmo semestre - zero de diferenca', () => {
+    expect(termsBetween({ year: 2026, term: 1 }, { year: 2026, term: 1 })).toBe(0);
+  });
+
+  it('um semestre de diferenca, mesmo ano', () => {
+    expect(termsBetween({ year: 2026, term: 1 }, { year: 2026, term: 2 })).toBe(1);
+  });
+
+  it('um semestre de diferenca, virando o ano', () => {
+    expect(termsBetween({ year: 2026, term: 2 }, { year: 2027, term: 1 })).toBe(1);
+  });
+
+  it('um ano inteiro de diferenca (2 semestres)', () => {
+    expect(termsBetween({ year: 2025, term: 1 }, { year: 2026, term: 1 })).toBe(2);
+  });
+
+  it('varios anos de diferenca', () => {
+    expect(termsBetween({ year: 2024, term: 2 }, { year: 2026, term: 1 })).toBe(3);
+  });
+});
+
+describe('semesterStartDate', () => {
+  it('1o periodo comeca em 1o de janeiro', () => {
+    expect(semesterStartDate({ year: 2026, term: 1 })).toEqual(new Date(2026, 0, 1));
+  });
+
+  it('2o periodo comeca em 1o de julho', () => {
+    expect(semesterStartDate({ year: 2026, term: 2 })).toEqual(new Date(2026, 6, 1));
+  });
+
+  it('bate com a fronteira de getCurrentSemesterKey nos dois lados do corte', () => {
+    const next = nextSemesterKey(getCurrentSemesterKey(new Date(2026, 5, 30)));
+    const cutover = semesterStartDate(next);
+
+    expect(getCurrentSemesterKey(cutover)).toEqual(next);
+    expect(getCurrentSemesterKey(new Date(cutover.getTime() - 1))).not.toEqual(next);
   });
 });

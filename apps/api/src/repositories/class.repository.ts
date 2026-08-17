@@ -104,11 +104,27 @@ export const classRepository = {
     return prisma.class.findUnique({ where: { id: classId }, select: classDetailSelect });
   },
 
-  /** O ciclo atual da turma - usado ao criar disciplina-molde/publicação nova (Etapa 30), que herdam os dois. */
-  findCycle(classId: string): Promise<{ semesterId: string; period: number } | null> {
+  /**
+   * O ciclo atual da turma - usado ao criar disciplina-molde/publicação nova
+   * (Etapa 30), que herdam os dois, e pela virada automática (Etapa 32),
+   * que também precisa do ano/período do semestre atual (pra comparar com o
+   * calendário) e do dono (o `Class.semesterId` é sempre o `Semester`
+   * PESSOAL dele).
+   */
+  findCycle(classId: string): Promise<{
+    semesterId: string;
+    period: number;
+    ownerId: string;
+    semester: { year: number; term: number };
+  } | null> {
     return prisma.class.findUnique({
       where: { id: classId },
-      select: { semesterId: true, period: true },
+      select: {
+        semesterId: true,
+        period: true,
+        ownerId: true,
+        semester: { select: { year: true, term: true } },
+      },
     });
   },
 
@@ -182,28 +198,39 @@ export const classRepository = {
   },
 
   /**
-   * "Finalizar semestre" (Etapa 30.5): avança o semestre/período da turma E
-   * o semestre pessoal de cada membro ativo numa única transação - sem isso,
+   * Virada automática (Etapa 32): avança o semestre/período da turma E o
+   * semestre pessoal de cada membro ativo numa única transação - sem isso,
    * um erro no meio do caminho deixaria a turma e alguns membros apontando
    * pro ciclo antigo enquanto outros já foram pro novo.
+   *
+   * Condicionada a `fromSemesterId` continuar sendo o semestre atual da
+   * turma (`updateMany`, não `update`) - protege contra duas requisições
+   * simultâneas percebendo a mesma virada ao mesmo tempo: quem chega
+   * primeiro avança (`count: 1`); a outra não tem efeito nenhum no `Class`
+   * (`count: 0`, `advanced: false`) - os updates de `ClassMember` dela
+   * viram no-ops inofensivos, pois `semesterService.ensure` já resolveu o
+   * mesmo semestre-alvo pros dois lados da corrida.
    */
   async advanceCycle(
     classId: string,
-    ownerSemesterId: string,
+    fromSemesterId: string,
+    toSemesterId: string,
     period: number,
     memberSemesters: Array<{ memberId: string; semesterId: string }>,
-  ): Promise<ClassDetailRow> {
-    await prisma.$transaction([
+  ): Promise<boolean> {
+    const results = await prisma.$transaction([
       ...memberSemesters.map(({ memberId, semesterId }) =>
         prisma.classMember.update({ where: { id: memberId }, data: { semesterId } }),
       ),
-      prisma.class.update({
-        where: { id: classId },
-        data: { semester: { connect: { id: ownerSemesterId } }, period },
+      prisma.class.updateMany({
+        where: { id: classId, semesterId: fromSemesterId },
+        data: { semesterId: toSemesterId, period },
       }),
     ]);
 
-    return prisma.class.findUniqueOrThrow({ where: { id: classId }, select: classDetailSelect });
+    const classUpdate = results[results.length - 1] as { count: number };
+
+    return classUpdate.count > 0;
   },
 
   /** Disciplinas-molde de ciclos anteriores (Etapa 30.8) - tudo, exceto o semestre atual da turma. */
@@ -280,8 +307,19 @@ export const classRepository = {
     data: NewClassSubject,
     order: number,
   ): Promise<ClassSubjectRow> {
+    // Campos do `cycle` nomeados um a um, nunca `...cycle` - quem chama pode
+    // repassar um objeto mais largo que o tipo declarado aqui permite
+    // (`findCycle` também devolve `ownerId`/`semester`, e TS não barra isso
+    // numa variável, só num literal) - espalhar tudo already causou um erro
+    // em runtime do Prisma rejeitando um campo que `ClassSubject` não tem.
     const created = await prisma.classSubject.create({
-      data: { ...data, classId, ...cycle, order },
+      data: {
+        ...data,
+        classId,
+        semesterId: cycle.semesterId,
+        period: cycle.period,
+        order,
+      },
       select: { id: true },
     });
 

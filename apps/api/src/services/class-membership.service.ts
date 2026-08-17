@@ -57,11 +57,17 @@ export const classMembershipService = {
       }
     }
 
-    const semester = await resolveMemberSemester(
-      userId,
-      invite.class.semester.year,
-      invite.class.semester.term,
-    );
+    // Virada automática (Etapa 32) antes de resolver o semestre do membro -
+    // sem isso, quem entra logo após a virada herdaria o ciclo desatualizado
+    // que `invite.class.semester` ainda carrega (resolvido antes de checar
+    // o calendário).
+    await classService.ensureCurrentCycle(classId);
+
+    const cycle = await classRepository.findCycle(classId);
+
+    if (!cycle) throw AppError.notFound('Turma');
+
+    const semester = await resolveMemberSemester(userId, cycle.semester.year, cycle.semester.term);
 
     const member = existingMembership
       ? await classRepository.reactivateMember(existingMembership.id, semester.id)
@@ -69,7 +75,7 @@ export const classMembershipService = {
 
     // Só o ciclo atual (Etapa 30.8) - quem entra agora não deve ganhar
     // vínculo/molde de disciplinas de um ciclo que a turma já finalizou.
-    const classSubjects = await classRepository.listSubjectsFull(classId, invite.class.semester.id);
+    const classSubjects = await classRepository.listSubjectsFull(classId, cycle.semesterId);
 
     let subjectsLinked = 0;
     let subjectsCreated = 0;
