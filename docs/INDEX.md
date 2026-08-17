@@ -40,6 +40,7 @@ de desenvolvimento. Nada foi perdido na mudança — só reorganizado.
 ### Planejamento (features aprovadas ou em análise, ainda não implementadas)
 
 - [planning/turma-semestre-automatico.md](planning/turma-semestre-automatico.md) — remove a ação manual "Finalizar semestre" da Turma, substituindo por virada automática pelo calendário (mesmo princípio da Etapa 31 para o aluno independente)
+- [planning/refresh-token-grace-period.md](planning/refresh-token-grace-period.md) — janela de tolerância na detecção de reuso do refresh token, pra parar de derrubar sessão em outros aparelhos por uma corrida legítima de rede/segundo plano
 
 O outro item pendente do roadmap (Etapa 25, envio de e-mail) está detalhado inteiro dentro de [modules/turmas.md](modules/turmas.md), por estar acoplado à publicação de avisos e ao convite por e-mail daquele módulo.
 
