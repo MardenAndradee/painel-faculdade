@@ -3,17 +3,27 @@
 import { useEffect, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { CalendarDays, ClipboardList, ListChecks, Loader2, Plus } from 'lucide-react';
+import { format } from 'date-fns';
 import {
+  CalendarDays,
+  ClipboardList,
+  ListChecks,
+  Loader2,
+  Plus,
+  type LucideIcon,
+} from 'lucide-react';
+import {
+  CLASS_POST_KIND_LABELS,
   createClassPostSchema,
   PRIORITY,
   PRIORITY_LABELS,
   type ClassPostFormValues,
   type ClassPostKind,
+  type ClassPostListItem,
   type ClassSubjectItem,
   type CreateClassPostInput,
 } from '@painel/shared';
-import { usePublishClassPost } from '@/hooks/use-class-posts';
+import { usePublishClassPost, useUpdateClassPost } from '@/hooks/use-class-posts';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -42,9 +52,17 @@ interface ClassPostFormDialogProps {
   onOpenChange: (open: boolean) => void;
   classId: string;
   subjects: ClassSubjectItem[];
+  /** Presente = editando esta publicação, em vez de criar uma nova. */
+  post?: ClassPostListItem | null;
 }
 
 const NO_SUBJECT = '__none__';
+
+const KIND_ICONS: Record<ClassPostKind, LucideIcon> = {
+  ASSIGNMENT: ListChecks,
+  EXAM: ClipboardList,
+  EVENT: CalendarDays,
+};
 
 /**
  * Um valor padrão por `kind`, no formato exato que aquele branco da união
@@ -91,8 +109,11 @@ export function ClassPostFormDialog({
   onOpenChange,
   classId,
   subjects,
+  post,
 }: ClassPostFormDialogProps) {
+  const isEditing = Boolean(post);
   const publish = usePublishClassPost(classId);
+  const updatePost = useUpdateClassPost(classId);
   const [kind, setKind] = useState<ClassPostKind>('ASSIGNMENT');
 
   const {
@@ -107,11 +128,45 @@ export function ClassPostFormDialog({
   });
 
   useEffect(() => {
-    if (open) {
+    if (!open) return;
+
+    if (post) {
+      setKind(post.kind);
+
+      if (post.kind === 'ASSIGNMENT') {
+        reset({
+          kind: 'ASSIGNMENT',
+          title: post.title,
+          description: post.description ?? '',
+          classSubjectId: post.classSubject?.id ?? null,
+          dueDate: post.dueDate ? post.dueDate.slice(0, 10) : null,
+          priority: post.priority ?? 'MEDIUM',
+          maxPoints: post.maxPoints ?? undefined,
+        });
+      } else if (post.kind === 'EXAM') {
+        reset({
+          kind: 'EXAM',
+          title: post.title,
+          description: post.description ?? '',
+          classSubjectId: post.classSubject?.id ?? '',
+          date: post.date ? post.date.slice(0, 10) : '',
+        });
+      } else {
+        reset({
+          kind: 'EVENT',
+          title: post.title,
+          description: post.description ?? '',
+          classSubjectId: post.classSubject?.id ?? null,
+          startsAt: post.startsAt ? format(new Date(post.startsAt), "yyyy-MM-dd'T'HH:mm") : '',
+          endsAt: post.endsAt ? format(new Date(post.endsAt), "yyyy-MM-dd'T'HH:mm") : '',
+          allDay: post.allDay ?? false,
+        });
+      }
+    } else {
       setKind('ASSIGNMENT');
       reset(DEFAULTS.ASSIGNMENT);
     }
-  }, [open, reset]);
+  }, [open, post, reset]);
 
   const handleKindChange = (next: string): void => {
     const nextKind = next as ClassPostKind;
@@ -122,7 +177,12 @@ export function ClassPostFormDialog({
 
   const onSubmit = handleSubmit(async (values) => {
     try {
-      await publish.mutateAsync(values);
+      if (isEditing && post) {
+        await updatePost.mutateAsync({ postId: post.id, data: values });
+      } else {
+        await publish.mutateAsync(values);
+      }
+
       onOpenChange(false);
     } catch {
       // O toast de erro já é disparado pelo hook.
@@ -148,28 +208,45 @@ export function ClassPostFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Publicar na turma</DialogTitle>
+          <DialogTitle>{isEditing ? 'Editar publicação' : 'Publicar na turma'}</DialogTitle>
           <DialogDescription>
-            Cria uma cópia pessoal para cada membro ativo, com o selo &quot;Da turma&quot;.
+            {isEditing
+              ? 'A propagação atualiza a cópia de quem ainda não editou a própria.'
+              : 'Cria uma cópia pessoal para cada membro ativo, com o selo "Da turma".'}
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs value={kind} onValueChange={handleKindChange}>
-          <TabsList>
-            <TabsTrigger value="ASSIGNMENT">
-              <ListChecks aria-hidden />
-              Atividade
-            </TabsTrigger>
-            <TabsTrigger value="EXAM">
-              <ClipboardList aria-hidden />
-              Prova
-            </TabsTrigger>
-            <TabsTrigger value="EVENT">
-              <CalendarDays aria-hidden />
-              Evento
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+        {isEditing ? (
+          // Tipo e disciplina não mudam depois de publicado (regra do
+          // backend) - mostra só um rótulo fixo, sem abas pra escolher.
+          (() => {
+            const KindIcon = KIND_ICONS[kind];
+
+            return (
+              <div className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+                <KindIcon className="size-4" aria-hidden />
+                {CLASS_POST_KIND_LABELS[kind]}
+              </div>
+            );
+          })()
+        ) : (
+          <Tabs value={kind} onValueChange={handleKindChange}>
+            <TabsList>
+              <TabsTrigger value="ASSIGNMENT">
+                <ListChecks aria-hidden />
+                Atividade
+              </TabsTrigger>
+              <TabsTrigger value="EXAM">
+                <ClipboardList aria-hidden />
+                Prova
+              </TabsTrigger>
+              <TabsTrigger value="EVENT">
+                <CalendarDays aria-hidden />
+                Evento
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        )}
 
         <form
           onSubmit={(event) => void onSubmit(event)}
@@ -204,6 +281,7 @@ export function ClassPostFormDialog({
                         value === NO_SUBJECT ? (kind === 'EXAM' ? '' : null) : value,
                       )
                     }
+                    disabled={isEditing}
                   >
                     <SelectTrigger id={field.id}>
                       <SelectValue placeholder="Selecione" />
@@ -350,9 +428,9 @@ export function ClassPostFormDialog({
               {isSubmitting ? (
                 <Loader2 className="size-4 animate-spin" aria-hidden />
               ) : (
-                <Plus className="size-4" aria-hidden />
+                !isEditing && <Plus className="size-4" aria-hidden />
               )}
-              Publicar
+              {isEditing ? 'Salvar' : 'Publicar'}
             </Button>
           </DialogFooter>
         </form>

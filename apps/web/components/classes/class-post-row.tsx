@@ -1,6 +1,6 @@
 'use client';
 
-import { MapPin, Trash2 } from 'lucide-react';
+import { MapPin, Pencil, Trash2 } from 'lucide-react';
 import type { ClassPostListItem } from '@painel/shared';
 import { Button } from '@/components/ui/button';
 import { formatDate, formatDateTime } from '@/lib/format';
@@ -40,9 +40,11 @@ function daysUntil(value: string): number {
  */
 export function ClassPostRow({
   post,
+  onEdit,
   onRemove,
 }: {
   post: ClassPostListItem;
+  onEdit?: (post: ClassPostListItem) => void;
   onRemove?: (post: ClassPostListItem) => void;
 }) {
   const when = formatPostWhen(post);
@@ -89,6 +91,18 @@ export function ClassPostRow({
       <div className="flex shrink-0 items-center gap-2">
         {isImminentExam && (
           <span className="text-xs font-medium whitespace-nowrap text-status-overdue">Próxima</span>
+        )}
+
+        {onEdit && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 shrink-0 text-muted-foreground"
+            onClick={() => onEdit(post)}
+            aria-label={`Editar ${post.title}`}
+          >
+            <Pencil className="size-3.5" aria-hidden />
+          </Button>
         )}
 
         {onRemove && (

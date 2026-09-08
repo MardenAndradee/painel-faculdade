@@ -33,6 +33,7 @@ import {
   type ClassAnnouncementItem,
   type ClassMaterialItem,
   type ClassPostKind,
+  type ClassPostListItem,
   type ClassSubjectItem,
 } from '@painel/shared';
 import {
@@ -117,6 +118,7 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
   const [removingSubject, setRemovingSubject] = useState<ClassSubjectItem | null>(null);
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [publishOpen, setPublishOpen] = useState(false);
+  const [editingPost, setEditingPost] = useState<ClassPostListItem | null>(null);
   const [announcementDialogOpen, setAnnouncementDialogOpen] = useState(false);
   const [editingAnnouncement, setEditingAnnouncement] = useState<ClassAnnouncementItem | null>(
     null,
@@ -176,6 +178,16 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
   const openEditSubject = (subject: ClassSubjectItem): void => {
     setEditingSubject(subject);
     setSubjectDialogOpen(true);
+  };
+
+  const openPublish = (): void => {
+    setEditingPost(null);
+    setPublishOpen(true);
+  };
+
+  const openEditPost = (post: ClassPostListItem): void => {
+    setEditingPost(post);
+    setPublishOpen(true);
   };
 
   const openAddAnnouncement = (): void => {
@@ -246,12 +258,7 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
                 <Pencil className="size-4" aria-hidden />
                 <span className="hidden sm:inline">Editar</span>
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={isArchived}
-                onClick={() => setPublishOpen(true)}
-              >
+              <Button size="sm" variant="outline" disabled={isArchived} onClick={openPublish}>
                 <Send className="size-4" aria-hidden />
                 Publicar
               </Button>
@@ -406,7 +413,7 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
                   }
                   action={
                     isOwner && (
-                      <Button variant="accent" size="sm" onClick={() => setPublishOpen(true)}>
+                      <Button variant="accent" size="sm" onClick={openPublish}>
                         <Send className="size-4" aria-hidden />
                         Publicar
                       </Button>
@@ -432,6 +439,7 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
                             <ClassPostRow
                               key={post.id}
                               post={post}
+                              onEdit={isOwner ? openEditPost : undefined}
                               onRemove={
                                 isOwner
                                   ? (target) => void removePost.mutateAsync(target.id)
@@ -850,6 +858,7 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
         onOpenChange={setPublishOpen}
         classId={classItem.id}
         subjects={classItem.subjects}
+        post={editingPost}
       />
 
       <ClassAnnouncementDialog
