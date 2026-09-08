@@ -62,6 +62,7 @@ export function ExamFormDialog({
     control,
     reset,
     watch,
+    setFocus,
     formState: { errors, isSubmitting },
   } = useForm<ExamFormValues, unknown, CreateExamInput>({
     resolver: zodResolver(createExamSchema),
@@ -105,11 +106,23 @@ export function ExamFormDialog({
     try {
       if (isEditing && exam) {
         await updateExam.mutateAsync({ id: exam.id, data: values });
-      } else {
-        await createExam.mutateAsync(values);
+        onOpenChange(false);
+        return;
       }
 
-      onOpenChange(false);
+      await createExam.mutateAsync(values);
+
+      // Cadastrar prova costuma ser uma tarefa repetitiva (varias provas de
+      // uma vez) - mantem o dialogo aberto, so limpa o que muda de prova pra
+      // prova. A disciplina fica: e comum cadastrar varias seguidas da mesma.
+      reset({
+        subjectId: values.subjectId,
+        date: '',
+        content: '',
+        gradeComponentId: null,
+        gradeValue: null,
+      });
+      setFocus('date');
     } catch {
       // O toast de erro vem do hook; o dialogo fica aberto para correcao.
     }
@@ -161,6 +174,7 @@ export function ExamFormDialog({
                   render={({ field: controlled }) => (
                     <DatePicker
                       {...field}
+                      ref={controlled.ref}
                       value={controlled.value ?? ''}
                       onChange={controlled.onChange}
                     />

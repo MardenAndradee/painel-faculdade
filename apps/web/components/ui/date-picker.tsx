@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { forwardRef, useEffect, useState } from 'react';
 import { format, isValid, parse } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { CalendarDays } from 'lucide-react';
@@ -70,15 +70,15 @@ interface DatePickerProps {
 /**
  * Data com calendario proprio (no lugar do popup nativo do navegador) E
  * digitacao manual - o calendario e uma forma de preencher, nao a unica.
+ *
+ * Encaminha o `ref` pro `<input>` - sem isso, `setFocus('campo')` do
+ * react-hook-form (usado por formularios que limpam e devolvem o foco apos
+ * salvar, ex. cadastro de varias provas seguidas) nao acha o que focar.
  */
-export function DatePicker({
-  value,
-  onChange,
-  id,
-  placeholder = 'dd/mm/aaaa',
-  disabled,
-  ...aria
-}: DatePickerProps) {
+export const DatePicker = forwardRef<HTMLInputElement, DatePickerProps>(function DatePicker(
+  { value, onChange, id, placeholder = 'dd/mm/aaaa', disabled, ...aria },
+  ref,
+) {
   const [open, setOpen] = useState(false);
   const normalized = toDateOnlyString(value);
   const selected = normalized ? parseDateOnly(normalized) : null;
@@ -119,6 +119,7 @@ export function DatePicker({
     <Popover open={open} onOpenChange={setOpen}>
       <div className="relative">
         <input
+          ref={ref}
           id={id}
           type="text"
           inputMode="numeric"
@@ -161,4 +162,4 @@ export function DatePicker({
       </PopoverContent>
     </Popover>
   );
-}
+});
