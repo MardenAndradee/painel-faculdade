@@ -206,9 +206,13 @@ export const assignmentService = {
 
     // Editar um campo que a publicação da turma controla desvincula a cópia
     // (Etapa 21): a propagação futura de uma edição do dono passa a pular
-    // esta atividade, que agora é definitivamente do membro.
+    // esta atividade, que agora é definitivamente do membro. Exceto se quem
+    // edita é o DONO da turma: a cópia dele é a mesma autoridade que a
+    // publicação, "divergir de si mesmo" só deixaria a própria tela dele
+    // desatualizada depois da próxima edição da publicação.
     if (
       current.classPostId &&
+      current.classPost?.class.ownerId !== userId &&
       CLASS_POST_MANAGED_FIELDS.some((field) => input[field] !== undefined)
     ) {
       await classPostRepository.markDetached(current.classPostId, userId);

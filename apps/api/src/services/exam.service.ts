@@ -248,9 +248,13 @@ export const examService = {
     if (!row) throw AppError.notFound('Prova');
 
     // Editar um campo que a publicação da turma controla desvincula a cópia
-    // (Etapa 21) - a nota em si NUNCA desvincula, é sempre pessoal.
+    // (Etapa 21) - a nota em si NUNCA desvincula, é sempre pessoal. Exceto se
+    // quem edita é o DONO da turma: a cópia dele é a mesma autoridade que a
+    // publicação, "divergir de si mesmo" só deixaria a própria tela dele
+    // desatualizada depois da próxima edição da publicação.
     if (
       current.classPostId &&
+      current.classPost?.class.ownerId !== userId &&
       CLASS_POST_MANAGED_FIELDS.some((field) => input[field] !== undefined)
     ) {
       await classPostRepository.markDetached(current.classPostId, userId);

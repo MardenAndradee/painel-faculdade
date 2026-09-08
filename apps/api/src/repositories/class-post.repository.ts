@@ -241,34 +241,63 @@ export const classPostRepository = {
   },
 
   // --- Propagação de edição: updateMany filtrado pelas cópias não divergentes -----
+  //
+  // A cópia do PRÓPRIO dono é sempre sincronizada à parte, ignorando
+  // `detachedAt`: ele é a mesma autoridade que a publicação, então uma cópia
+  // "divergente" dele não faz sentido - só deixaria a própria tela do dono
+  // desatualizada depois que ele editasse a publicação (ver `markDetached`).
 
-  updateAssignmentCopies(
+  async updateAssignmentCopies(
     classPostId: string,
     data: Prisma.AssignmentUpdateManyMutationInput,
-  ): Promise<Prisma.BatchPayload> {
-    return prisma.assignment.updateMany({
-      where: { classPostId, classPostCopy: { detachedAt: null } },
-      data,
-    });
+    ownerId: string,
+  ): Promise<void> {
+    await prisma.$transaction([
+      prisma.assignment.updateMany({
+        where: { classPostId, classPostCopy: { detachedAt: null } },
+        data,
+      }),
+      prisma.assignment.updateMany({ where: { classPostId, userId: ownerId }, data }),
+      prisma.classPostCopy.updateMany({
+        where: { classPostId, userId: ownerId },
+        data: { detachedAt: null },
+      }),
+    ]);
   },
 
-  updateExamCopies(
+  async updateExamCopies(
     classPostId: string,
     data: Prisma.ExamUpdateManyMutationInput,
-  ): Promise<Prisma.BatchPayload> {
-    return prisma.exam.updateMany({
-      where: { classPostId, classPostCopy: { detachedAt: null } },
-      data,
-    });
+    ownerId: string,
+  ): Promise<void> {
+    await prisma.$transaction([
+      prisma.exam.updateMany({
+        where: { classPostId, classPostCopy: { detachedAt: null } },
+        data,
+      }),
+      prisma.exam.updateMany({ where: { classPostId, userId: ownerId }, data }),
+      prisma.classPostCopy.updateMany({
+        where: { classPostId, userId: ownerId },
+        data: { detachedAt: null },
+      }),
+    ]);
   },
 
-  updateEventCopies(
+  async updateEventCopies(
     classPostId: string,
     data: Prisma.CalendarEventUpdateManyMutationInput,
-  ): Promise<Prisma.BatchPayload> {
-    return prisma.calendarEvent.updateMany({
-      where: { classPostId, classPostCopy: { detachedAt: null } },
-      data,
-    });
+    ownerId: string,
+  ): Promise<void> {
+    await prisma.$transaction([
+      prisma.calendarEvent.updateMany({
+        where: { classPostId, classPostCopy: { detachedAt: null } },
+        data,
+      }),
+      prisma.calendarEvent.updateMany({ where: { classPostId, userId: ownerId }, data }),
+      prisma.classPostCopy.updateMany({
+        where: { classPostId, userId: ownerId },
+        data: { detachedAt: null },
+      }),
+    ]);
   },
 };

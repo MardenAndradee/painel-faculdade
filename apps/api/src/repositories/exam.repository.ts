@@ -38,7 +38,7 @@ const listSelect = {
   grade: { select: { id: true, value: true, maxValue: true } },
   // Selo "Da turma" (Etapa 21) - nulo para provas manuais.
   classPostId: true,
-  classPost: { select: { class: { select: { id: true, name: true } } } },
+  classPost: { select: { class: { select: { id: true, name: true, ownerId: true } } } },
   _count: { select: { attachments: true } },
   // Plano de Estudos (Etapa 27) - so o id, pro menu decidir "Criar" x "Ver".
   examPrep: { select: { id: true } },

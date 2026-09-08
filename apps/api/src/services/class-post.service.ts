@@ -228,11 +228,11 @@ export const classPostService = {
     const fields = toFields(updated);
 
     if (updated.kind === 'ASSIGNMENT') {
-      await classPostRepository.updateAssignmentCopies(postId, toAssignmentFields(fields));
+      await classPostRepository.updateAssignmentCopies(postId, toAssignmentFields(fields), userId);
     } else if (updated.kind === 'EXAM') {
-      await classPostRepository.updateExamCopies(postId, toExamFields(fields));
+      await classPostRepository.updateExamCopies(postId, toExamFields(fields), userId);
     } else {
-      await classPostRepository.updateEventCopies(postId, toEventFields(fields));
+      await classPostRepository.updateEventCopies(postId, toEventFields(fields), userId);
     }
 
     return toListItem(updated);

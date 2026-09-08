@@ -39,7 +39,7 @@ const listSelect = {
   subject: { select: { id: true, name: true, color: true } },
   // Selo "Da turma" (Etapa 21) - nulo para atividades manuais/Classroom.
   classPostId: true,
-  classPost: { select: { class: { select: { id: true, name: true } } } },
+  classPost: { select: { class: { select: { id: true, name: true, ownerId: true } } } },
   _count: { select: { attachments: true } },
 } satisfies Prisma.AssignmentSelect;
 
