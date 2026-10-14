@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isWithinReuseGrace } from './refresh-token-grace.js';
+import { isLegitimateRetry, isWithinReuseGrace } from './refresh-token-grace.js';
 
 /**
  * Borda medida a partir do `revokedAt` original - ver
@@ -44,5 +44,35 @@ describe('isWithinReuseGrace', () => {
     const now = new Date(revokedAt.getTime() - 1_000);
 
     expect(isWithinReuseGrace(revokedAt, now, graceMs)).toBe(true);
+  });
+});
+
+describe('isLegitimateRetry', () => {
+  const revokedAt = new Date('2026-01-01T12:00:00.000Z');
+  const graceMs = 30_000;
+  const hoursLater = new Date(revokedAt.getTime() + 6 * 60 * 60 * 1000);
+
+  it('perdoa dentro da janela mesmo com sucessor já usado (abas concorrentes)', () => {
+    const now = new Date(revokedAt.getTime() + 5_000);
+
+    expect(isLegitimateRetry({ revokedAt, now, graceMs, successorUsed: true })).toBe(true);
+  });
+
+  it('perdoa horas depois quando o sucessor nunca foi usado (resposta perdida)', () => {
+    expect(isLegitimateRetry({ revokedAt, now: hoursLater, graceMs, successorUsed: false })).toBe(
+      true,
+    );
+  });
+
+  it('trata como reuso horas depois quando o sucessor já foi usado', () => {
+    expect(isLegitimateRetry({ revokedAt, now: hoursLater, graceMs, successorUsed: true })).toBe(
+      false,
+    );
+  });
+
+  it('trata como reuso fora da janela quando não há sucessor registrado', () => {
+    expect(isLegitimateRetry({ revokedAt, now: hoursLater, graceMs, successorUsed: null })).toBe(
+      false,
+    );
   });
 });

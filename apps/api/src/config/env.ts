@@ -19,7 +19,7 @@ const envSchema = z
     JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET precisa de ao menos 32 caracteres'),
     JWT_REFRESH_SECRET: z.string().min(32, 'JWT_REFRESH_SECRET precisa de ao menos 32 caracteres'),
     JWT_ACCESS_EXPIRES_IN: z.string().default('15m'),
-    JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
+    JWT_REFRESH_EXPIRES_IN: z.string().default('90d'),
 
     GOOGLE_CLIENT_ID: z.string().default(''),
     GOOGLE_CLIENT_SECRET: z.string().default(''),

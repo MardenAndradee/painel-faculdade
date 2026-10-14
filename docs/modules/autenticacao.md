@@ -24,7 +24,7 @@ O refresh token, por sua vez, viaja no **fragmento** (`#session=...`) só entre 
 | Token | Local | Validade | Motivo |
 | --- | --- | --- | --- |
 | Access | Memória (React Context) | 15 min | `localStorage` é legível por qualquer script injetado |
-| Refresh | Cookie `httpOnly`, `SameSite`, `path=/api/v1/auth` | 7 dias | Fora do alcance do JavaScript — imune a XSS |
+| Refresh | Cookie `httpOnly`, `SameSite`, `path=/api/v1/auth` | 90 dias, renovados a cada uso | Fora do alcance do JavaScript — imune a XSS |
 
 Recarregar a página descarta o access token; o `AuthProvider` o recupera silenciosamente pelo cookie. A renovação também acontece de forma proativa, 1 minuto antes de expirar.
 
@@ -35,6 +35,10 @@ Cada `POST /auth/refresh` revoga o token apresentado e emite um novo. Se um toke
 **Janela de tolerância (Etapa 33).** Revogar tudo a cada reaparecimento também disparava num cenário 100% legítimo: a renovação proativa roda sozinha em segundo plano, e se o aparelho for suspenso/perder rede bem no meio (a resposta com o cookie novo nunca chega a ser salva), ele reapresenta o token antigo, já revogado, na próxima tentativa — sem nenhum roubo envolvido. Sintoma relatado: "logar no celular desloga o navegador do PC".
 
 `isWithinReuseGrace` (`apps/api/src/utils/refresh-token-grace.ts`) dá 30 segundos de tolerância medidos a partir do `revokedAt` original: um token revogado reaparecendo dentro da janela emite uma sessão nova sem revogar o registro de novo (revogar de novo reiniciaria a janela). Fora da janela, o comportamento é o de sempre — reuso de verdade, derruba tudo.
+
+**Sucessor nunca usado (2026-10-14).** A janela de 30s não cobria o caso mais comum no iPhone/PWA: o app é suspenso no meio da rotação e o token antigo só reaparece horas depois — fora da janela, derrubando todos os dispositivos. Cada rotação agora grava `replacedById` no token revogado. Um token revogado que reaparece é tratado como retry (`isLegitimateRetry`) se estiver dentro da janela **ou** se o seu sucessor nunca foi apresentado (`revokedAt` nulo). Nesse caso o sucessor órfão é **apagado** (não revogado — revogar o faria parecer usado) e o antigo passa a apontar pro novo. Se o sucessor já foi usado ou apagado, é reuso de verdade e tudo cai como antes.
+
+No frontend, só um **401** do `/auth/refresh` desloga. Falha de rede, 5xx e rate limit mantêm o usuário e tentam renovar de novo.
 
 **Detalhe que quebrava a própria revogação em massa.** `revokeAllForUser` (reuso real detectado, troca/redefinição de senha, sair de todos os dispositivos) só marcava `revokedAt` nos outros tokens — e um desses tokens, reapresentado nos 30s seguintes a ESSA revogação em massa, também caía dentro da janela e era perdoado, ressuscitando uma sessão que a revogação em massa deveria ter matado. Por isso `revokeAllForUser` **apaga** as linhas em vez de só marcá-las: reapresentar um token apagado cai direto em "sessão inválida", sem chance de cair na janela de tolerância. Só a rotação normal (`revoke`, um registro por vez) marca `revokedAt` e fica elegível para a janela.
 

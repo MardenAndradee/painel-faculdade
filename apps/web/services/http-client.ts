@@ -63,9 +63,19 @@ export function setSessionExpiredHandler(handler: (() => void) | null): void {
  * promise. Sem isso, cada uma dispararia seu proprio refresh e a rotacao de
  * tokens invalidaria as demais - derrubando a sessao do usuario.
  */
-let refreshPromise: Promise<string | null> | null = null;
+/**
+ * `rejected` so e verdadeiro quando o servidor recusou a sessao (401). Falha
+ * de rede, 5xx e rate limit nao provam que a sessao acabou - deslogar nesses
+ * casos derrubava o usuario a cada oscilacao de rede no celular.
+ */
+interface RefreshResult {
+  token: string | null;
+  rejected: boolean;
+}
 
-async function refreshAccessToken(): Promise<string | null> {
+let refreshPromise: Promise<RefreshResult> | null = null;
+
+async function refreshAccessToken(): Promise<RefreshResult> {
   refreshPromise ??= (async () => {
     try {
       const response = await fetch(`${API_URL}/auth/refresh`, {
@@ -73,15 +83,15 @@ async function refreshAccessToken(): Promise<string | null> {
         credentials: 'include',
       });
 
-      if (!response.ok) return null;
+      if (!response.ok) return { token: null, rejected: response.status === 401 };
 
       const body = (await response.json()) as { data?: { accessToken?: string } };
       const token = body.data?.accessToken ?? null;
 
       accessToken = token;
-      return token;
+      return { token, rejected: token === null };
     } catch {
-      return null;
+      return { token: null, rejected: false };
     } finally {
       // Liberado apos a resolucao para que o proximo 401 gere um refresh novo.
       refreshPromise = null;
@@ -92,8 +102,8 @@ async function refreshAccessToken(): Promise<string | null> {
 }
 
 /** Renovacao explicita, usada pelo AuthProvider no carregamento inicial. */
-export function refreshSession(): Promise<string | null> {
-  return refreshAccessToken();
+export async function refreshSession(): Promise<string | null> {
+  return (await refreshAccessToken()).token;
 }
 
 // --- Requisicao ---------------------------------------------------------------
@@ -183,11 +193,13 @@ async function sendWithRetry(path: string, options: RequestOptions): Promise<Res
 
   if (response.status !== 401 || options.skipAuth) return response;
 
-  const token = await refreshAccessToken();
+  const { token, rejected } = await refreshAccessToken();
 
   if (!token) {
-    accessToken = null;
-    onSessionExpired?.();
+    if (rejected) {
+      accessToken = null;
+      onSessionExpired?.();
+    }
     throw await parseError(response);
   }
 

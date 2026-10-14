@@ -5,8 +5,11 @@ import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import type { AuthSession, AuthUser } from '@painel/shared';
 import { authService } from '@/services/auth.service';
-import { setAccessToken, setSessionExpiredHandler } from '@/services/http-client';
+import { ApiError, setAccessToken, setSessionExpiredHandler } from '@/services/http-client';
 import { clearServiceWorkerState } from '@/lib/pwa-cleanup';
+
+/** Espera antes de tentar renovar de novo apos falha que nao foi 401. */
+const RETRY_AFTER_FAILURE_SECONDS = 90;
 
 /**
  * Estado global de autenticacao.
@@ -94,14 +97,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const session = await authService.refresh();
 
       applySession(session);
-    } catch {
-      setUserState(null);
-      setAccessToken(null);
-      clearRenewalTimer();
+    } catch (error) {
+      // So um 401 prova que a sessao acabou. Rede caida, 5xx ou rate limit
+      // mantem o usuario e tentam de novo - o cookie continua valido.
+      if (error instanceof ApiError && error.status === 401) {
+        setUserState(null);
+        setAccessToken(null);
+        clearRenewalTimer();
+      } else {
+        scheduleRenewal(RETRY_AFTER_FAILURE_SECONDS);
+      }
     } finally {
       setIsLoading(false);
     }
-  }, [applySession, clearRenewalTimer]);
+  }, [applySession, clearRenewalTimer, scheduleRenewal]);
 
   useEffect(() => {
     restoreSessionRef.current = restoreSession;
