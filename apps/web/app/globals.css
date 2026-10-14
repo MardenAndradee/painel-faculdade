@@ -222,6 +222,12 @@
       'calt' 1;
   }
 
+  /* Tailwind 4 dropped the pointer cursor from buttons in preflight. */
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']) {
+    cursor: pointer;
+  }
+
   /* Respeita quem desativou animacoes no sistema operacional. */
   @media (prefers-reduced-motion: reduce) {
     *,
