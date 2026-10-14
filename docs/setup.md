@@ -95,7 +95,7 @@ Nas Etapas 8 e 9, quando as APIs do Classroom e do Calendar forem usadas, será 
 | `JWT_ACCESS_SECRET`      | **sim**     | —                       | Segredo do access token (mín. 32 caracteres)          |
 | `JWT_REFRESH_SECRET`     | **sim**     | —                       | Segredo do refresh token (mín. 32 caracteres)         |
 | `JWT_ACCESS_EXPIRES_IN`  | não         | `15m`                   | Validade do access token                              |
-| `JWT_REFRESH_EXPIRES_IN` | não         | `7d`                    | Validade do refresh token                             |
+| `JWT_REFRESH_EXPIRES_IN` | não         | `90d`                   | Validade do refresh token                             |
 | `GOOGLE_CLIENT_ID`       | para login  | `''`                    | Credencial do Google OAuth2                           |
 | `GOOGLE_CLIENT_SECRET`   | para login  | `''`                    | Credencial do Google OAuth2                           |
 | `GOOGLE_REDIRECT_URI`    | não         | `.../auth/google/callback` | Callback do OAuth                                  |

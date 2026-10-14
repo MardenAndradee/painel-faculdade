@@ -28,7 +28,7 @@ import { AppError } from '../utils/app-error.js';
 import { hashToken, randomToken } from '../utils/crypto.js';
 import { hashPassword, verifyPassword } from '../utils/password.js';
 import { isAccountLocked, resolveGoogleLogin } from '../utils/google-link-resolution.js';
-import { isWithinReuseGrace } from '../utils/refresh-token-grace.js';
+import { isLegitimateRetry } from '../utils/refresh-token-grace.js';
 import {
   durationToSeconds,
   signAccessToken,
@@ -103,7 +103,7 @@ function toAuthUser(user: User): AuthUser {
 async function issueSession(
   user: User,
   context: SessionContext,
-): Promise<{ session: AuthSession; refreshToken: string }> {
+): Promise<{ session: AuthSession; refreshToken: string; tokenId: string }> {
   const expiresInSeconds = durationToSeconds(env.JWT_REFRESH_EXPIRES_IN);
 
   // O id e gerado aqui para que o token possa ser assinado antes da escrita:
@@ -127,6 +127,7 @@ async function issueSession(
       expiresIn: durationToSeconds(env.JWT_ACCESS_EXPIRES_IN),
     },
     refreshToken,
+    tokenId,
   };
 }
 
@@ -662,10 +663,21 @@ export const authService = {
     }
 
     if (record.revokedAt) {
-      if (isWithinReuseGrace(record.revokedAt, now, REFRESH_TOKEN_REUSE_GRACE_MS)) {
-        logger.info('Reuso de refresh token dentro da janela de tolerancia - tratado como retry', {
-          userId: record.userId,
-        });
+      const successor = record.replacedById
+        ? await refreshTokenRepository.findById(record.replacedById)
+        : null;
+      // Sucessor apagado (revogacao em massa) conta como usado: nada a perdoar.
+      const successorUsed = record.replacedById ? !successor || successor.revokedAt !== null : null;
+
+      if (
+        isLegitimateRetry({
+          revokedAt: record.revokedAt,
+          now,
+          graceMs: REFRESH_TOKEN_REUSE_GRACE_MS,
+          successorUsed,
+        })
+      ) {
+        logger.info('Reuso de refresh token tratado como retry', { userId: record.userId });
 
         const user = await userRepository.findById(record.userId);
 
@@ -673,7 +685,16 @@ export const authService = {
           throw AppError.unauthorized('Usuario nao encontrado');
         }
 
-        return issueSession(user, context);
+        const issued = await issueSession(user, context);
+
+        // O sucessor nunca chegou ao dispositivo; mante-lo vivo deixaria duas
+        // pontas validas na mesma cadeia.
+        if (successor && successor.revokedAt === null) {
+          await refreshTokenRepository.deleteById(successor.id);
+        }
+        await refreshTokenRepository.setReplacedBy(record.id, issued.tokenId);
+
+        return issued;
       }
 
       logger.warn('Reuso de refresh token detectado', { userId: record.userId });
@@ -696,9 +717,10 @@ export const authService = {
       throw AppError.unauthorized('Usuario nao encontrado');
     }
 
-    await refreshTokenRepository.revoke(record.id);
+    const issued = await issueSession(user, context);
+    await refreshTokenRepository.revoke(record.id, issued.tokenId);
 
-    return issueSession(user, context);
+    return issued;
   },
 
   /** Encerra apenas a sessao atual, preservando os demais dispositivos. */

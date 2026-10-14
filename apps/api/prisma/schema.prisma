@@ -332,6 +332,10 @@ model RefreshToken {
   expiresAt DateTime
   revokedAt DateTime?
 
+  /// Token emitido no lugar deste na rotacao. Sem FK de proposito: o sucessor
+  /// pode ser apagado (revogacao em massa) e o vinculo so serve de consulta.
+  replacedById String?
+
   userAgent String?
   ipAddress String?
 

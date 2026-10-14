@@ -37,11 +37,24 @@ export const refreshTokenRepository = {
     return prisma.refreshToken.findUnique({ where: { tokenHash } });
   },
 
-  revoke(id: string): Promise<RefreshToken> {
+  revoke(id: string, replacedById?: string): Promise<RefreshToken> {
     return prisma.refreshToken.update({
       where: { id },
-      data: { revokedAt: new Date() },
+      data: { revokedAt: new Date(), ...(replacedById ? { replacedById } : {}) },
     });
+  },
+
+  /** Re-aponta um token ja revogado pro novo sucessor, sem tocar em `revokedAt`. */
+  setReplacedBy(id: string, replacedById: string): Promise<RefreshToken> {
+    return prisma.refreshToken.update({ where: { id }, data: { replacedById } });
+  },
+
+  /**
+   * Apaga um sucessor que nunca chegou ao dispositivo. Apaga em vez de
+   * revogar: um `revokedAt` o faria parecer "usado" pra regra de retry.
+   */
+  async deleteById(id: string): Promise<void> {
+    await prisma.refreshToken.deleteMany({ where: { id } });
   },
 
   /**
